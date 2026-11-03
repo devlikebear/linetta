@@ -1,0 +1,95 @@
+//go:build !mobile
+
+package agent
+
+import (
+	"fmt"
+	"strings"
+)
+
+// A settlement may read each scene and the ledger, and write what changed. Each
+// fact is one call, so it gets a larger budget than the review.
+const settlementCallsPerScene = 14
+
+// settlementTools can record in the ledger and report what does not fit. It has
+// no way to touch the prose or the story world: what a scene established is the
+// only thing it is here to write down.
+var settlementTools = map[string]bool{
+	"linetta_read_scene":        true,
+	"linetta_list_ledger":       true,
+	"linetta_edit_ledger":       true,
+	"linetta_report_continuity": true,
+}
+
+// settlementSystemPrompt asks for changes only. A fact that the story leans on
+// later is worth a row; the prose is the record of everything else, and a ledger
+// that copies it grows with the book and stops being readable.
+const settlementSystemPrompt = `You are settling a finished chapter of fiction into the work's ledger, for its author. You did not write it. Your reply goes nowhere: what you find reaches the author only through the ledger and linetta_report_continuity.
+
+For each scene you are given:
+1. Read it with linetta_read_scene numbered=true.
+2. Look up what the ledger already holds with linetta_list_ledger, using query for the subject.
+3. For each thing this scene changed that later scenes must honour, call linetta_edit_ledger with kind (number, timeline, knowledge or decision), subject, attribute, body, planted_node_id and planted_quote copied exactly from the scene. Use the attributes 위치, 소지금, 경지, 부상, 소속, 호칭, 작중 날짜, 앎. Set value_num when the value is a number, and strength soft when it comes from a character's mouth or a rumour rather than the narrator.
+4. When a value replaces one already recorded, pass its id as supersedes.
+5. When the result lists conflicts and the scene is not plainly changing the value, the prose and the record disagree: call linetta_report_continuity with the quote, and leave the fact as it is.
+
+Record only what changed and will matter. Do not retell the plot, and do not record what is already there. Nothing to record is a good result.`
+
+func settlementRequest(projectID string, scenes []string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Work: %s\nSettle these scenes, in order:\n", projectID)
+	for _, id := range scenes {
+		b.WriteString("- " + id + "\n")
+	}
+	return b.String()
+}
+
+// impactCallsPerEntry covers finding the scenes, reading the twelve it may list,
+// and a few reports. impactMaxEntries keeps a turn that settled many things from
+// sending the book back.
+const (
+	impactCallsPerEntry = 18
+	impactMaxEntries    = 3
+)
+
+// impactTools can look and report, and nothing else: a change's effect on the
+// prose is the writer's to act on.
+var impactTools = map[string]bool{
+	"linetta_list_ledger":       true,
+	"linetta_find_impact":       true,
+	"linetta_read_scene":        true,
+	"linetta_search_manuscript": true,
+	"linetta_report_continuity": true,
+}
+
+const impactSystemPrompt = `A decision or a fact in the ledger of a work of fiction has just changed. You are finding where the prose already written no longer agrees with it, for its author. You did not write it. Your reply goes nowhere: what you find reaches the author only through linetta_report_continuity.
+
+For each entry you are given:
+1. Read it with linetta_list_ledger, using query for its subject, and take what it now says.
+2. Call linetta_find_impact with its id for the scenes to read.
+3. Read each with linetta_read_scene numbered=true, looking only for statements this entry makes false. A candidate is a scene worth reading, not a scene that is wrong.
+4. Call linetta_report_continuity once for each scene that disagrees, with source quotes copied exactly and a note starting "영향 검사:" that names the entry. An empty list is a good result: skip scenes that agree.
+
+Report what cannot both be true, not what could be better. Do not suggest prose longer than a sentence.`
+
+func impactRequest(projectID string, entries []string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Work: %s\nThese ledger entries changed:\n", projectID)
+	for _, id := range entries {
+		b.WriteString("- " + id + "\n")
+	}
+	return b.String()
+}
+
+// sampleTools read and report: two scenes, side by side, and no brief. What the
+// agent believes about the book is what this pass exists to do without.
+var sampleTools = map[string]bool{
+	"linetta_read_scene":        true,
+	"linetta_report_continuity": true,
+}
+
+const sampleSystemPrompt = `You are comparing scenes of a work of fiction, for its author. You know nothing of how it came to be written and nothing about it but what you read here. Your reply goes nowhere: what you find reaches the author only through linetta_report_continuity.
+
+For each pair you are given, read both scenes with linetta_read_scene numbered=true, the later one being the scene the finding belongs to. Look for two statements that cannot both be true: a fact, a number, a date, an object, who knows what, what someone can do. A character's lie or a rumour that later proves wrong is not a contradiction. A fixed rule of the work counts as a statement.
+
+Call linetta_report_continuity for the later scene only when you find one, with kind contradiction, source quotes copied exactly from both scenes, and a note starting "표본 대조:". Finding nothing is the usual result, and a good one. Taste, pacing and style are not findings.`

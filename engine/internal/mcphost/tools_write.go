@@ -99,6 +99,8 @@ type writeSceneOutput struct {
 	// not through linetta_undo_last_change's batch id: undoing a structural
 	// batch restores the outline and leaves scene bodies alone.
 	SnapshotID string `json:"snapshot_id,omitempty"`
+	// Notice says what the write means beyond the scene, when it means something.
+	Notice string `json:"notice,omitempty"`
 	// LinkedElements reports the registered story elements this write linked
 	// automatically (#72), so the agent can spot a homonym gone wrong.
 	LinkedElements []mention.Linked `json:"linked_elements,omitempty" jsonschema:"story elements named in the text, linked automatically"`
@@ -362,7 +364,18 @@ func (d ToolDeps) writeScene(ctx context.Context, _ *mcp.CallToolRequest, in wri
 		SnapshotID:           snapshotID,
 		SummaryIsPlaceholder: true,
 		LinkedElements:       linked,
+		Notice:               publishedNotice(n.Status),
 	}, nil
+}
+
+// publishedNotice is said once a published episode's text moved: readers still
+// have the old one, and only publishing it again changes that. It does not stop
+// the write, because fixing a published episode is a thing writers mean to do.
+func publishedNotice(status string) string {
+	if status != node.StatusPublished {
+		return ""
+	}
+	return "This episode is published: readers keep the old text until it is published again. Tell the writer."
 }
 
 func (d ToolDeps) writeSummary(ctx context.Context, _ *mcp.CallToolRequest, in writeSummaryInput) (*mcp.CallToolResult, writeSummaryOutput, error) {

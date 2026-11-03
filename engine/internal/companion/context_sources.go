@@ -51,6 +51,7 @@ func (s *Service) ContextFacts(ctx context.Context, projectID, nodeID string) ([
 			Claim:    c.Claim,
 			Category: c.Category,
 			Result:   c.Result,
+			Scene:    c.NodeID != nil && *c.NodeID == nodeID,
 		}
 		for _, src := range c.Sources {
 			if strings.TrimSpace(src.URL) == "" {

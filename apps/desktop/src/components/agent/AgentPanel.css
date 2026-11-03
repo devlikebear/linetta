@@ -420,3 +420,10 @@
   color: var(--ink-soft);
   font-size: 12px;
 }
+
+.agent-fresh { padding: 10px 14px; border-bottom: 1px solid var(--line, var(--surface-3)); font-size: var(--fs-sm, 13px); }
+.agent-fresh p { margin: 0 0 8px; }
+.agent-fresh-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: flex-end; }
+.agent-fresh-actions .chip { margin-right: auto; }
+
+.agent-longform { padding: 8px 14px; border-bottom: 1px solid var(--line, var(--surface-3)); }

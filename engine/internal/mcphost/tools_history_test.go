@@ -175,3 +175,19 @@ func TestSearchHistoryPutsArchivedNotesFirstAndNamesTheirSource(t *testing.T) {
 		t.Errorf("second = %+v", second)
 	}
 }
+
+// Starting over changes what a turn replays, not what the search can reach.
+func TestSearchHistoryStillFindsWhatCameBeforeAStart(t *testing.T) {
+	ctx, d, projectID := newHistoryDeps(t)
+	appendHistory(t, d, projectID, "old", "r1", "user", "무형검은 12화에 나온다", 1)
+	if err := d.History.SetMark(ctx, projectID, "old", 2); err != nil {
+		t.Fatal(err)
+	}
+	_, out, err := d.searchHistory(ctx, nil, searchHistoryInput{ProjectID: projectID, Query: "무형검"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Hits) != 1 || out.Hits[0].MessageID != "old" {
+		t.Fatalf("hits = %+v", out.Hits)
+	}
+}

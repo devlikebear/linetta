@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   setStatus: vi.fn(),
   delete: vi.fn(),
+  sampleCheck: vi.fn(),
 }));
 vi.mock("@tauri-apps/api/event", () => ({
   listen: (name: string, cb: (e: { payload: unknown }) => void) => {
@@ -20,7 +21,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 vi.mock("../lib/rpc", () => ({
   // I18nProvider reads the app language through the same module.
   settings: { get: vi.fn().mockResolvedValue({ language: "ko" }) },
-  continuity: { list: mocks.list, setStatus: mocks.setStatus, delete: mocks.delete },
+  continuity: { list: mocks.list, setStatus: mocks.setStatus, delete: mocks.delete, sampleCheck: mocks.sampleCheck },
 }));
 
 function check(overrides: Partial<ContinuityCheck> = {}): ContinuityCheck {
@@ -75,6 +76,16 @@ describe("ContinuitySection", () => {
     mocks.list.mockReset().mockResolvedValue({ checks: [] });
     mocks.setStatus.mockReset();
     mocks.delete.mockReset().mockResolvedValue({ ok: true });
+  });
+
+  it("starts a sample check and says how many pairs it took", async () => {
+    mocks.list.mockResolvedValue({ checks: [] });
+    mocks.sampleCheck.mockResolvedValue({ pairs: 4 });
+    renderSection();
+    const button = await screen.findByRole("button", { name: "표본 대조" });
+    button.click();
+    await waitFor(() => expect(mocks.sampleCheck).toHaveBeenCalled());
+    expect(await screen.findByText(/4쌍/)).toBeTruthy();
   });
 
   it("lists a check's observations, ref chip included", async () => {

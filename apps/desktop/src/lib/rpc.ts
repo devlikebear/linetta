@@ -231,6 +231,9 @@ export async function rpcCall<T>(method: string, params?: unknown): Promise<T> {
 
 
 export const projects = {
+  /** A copy under a new id for trying a big change on. Publishing stays with the original. */
+  duplicate: (id: string, titleSuffix: string) =>
+    rpcCall<{ project_id: string }>("projects.duplicate", { project_id: id, title_suffix: titleSuffix }),
   create: (input: NewProjectInput) => rpcCall<Project>("projects.create", input),
   list: (params: ListProjectsParams = {}) => rpcCall<Project[]>("projects.list", params),
   get: (id: string) => rpcCall<Project>("projects.get", { id }),
@@ -596,6 +599,9 @@ export const agent = {
     rpcCall<AgentHistoryRow[]>("agent.history", { project_id: projectId, limit }),
   status: (projectId: string) => rpcCall<AgentRunStatus>("agent.status", { project_id: projectId }),
   clear: (projectId: string) => rpcCall<{ ok: true }>("agent.clear", { project_id: projectId }),
+  /** Starts the conversation over from here. Nothing is deleted. */
+  startFresh: (projectId: string) =>
+    rpcCall<{ ok: true }>("agent.start_fresh", { project_id: projectId }),
   // Exactly one of batchId/snapshotId is expected — an outline batch from
   // linetta_apply_story_ops, or a scene write/revise's pre-write snapshot
   // (#112). rpcCall drops the other since it stringifies as undefined.
@@ -660,6 +666,9 @@ export const entities = {
 };
 
 export const mentions = {
+  /** Links scenes written before their names were registered. */
+  relinkWork: (projectId: string) =>
+    rpcCall<{ scenes: number; links: number }>("mentions.relink_work", { project_id: projectId }),
   listForNode: (nodeId: string) =>
     rpcCall<Entity[]>("mentions.list_for_node", { node_id: nodeId }),
 };
@@ -766,15 +775,20 @@ export const direction = {
 /** The work's ledger and part arcs (internal/ledger). */
 export const ledger = {
   list: (projectId: string) => rpcCall<LedgerState>("ledger.list", { project_id: projectId }),
-  save: (entry: { id?: string; project_id?: string; kind?: LedgerKind; subject?: string; body?: string; status?: LedgerStatus }) =>
+  save: (entry: { id?: string; project_id?: string; kind?: LedgerKind; reach?: LedgerEntry["reach"]; subject?: string; body?: string; status?: LedgerStatus }) =>
     rpcCall<LedgerEntry>("ledger.save", entry),
   remove: (id: string) => rpcCall<{ ok: boolean }>("ledger.delete", { id }),
+  setPinned: (id: string, pinned: boolean) =>
+    rpcCall<LedgerEntry>("ledger.set_pinned", { id, pinned }),
   setArc: (arc: PartArc) => rpcCall<PartArc>("ledger.set_arc", {
     node_id: arc.node_id, role: arc.role, goal: arc.goal, tension: arc.tension,
   }),
 };
 
 export const continuity = {
+  /** Compares scenes with no conversation behind them. Findings arrive in the list. */
+  sampleCheck: (projectId: string, nodeId?: string) =>
+    rpcCall<{ pairs: number }>("continuity.sample_check", { project_id: projectId, node_id: nodeId }),
   list: (projectId: string, nodeId?: string, statuses?: ContinuityStatus[]) =>
     rpcCall<{ checks: ContinuityCheck[] }>("continuity.list", {
       project_id: projectId,

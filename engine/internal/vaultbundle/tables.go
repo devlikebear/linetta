@@ -98,6 +98,8 @@ var dependents = []Table{
 var excluded = map[string]string{
 	"ai_runs":                          "device history of model calls",
 	"companion_messages":               "device conversation history",
+	"agent_history_marks":              "where this device's conversation starts over",
+	"continuity_sample_pairs":          "what this device has sample-checked, redone by checking",
 	"companion_references":             "device conversation history",
 	"companion_history_imports":        "device conversation history",
 	"companion_messages_fts":           "search index, rebuilt from companion_messages",

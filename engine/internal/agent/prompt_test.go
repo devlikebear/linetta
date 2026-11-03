@@ -1033,3 +1033,96 @@ func TestLoadRowsFor_neverFallsBelowTheFloor(t *testing.T) {
 		t.Errorf("200k reads %d rows", got)
 	}
 }
+
+// Starting over is the writer's choice and deletes nothing: the next turn
+// replays only what follows, the window survives a restart because the mark is
+// stored, and the note about reaching older messages still goes to the model.
+func TestStartFresh_replaysOnlyWhatFollows(t *testing.T) {
+	svc, ctx := newHistoryService(t)
+	appendTurns(t, svc, ctx, "p1", "이전 대화", 3)
+	if err := svc.StartFresh(ctx, "p1"); err != nil {
+		t.Fatal(err)
+	}
+	appendTurns(t, svc, ctx, "p1", "새 대화", 1)
+
+	msgs, err := svc.tr.load(ctx, "p1", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(msgs) != 8 {
+		t.Fatalf("nothing may be deleted: %d rows", len(msgs))
+	}
+	replay, start, cut, _ := svc.replayHistory(ctx, "p1", msgs, 100000)
+	if len(replay) != 2 || !cut {
+		t.Fatalf("replay %d rows, cut %v", len(replay), cut)
+	}
+	for _, m := range replay {
+		if strings.Contains(m.Content, "이전 대화") {
+			t.Fatalf("replayed %q", m.Content)
+		}
+	}
+	if got, err := svc.ReplayStart(ctx, "p1"); err != nil || got != start {
+		t.Fatalf("the panel's boundary %q must be the turn's %q (%v)", got, start, err)
+	}
+
+	restarted := New(svc.deps)
+	replay, _, _, _ = restarted.replayHistory(ctx, "p1", msgs, 100000)
+	if len(replay) != 2 {
+		t.Fatalf("after a restart: %d rows", len(replay))
+	}
+}
+
+func TestStartFresh_onAnEmptyConversationDoesNothing(t *testing.T) {
+	svc, ctx := newHistoryService(t)
+	if err := svc.StartFresh(ctx, "p1"); err != nil {
+		t.Fatal(err)
+	}
+	if mark, err := svc.tr.repo.Mark(ctx, "p1"); err != nil || mark != "" {
+		t.Fatalf("mark %q, err %v", mark, err)
+	}
+}
+
+func TestClear_removesTheMark(t *testing.T) {
+	svc, ctx := newHistoryService(t)
+	appendTurns(t, svc, ctx, "p1", "대화", 1)
+	if err := svc.StartFresh(ctx, "p1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Clear(ctx, "p1"); err != nil {
+		t.Fatal(err)
+	}
+	if mark, err := svc.tr.repo.Mark(ctx, "p1"); err != nil || mark != "" {
+		t.Fatalf("mark %q, err %v", mark, err)
+	}
+}
+
+func TestAMarkWhoseMessageIsGoneIsIgnored(t *testing.T) {
+	svc, ctx := newHistoryService(t)
+	appendTurns(t, svc, ctx, "p1", "대화", 2)
+	if err := svc.tr.repo.SetMark(ctx, "p1", "gone", 1); err != nil {
+		t.Fatal(err)
+	}
+	msgs, err := svc.tr.load(ctx, "p1", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := svc.tr.afterMark(ctx, "p1", msgs); len(got) != len(msgs) {
+		t.Fatalf("kept %d of %d", len(got), len(msgs))
+	}
+}
+
+func newHistoryService(t *testing.T) (*Service, context.Context) {
+	t.Helper()
+	return newService(t, &scriptedClient{responses: []llm.ChatResponse{textReply("네")}}, &recorder{}), context.Background()
+}
+
+func appendTurns(t *testing.T, svc *Service, ctx context.Context, projectID, text string, n int) {
+	t.Helper()
+	for i := range n {
+		for _, side := range []string{"질문", "답"} {
+			if err := svc.tr.appendUser(ctx, projectID, "", fmt.Sprintf("%s%d", text, i), text+" "+side); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+}

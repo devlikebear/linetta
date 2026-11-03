@@ -72,6 +72,71 @@ func Render(c Context) (system, user string) {
 	return buildSystem(c), buildUser(c)
 }
 
+// EscapedRunes is how long s runs once it is a JSON string, which is what a tool
+// result is measured in: a Korean brief is mostly newlines and quotes away from
+// its own rune count, and Go's encoder spells < > & as six characters.
+func EscapedRunes(s string) int {
+	n := 0
+	for _, r := range s {
+		switch r {
+		case '\n', '\t', '\r', '"', '\\':
+			n += 2
+		case '<', '>', '&':
+			n += 6
+		default:
+			n++
+		}
+	}
+	return n
+}
+
+// FitBrief renders c within maxRunes of JSON text, and names what it had to
+// leave out. It takes from the back: what the brief has in reference before what
+// the writer told the agent. Style notes, direction, the ledger and the scene's
+// plan are never touched; a brief still over the limit without everything else
+// is returned as it stands.
+func FitBrief(c Context, maxRunes int) (string, []string) {
+	fits := func() (string, bool) {
+		_, user := Render(c)
+		return user, EscapedRunes(user) <= maxRunes
+	}
+	brief, ok := fits()
+	if ok {
+		return brief, nil
+	}
+	omitted := []string{}
+	steps := []struct {
+		name string
+		drop func()
+	}{
+		{"facts", func() { c.Facts, c.FactsOmitted = nil, 0 }},
+		{"relationships", func() { c.Relationships = nil }},
+		{"related_scenes", func() { c.RelatedScenes = nil }},
+		{"plot", func() { c.Plot = plot.Spine{} }},
+	}
+	for _, step := range steps {
+		step.drop()
+		omitted = append(omitted, step.name)
+		if brief, ok = fits(); ok {
+			return brief, omitted
+		}
+	}
+	omitted = append(omitted, "entities")
+	entities := slices.Clone(c.Entities)
+	for i := range entities {
+		entities[i].Recent = nil
+	}
+	c.Entities = entities
+	for len(c.Entities) > 0 {
+		if brief, ok = fits(); ok {
+			return brief, omitted
+		}
+		c.Entities = c.Entities[:len(c.Entities)-1]
+	}
+	brief, _ = fits()
+	return brief, omitted
+}
+
 func buildSystem(c Context) string {
 	lang := c.Options.Language
 	if langIsJapanese(lang) {
@@ -455,6 +520,12 @@ func buildUser(c Context) string {
 				b.WriteString(fmt.Sprintf("  · %s — %s\n", title, src.URL))
 			}
 		}
+		if c.FactsOmitted > 0 {
+			fmt.Fprintf(&b, langPick(lang,
+				"자료 %d장은 생략했습니다. linetta_get_fact_cards로 볼 수 있습니다.\n",
+				"%d fact cards left out; linetta_get_fact_cards shows them.\n",
+				"資料 %d 枚を省きました。linetta_get_fact_cards で見られます。\n"), c.FactsOmitted)
+		}
 		b.WriteString("\n")
 	}
 	if len(c.References) > 0 {
@@ -560,8 +631,23 @@ func renderLedger(l LedgerBrief, lang string) string {
 		return ""
 	}
 	var b strings.Builder
-	if p := l.Part; p != nil {
-		fmt.Fprintf(&b, langPick(lang, "## 지금 쓰는 부: %s\n", "## Current Part: %s\n", "## いま書いている部: %s\n"), p.Label)
+	section := func(heading string, lines []string) {
+		if len(lines) == 0 {
+			return
+		}
+		b.WriteString(heading + "\n")
+		for _, line := range lines {
+			b.WriteString("- " + line + "\n")
+		}
+		b.WriteString("\n")
+	}
+	section(langPick(lang, "## 작품 규칙", "## Rules of This Work", "## 作品の規則"), l.Pinned)
+	section(langPick(lang, "## 현재 상태", "## Current State", "## 現在の状態"), l.State)
+	part := func(p *PartArcBrief, heading string) {
+		if p == nil {
+			return
+		}
+		fmt.Fprintf(&b, heading, p.Label)
 		if p.Role != "" {
 			b.WriteString(langPick(lang, "역할: ", "Role: ", "役割: ") + p.Role + "\n")
 		}
@@ -573,16 +659,8 @@ func renderLedger(l LedgerBrief, lang string) string {
 		}
 		fmt.Fprintf(&b, langPick(lang, "이 부의 남은 화: %d\n\n", "Scenes left in this part: %d\n\n", "この部の残り話数: %d\n\n"), p.ScenesLeft)
 	}
-	section := func(heading string, lines []string) {
-		if len(lines) == 0 {
-			return
-		}
-		b.WriteString(heading + "\n")
-		for _, line := range lines {
-			b.WriteString("- " + line + "\n")
-		}
-		b.WriteString("\n")
-	}
+	part(l.Part, langPick(lang, "## 지금 쓰는 부: %s\n", "## Current Part: %s\n", "## いま書いている部: %s\n"))
+	part(l.Arc, langPick(lang, "## 지금 쓰는 아크: %s\n", "## Current Arc: %s\n", "## いま書いているアーク: %s\n"))
 	section(langPick(lang, "## 지금 회수할 것", "## Due Now", "## いま回収するもの"), l.Due)
 	section(langPick(lang, "## 열려 있는 약속", "## Still Owed", "## 未回収の約束"), l.Open)
 	section(langPick(lang, "## 정해진 사실", "## Settled", "## 確定した事項"), l.Settled)

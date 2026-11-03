@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -22,6 +23,13 @@ import (
 const prevSummaryMaxRunes = 300
 const coreEntityContextLimit = 12
 
+// coreEntityCandidates is how many core elements are weighed for the limit above,
+// and recentCoreScenes how far back counts as recent.
+const (
+	coreEntityCandidates = 50
+	recentCoreScenes     = 30
+)
+
 // Budgets for the parts of the brief that grow with the work, in runes: a
 // Korean summary is three bytes a character, so a byte budget would give a
 // Korean work a third of what it means to.
@@ -33,13 +41,21 @@ const (
 	// is shared among the others, so a long series still shows its whole shape.
 	partSummariesMaxRunes      = 2500
 	partSummaryCurrentMaxRunes = 1200
-	partSummaryMinRunes        = 80
+	// arcSummaryMaxRunes bounds the arc being written, on top of its part.
+	arcSummaryMaxRunes  = 500
+	partSummaryMinRunes = 80
 	// upcomingPlanLimit is how many unwritten scenes past the next one the
 	// brief carries the plan of.
 	upcomingPlanLimit = 2
 	// An entity's dossier is a pointer back into the story, not a recap of it:
 	// a few short lines, with a cap over all entities together. Without these
 	// the dossier was four fifths of a ten-episode work's brief.
+	// entityBriefMaxRunes bounds the whole world section and factBriefMaxRunes
+	// the fact dossier. Together they were what ran off the end of a real brief:
+	// a 56-element work spent 10,000 runes on cards and 4,500 on general notes.
+	entityBriefMaxRunes = 7000
+	factBriefMaxRunes   = 1500
+
 	entityRecentLimit        = 3
 	entityRecentLineMaxRunes = 160
 	entityRecentMaxRunes     = 6000
@@ -287,7 +303,11 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 	if err != nil {
 		return Context{}, err
 	}
-	coreEnts, err := b.mentions.ListCoreEntitiesForProject(ctx, n.ProjectID, coreEntityContextLimit)
+	coreEnts, err := b.mentions.ListCoreEntitiesForProject(ctx, n.ProjectID, coreEntityCandidates)
+	if err != nil {
+		return Context{}, err
+	}
+	coreEnts, err = b.recentCore(ctx, n, coreEnts)
 	if err != nil {
 		return Context{}, err
 	}
@@ -333,9 +353,10 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 	// partial context beats aborting the turn: per-source errors leave the
 	// section empty.
 	var facts []FactBrief
+	factsOmitted := 0
 	if b.factSource != nil {
 		if got, err := b.factSource.ContextFacts(ctx, n.ProjectID, nodeID); err == nil {
-			facts = got
+			facts, factsOmitted = budgetFacts(got)
 		}
 	}
 	var writerProfile, workNotes string
@@ -421,6 +442,7 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 		Plot:          spine,
 		Notes:         noteBriefs,
 		Facts:         facts,
+		FactsOmitted:  factsOmitted,
 		WriterProfile: writerProfile,
 		WorkNotes:     workNotes,
 		Skills:        skills,
@@ -457,14 +479,29 @@ func (b *ContextBuilder) loadEntityBriefs(ctx context.Context, cur node.Node, en
 		}
 	}
 
+	// Cards first, in the order they came: the scene's own cast, then the core.
+	// A card that does not fit is left to elements_not_in_brief, which says it
+	// exists, and a shorter one after it may still fit.
 	briefs := make([]EntityBrief, 0, len(ents))
-	budget := entityRecentMaxRunes
+	kept := make([]entity.Entity, 0, len(ents))
+	room := entityBriefMaxRunes
+	for _, e := range ents {
+		brief := EntityBrief{Name: e.Name, Kind: e.Kind, Role: e.Role, Summary: e.Summary, Attributes: e.Attributes}
+		cost := entityCardRunes(brief)
+		if cost > room {
+			continue
+		}
+		room -= cost
+		briefs = append(briefs, brief)
+		kept = append(kept, e)
+	}
+
+	budget := min(entityRecentMaxRunes, room)
 	// A scene's line appears once. The next entity it concerns gets the label
 	// alone: a cast of twelve shares most of its scenes, and repeating the
 	// summary under each of them is the bulk the dossier used to be.
 	told := map[string]bool{}
-	for _, e := range ents {
-		brief := EntityBrief{Name: e.Name, Kind: e.Kind, Role: e.Role, Summary: e.Summary, Attributes: e.Attributes}
+	for at, e := range kept {
 		ids, _, err := b.mentions.MentionedNodeIDs(ctx, e.ID)
 		if err != nil {
 			return nil, err
@@ -473,7 +510,7 @@ func (b *ContextBuilder) loadEntityBriefs(ctx context.Context, cur node.Node, en
 		for _, id := range ids {
 			mentioned[id] = true
 		}
-		for i := len(earlier) - 1; i >= 0 && len(brief.Recent) < entityRecentLimit; i-- {
+		for i := len(earlier) - 1; i >= 0 && len(briefs[at].Recent) < entityRecentLimit; i-- {
 			lf := earlier[i]
 			if !mentioned[lf.ID] || skip[lf.ID] {
 				continue
@@ -485,17 +522,101 @@ func (b *ContextBuilder) loadEntityBriefs(ctx context.Context, cur node.Node, en
 			line := "[" + lf.Label + "]"
 			if !told[lf.ID] {
 				line += " " + trimRunes(first, entityRecentLineMaxRunes)
-				told[lf.ID] = true
 			}
-			budget -= utf8.RuneCountInString(line)
-			if budget < 0 {
+			cost := utf8.RuneCountInString(line) + entityRecentLineFrame
+			if cost > budget {
 				break
 			}
-			brief.Recent = append(brief.Recent, line)
+			budget -= cost
+			told[lf.ID] = true
+			briefs[at].Recent = append(briefs[at].Recent, line)
 		}
-		briefs = append(briefs, brief)
 	}
 	return briefs, nil
+}
+
+// entityRecentLineFrame is what a Recent line adds around its text when rendered.
+const entityRecentLineFrame = 5
+
+// entityCardRunes is what one card costs in the rendered brief, Recent aside.
+func entityCardRunes(e EntityBrief) int {
+	n := utf8.RuneCountInString(e.Name) + utf8.RuneCountInString(e.Kind) + utf8.RuneCountInString(e.Role) +
+		utf8.RuneCountInString(e.Summary) + 12
+	for k, v := range e.Attributes {
+		n += utf8.RuneCountInString(k) + utf8.RuneCountInString(v) + 3
+	}
+	return n
+}
+
+// factCardRunes is what one card costs in the rendered dossier.
+func factCardRunes(f FactBrief) int {
+	n := utf8.RuneCountInString(f.ID) + utf8.RuneCountInString(f.Status) + utf8.RuneCountInString(f.Claim) +
+		utf8.RuneCountInString(f.Category) + utf8.RuneCountInString(f.Result) + 12
+	for _, s := range f.Sources {
+		n += utf8.RuneCountInString(s.Title) + utf8.RuneCountInString(s.URL) + 8
+	}
+	return n
+}
+
+// budgetFacts keeps what bears on this scene: cards attached to it, then what
+// the writer set as the work's own (intentional_fiction), then general notes.
+func budgetFacts(cards []FactBrief) ([]FactBrief, int) {
+	rank := func(f FactBrief) int {
+		switch {
+		case f.Scene:
+			return 0
+		case f.Status == "intentional_fiction":
+			return 1
+		}
+		return 2
+	}
+	ordered := slices.Clone(cards)
+	slices.SortStableFunc(ordered, func(a, b FactBrief) int { return rank(a) - rank(b) })
+	out := make([]FactBrief, 0, len(ordered))
+	room, omitted := factBriefMaxRunes, 0
+	for _, f := range ordered {
+		cost := factCardRunes(f)
+		if cost > room {
+			omitted++
+			continue
+		}
+		room -= cost
+		out = append(out, f)
+	}
+	return out, omitted
+}
+
+// recentCore keeps the core elements the story is using now. In a long work the
+// cast turns over, and an order by when a card was last edited says nothing
+// about who is on stage: the elements seen in the last scenes come first.
+func (b *ContextBuilder) recentCore(ctx context.Context, cur node.Node, core []entity.Entity) ([]entity.Entity, error) {
+	if len(core) <= coreEntityContextLimit {
+		return core, nil
+	}
+	all, err := b.nodes.ListByProject(ctx, cur.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	earlier := leavesBefore(leavesInOrder(childrenByParent(all)), cur.ID)
+	recent := make(map[string]bool, recentCoreScenes)
+	for _, lf := range earlier[max(0, len(earlier)-recentCoreScenes):] {
+		recent[lf.ID] = true
+	}
+	seen := make(map[string]int, len(core))
+	for _, e := range core {
+		ids, _, err := b.mentions.MentionedNodeIDs(ctx, e.ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, id := range ids {
+			if recent[id] {
+				seen[e.ID]++
+			}
+		}
+	}
+	ordered := slices.Clone(core)
+	slices.SortStableFunc(ordered, func(x, y entity.Entity) int { return seen[y.ID] - seen[x.ID] })
+	return ordered[:coreEntityContextLimit], nil
 }
 
 // leavesBefore returns the leaves ahead of curID in story order, or all of them
@@ -693,6 +814,7 @@ func (b *ContextBuilder) loadHierarchicalContext(ctx context.Context, cur node.N
 	}
 
 	out.PartSummaries = partSummaries(rootContainers, ancestorRoot(byID, cur), byID)
+	out.PartSummaries = withArcSummary(out.PartSummaries, cur, byID)
 
 	return out, shown, nil
 }
@@ -752,6 +874,30 @@ func partSummaries(roots []node.Node, currentRoot string, byID map[string]node.N
 		})
 	}
 	return out
+}
+
+// withArcSummary adds the arc being written after the part it belongs to, in a
+// work split finer than its parts. A part's summary says where the volume is
+// going; the scene at hand is more often about the arc inside it.
+func withArcSummary(parts []SceneSummary, cur node.Node, byID map[string]node.Node) []SceneSummary {
+	if cur.ParentID == nil {
+		return parts
+	}
+	arc, ok := byID[*cur.ParentID]
+	if !ok || arc.ParentID == nil || !arc.SummaryWritten || strings.TrimSpace(arc.Summary) == "" {
+		return parts
+	}
+	root := ancestorRoot(byID, cur)
+	line := SceneSummary{
+		NodeID: arc.ID, Label: node.BreadcrumbLabel(byID, arc),
+		Body: trimRunes(strings.TrimSpace(arc.Summary), arcSummaryMaxRunes), Stale: !arc.SummaryFresh(),
+	}
+	for i, p := range parts {
+		if p.NodeID == root {
+			return slices.Insert(parts, i+1, line)
+		}
+	}
+	return append(parts, line)
 }
 
 // DeriveProjectSynopsis builds the rollup synopsis from root containers. When

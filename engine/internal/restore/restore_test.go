@@ -17,6 +17,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/forecast"
+	"github.com/devlikebear/linetta/engine/internal/ledger"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/note"
 	"github.com/devlikebear/linetta/engine/internal/project"
@@ -783,5 +784,96 @@ func TestMergeProjectExcludesForecasts(t *testing.T) {
 	}
 	if count != 0 {
 		t.Errorf("merged project carries %d forecasts, want 0 (excluded by design)", count)
+	}
+}
+
+func TestMergeProjectKeepsPinnedLedgerEntries(t *testing.T) {
+	ctx := context.Background()
+	home := t.TempDir()
+	st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	nodes := node.NewRepo(st)
+	p, err := project.NewRepo(st).Create(ctx, 1, project.NewInput{Title: "Pinned", LengthTarget: "short", DefaultPOV: "first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := ledger.NewRepo(st, nodes)
+	e, err := repo.Add(ctx, 1, ledger.Entry{ProjectID: p.ID, Kind: ledger.KindDecision, Body: "규칙"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.SetPinned(ctx, 2, e.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	backupPath := filepath.Join(home, "backup.db")
+	if _, err := st.DB().ExecContext(ctx, "VACUUM INTO ?", backupPath); err != nil {
+		t.Fatal(err)
+	}
+	live, err := store.Open(ctx, filepath.Join(home, "live.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer live.Close()
+	merged, err := MergeProject(ctx, live, backupPath, home, p.ID, " copy", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := ledger.NewRepo(live, node.NewRepo(live)).List(ctx, ledger.Filter{ProjectID: merged.ProjectID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || !got[0].Pinned {
+		t.Fatalf("entries = %+v", got)
+	}
+}
+
+func TestMergeProjectRemapsWhatAFactPointsAt(t *testing.T) {
+	ctx := context.Background()
+	home := t.TempDir()
+	st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	nodes := node.NewRepo(st)
+	p, err := project.NewRepo(st).Create(ctx, 1, project.NewInput{Title: "Facts", LengthTarget: "short", DefaultPOV: "first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaf := *p.LastOpenedNodeID
+	repo := ledger.NewRepo(st, nodes)
+	old, err := repo.Add(ctx, 1, ledger.Entry{ProjectID: p.ID, Kind: ledger.KindNumber, Subject: "주인공", Attribute: "위치", Body: "객잔"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, err := repo.Add(ctx, 2, ledger.Entry{ProjectID: p.ID, Kind: ledger.KindNumber, Subject: "주인공", Attribute: "위치", Body: "산문", PlantedNodeID: leaf})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Supersede(ctx, 3, old.ID, next); err != nil {
+		t.Fatal(err)
+	}
+	backupPath := filepath.Join(home, "backup.db")
+	if _, err := st.DB().ExecContext(ctx, "VACUUM INTO ?", backupPath); err != nil {
+		t.Fatal(err)
+	}
+	live, err := store.Open(ctx, filepath.Join(home, "live.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer live.Close()
+	merged, err := MergeProject(ctx, live, backupPath, home, p.ID, " copy", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := ledger.NewRepo(live, node.NewRepo(live)).List(ctx, ledger.Filter{ProjectID: merged.ProjectID})
+	if err != nil || len(got) != 2 {
+		t.Fatalf("entries = %+v, err %v", got, err)
+	}
+	if got[0].SupersededBy != got[1].ID || got[0].ValidToNodeID == "" || got[0].ValidToNodeID == leaf {
+		t.Fatalf("got %+v", got[0])
 	}
 }

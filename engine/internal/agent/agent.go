@@ -87,6 +87,12 @@ type Deps struct {
 	// by an independent read of it. Nil means off: this pass sends the
 	// manuscript again, so it runs only when the writer asked for it.
 	EpisodeReviewEnabled func() bool
+	// SettlementEnabled reports whether a turn that wrote a scene is followed by
+	// a pass that records what the scene changed. Nil means off.
+	SettlementEnabled func() bool
+	// ImpactReviewEnabled reports whether a turn that changed a decision or a
+	// fact is followed by a look for prose it no longer agrees with. Nil means off.
+	ImpactReviewEnabled func() bool
 	// MaxToolCalls reports how many tool calls one turn may execute
 	// (settings.agent_max_tool_calls). Read once at the top of each turn. A
 	// nil func, or an answer below one, means maxIterations.
@@ -194,11 +200,12 @@ func New(d Deps) *Service {
 // one did. Nothing has moved on the
 // first turn after a restart: the window it would be measured against is gone,
 // and agent.history already drew the boundary when the panel opened.
-func (s *Service) replayHistory(projectID string, msgs []companion.HistoryMessage, budget int) (replay []llm.ChatMessage, start string, cut, moved bool) {
+func (s *Service) replayHistory(ctx context.Context, projectID string, msgs []companion.HistoryMessage, budget int) (replay []llm.ChatMessage, start string, cut, moved bool) {
+	visible := s.tr.afterMark(ctx, projectID, msgs)
 	s.historyMu.Lock()
 	defer s.historyMu.Unlock()
 	previous := s.historyStarts[projectID]
-	replay, start = priorMessages(msgs, previous, budget)
+	replay, start = priorMessages(visible, previous, budget)
 	s.historyStarts[projectID] = start
 	cut = historyCut(msgs, start)
 	return replay, start, cut, cut && previous != "" && start != previous
@@ -228,9 +235,10 @@ func (s *Service) ReplayStart(ctx context.Context, projectID string) (string, er
 	if err != nil {
 		return "", err
 	}
+	visible := s.tr.afterMark(ctx, projectID, msgs)
 	s.historyMu.Lock()
 	defer s.historyMu.Unlock()
-	_, start := priorMessages(msgs, s.historyStarts[projectID], budget)
+	_, start := priorMessages(visible, s.historyStarts[projectID], budget)
 	if !historyCut(msgs, start) {
 		return "", nil
 	}
@@ -360,6 +368,27 @@ func (s *Service) Status(projectID string) RunStatus {
 // Clear drops the conversation. The activity log survives on purpose.
 func (s *Service) Clear(ctx context.Context, projectID string) error {
 	return s.tr.clear(ctx, projectID)
+}
+
+// ErrTurnRunning is why a conversation cannot start over mid-turn.
+var ErrTurnRunning = errors.New("agent: wait for the turn to finish before starting a new conversation")
+
+// StartFresh begins the conversation anew from here. The writer chooses when:
+// the replay budget stays what it is, nothing is deleted, and the search tools
+// still reach what came before. The mark is in the database because a replay
+// window is only in memory and would not outlive a restart.
+func (s *Service) StartFresh(ctx context.Context, projectID string) error {
+	projectID = strings.TrimSpace(projectID)
+	if s.runs.status(projectID).Running {
+		return ErrTurnRunning
+	}
+	if err := s.tr.startFresh(ctx, projectID); err != nil {
+		return err
+	}
+	s.historyMu.Lock()
+	delete(s.historyStarts, projectID)
+	s.historyMu.Unlock()
+	return nil
 }
 
 // Undo reverts what the agent last did — a structural batch (batchID) or a

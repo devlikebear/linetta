@@ -23,7 +23,7 @@ English · 한국어 · 日本語
 Linetta is made for novelists and web-fiction writers who want their manuscript, outline, characters, places, relationships, and research close at hand — without turning writing into project management.
 
 - **Write with focus.** Work scene by scene in a quiet editor with your outline always within reach.
-- **Keep the story consistent.** Organize characters, places, relationships, storylines, beats, summaries, and memories beside the manuscript. Agents can check a scene against all of it, and what they find or propose waits for your decision.
+- **Keep the story consistent.** See [what has been measured for long serials](docs/longform-support.md). Organize characters, places, relationships, storylines, beats, summaries, and memories beside the manuscript. Agents can check a scene against all of it, and what they find or propose waits for your decision.
 - **Stay in control of AI.** Linetta calls a model only if you connect a provider — for the built-in agent, or your own agent over MCP. The activity log shows what changed and whether the built-in agent or an external client made the call, a recent structural change can be undone in one click while the app stays open, and the text an agent replaces is kept as a restorable version of the scene.
 - **See your story.** Optionally draw illustrations with ChatGPT or Gemini from your scenes and character sheets. Earlier pictures go along so faces stay the same, and nothing is drawn until you press Generate.
 - **Keep your work local.** Projects live in a local SQLite database with version snapshots and daily backups. No Linetta account or mandatory cloud is required.

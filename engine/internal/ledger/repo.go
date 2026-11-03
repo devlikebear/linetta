@@ -14,21 +14,49 @@ import (
 
 // Repo stores the ledger and the part arcs in library.db.
 type Repo struct {
-	s     *store.Store
-	nodes *node.Repo
+	s        *store.Store
+	nodes    *node.Repo
+	subjects SubjectResolver
 }
 
 func NewRepo(s *store.Store, nodes *node.Repo) *Repo { return &Repo{s: s, nodes: nodes} }
 
+// SubjectResolver turns a name into the one the work knows it by.
+type SubjectResolver interface {
+	CanonicalName(ctx context.Context, projectID, name string) string
+	// Names lists every name a subject goes by, its own included.
+	Names(ctx context.Context, projectID, name string) []string
+	// AllNames lists each element's names, one group an element.
+	AllNames(ctx context.Context, projectID string) [][]string
+}
+
+// WithSubjects returns the repo with subjects folded onto the work's names, so
+// that an alias and a name are one subject when facts are compared.
+func (r *Repo) WithSubjects(s SubjectResolver) *Repo {
+	r.subjects = s
+	return r
+}
+
+// canonical is e's subject under its work's name for it. What the story owes
+// keeps the agent's wording: only a fact is compared by subject.
+func (r *Repo) canonical(ctx context.Context, e Entry) string {
+	if r.subjects == nil || Tracked(e.Kind) {
+		return e.Subject
+	}
+	return r.subjects.CanonicalName(ctx, e.ProjectID, e.Subject)
+}
+
 const entryColumns = `id, project_id, kind, subject, body, status,
        COALESCE(planted_node_id, ''), planted_quote, COALESCE(due_node_id, ''),
-       COALESCE(paid_node_id, ''), paid_quote, source, created_at, updated_at`
+       COALESCE(paid_node_id, ''), paid_quote, source, pinned, attribute,
+       COALESCE(valid_to_node_id, ''), superseded_by, strength, value_num, reach, created_at, updated_at`
 
 func scanEntry(row interface{ Scan(...any) error }) (Entry, error) {
 	var e Entry
 	err := row.Scan(&e.ID, &e.ProjectID, &e.Kind, &e.Subject, &e.Body, &e.Status,
 		&e.PlantedNodeID, &e.PlantedQuote, &e.DueNodeID, &e.PaidNodeID, &e.PaidQuote,
-		&e.Source, &e.CreatedAt, &e.UpdatedAt)
+		&e.Source, &e.Pinned, &e.Attribute, &e.ValidToNodeID, &e.SupersededBy, &e.Strength, &e.ValueNum,
+		&e.Reach, &e.CreatedAt, &e.UpdatedAt)
 	return e, err
 }
 
@@ -43,9 +71,17 @@ func (r *Repo) Add(ctx context.Context, now int64, e Entry) (Entry, error) {
 	if e.Source == "" {
 		e.Source = SourceWriter
 	}
+	if e.Strength == "" {
+		e.Strength = StrengthHard
+	}
+	if e.Reach == "" {
+		e.Reach = ReachArc
+	}
 	if !ValidKind(e.Kind) {
 		return Entry{}, ErrInvalidKind
 	}
+	e.Attribute = strings.TrimSpace(e.Attribute)
+	e.Subject = r.canonical(ctx, e)
 	if err := r.validate(ctx, e); err != nil {
 		return Entry{}, err
 	}
@@ -53,10 +89,12 @@ func (r *Repo) Add(ctx context.Context, now int64, e Entry) (Entry, error) {
 	e.CreatedAt, e.UpdatedAt = now, now
 	if _, err := r.s.DB().ExecContext(ctx, `
 INSERT INTO story_ledger (id, project_id, kind, subject, body, status, planted_node_id, planted_quote,
-                          due_node_id, paid_node_id, paid_quote, source, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                          due_node_id, paid_node_id, paid_quote, source, attribute, valid_to_node_id,
+                          strength, value_num, reach, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		e.ID, e.ProjectID, e.Kind, e.Subject, e.Body, e.Status, nullable(e.PlantedNodeID), e.PlantedQuote,
-		nullable(e.DueNodeID), nullable(e.PaidNodeID), e.PaidQuote, e.Source, now, now); err != nil {
+		nullable(e.DueNodeID), nullable(e.PaidNodeID), e.PaidQuote, e.Source, e.Attribute,
+		nullable(e.ValidToNodeID), e.Strength, e.ValueNum, e.Reach, now, now); err != nil {
 		return Entry{}, err
 	}
 	return e, nil
@@ -84,11 +122,17 @@ func (r *Repo) Update(ctx context.Context, now int64, id string, p Patch) (Entry
 		{&e.Subject, p.Subject}, {&e.Body, p.Body}, {&e.Status, p.Status},
 		{&e.PlantedNodeID, p.PlantedNodeID}, {&e.PlantedQuote, p.PlantedQuote},
 		{&e.DueNodeID, p.DueNodeID}, {&e.PaidNodeID, p.PaidNodeID}, {&e.PaidQuote, p.PaidQuote},
+		{&e.Attribute, p.Attribute}, {&e.ValidToNodeID, p.ValidToNodeID}, {&e.Strength, p.Strength},
+		{&e.Reach, p.Reach},
 	} {
 		if f.from != nil {
 			*f.to = strings.TrimSpace(*f.from)
 		}
 	}
+	if p.ValueNum != nil {
+		e.ValueNum = p.ValueNum
+	}
+	e.Subject = r.canonical(ctx, e)
 	if err := r.validate(ctx, e); err != nil {
 		return Entry{}, err
 	}
@@ -96,9 +140,30 @@ func (r *Repo) Update(ctx context.Context, now int64, id string, p Patch) (Entry
 	if _, err := r.s.DB().ExecContext(ctx, `
 UPDATE story_ledger
    SET subject = ?, body = ?, status = ?, planted_node_id = ?, planted_quote = ?,
-       due_node_id = ?, paid_node_id = ?, paid_quote = ?, updated_at = ?
+       due_node_id = ?, paid_node_id = ?, paid_quote = ?, attribute = ?, valid_to_node_id = ?,
+       strength = ?, value_num = ?, reach = ?, updated_at = ?
  WHERE id = ?`, e.Subject, e.Body, e.Status, nullable(e.PlantedNodeID), e.PlantedQuote,
-		nullable(e.DueNodeID), nullable(e.PaidNodeID), e.PaidQuote, now, id); err != nil {
+		nullable(e.DueNodeID), nullable(e.PaidNodeID), e.PaidQuote, e.Attribute,
+		nullable(e.ValidToNodeID), e.Strength, e.ValueNum, e.Reach, now, id); err != nil {
+		return Entry{}, err
+	}
+	return e, nil
+}
+
+// SetPinned holds an entry fixed or lets it go. Only the writer's RPC calls it.
+// What the story still owes cannot be pinned: a pin says this stays true, and a
+// promise is there to be paid.
+func (r *Repo) SetPinned(ctx context.Context, now int64, id string, pinned bool) (Entry, error) {
+	e, err := r.Get(ctx, id)
+	if err != nil {
+		return Entry{}, err
+	}
+	if pinned && (Tracked(e.Kind) || e.Kind == KindCutPlan || e.Status != StatusOpen) {
+		return Entry{}, ErrNotPinnable
+	}
+	e.Pinned, e.UpdatedAt = pinned, now
+	if _, err := r.s.DB().ExecContext(ctx,
+		`UPDATE story_ledger SET pinned = ?, updated_at = ? WHERE id = ?`, pinned, now, id); err != nil {
 		return Entry{}, err
 	}
 	return e, nil
@@ -180,6 +245,22 @@ func (r *Repo) validate(ctx context.Context, e Entry) error {
 	}
 	if e.Status == StatusPaid && e.PaidNodeID == "" {
 		return ErrPaidNeedsNode
+	}
+	if e.Strength != StrengthHard && e.Strength != StrengthSoft {
+		return ErrInvalidStrength
+	}
+	if e.Reach != ReachArc && e.Reach != ReachVolume && e.Reach != ReachWork {
+		return ErrInvalidReach
+	}
+	hasFactFields := e.Attribute != "" || e.ValidToNodeID != "" || e.ValueNum != nil
+	if hasFactFields && (Tracked(e.Kind) || e.Kind == KindCutPlan) {
+		return ErrFactOnly
+	}
+	if e.Attribute != "" && e.Subject == "" {
+		return ErrFactNoSubject
+	}
+	if err := r.checkNode(ctx, e.ProjectID, e.ValidToNodeID, ""); err != nil {
+		return err
 	}
 	if err := r.checkNode(ctx, e.ProjectID, e.DueNodeID, ""); err != nil {
 		return err

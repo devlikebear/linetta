@@ -164,11 +164,19 @@ type ProjectMeta struct {
 // already rendered: the ledger package owns what its entries mean.
 type LedgerBrief struct {
 	Part *PartArcBrief `json:"part,omitempty"`
+	// Arc is the arc being written, in a work split finer than its parts.
+	Arc *PartArcBrief `json:"arc,omitempty"`
+	// Pinned is what the writer holds fixed for the whole work.
+	Pinned []string `json:"pinned,omitempty"`
+	// State is what is true at this scene, one line a subject, worked out from
+	// the facts in the ledger rather than written by anyone.
+	State []string `json:"state,omitempty"`
 	// Due is what the story owes about now.
 	Due []string `json:"due,omitempty"`
 	// Open is what else the story owes.
 	Open []string `json:"open,omitempty"`
-	// Settled is what has been decided or established, newest first.
+	// Settled is what has been decided or established: what this scene talks
+	// about first, then newest first.
 	Settled []string `json:"settled,omitempty"`
 	// Omitted counts entries that did not fit.
 	Omitted int `json:"omitted,omitempty"`
@@ -176,7 +184,7 @@ type LedgerBrief struct {
 
 // Empty reports whether there is nothing to render.
 func (l LedgerBrief) Empty() bool {
-	return l.Part == nil && len(l.Due) == 0 && len(l.Open) == 0 && len(l.Settled) == 0 && l.Omitted == 0
+	return l.Part == nil && l.Arc == nil && len(l.Pinned) == 0 && len(l.State) == 0 && len(l.Due) == 0 && len(l.Open) == 0 && len(l.Settled) == 0 && l.Omitted == 0
 }
 
 // PartArcBrief is the current part's job in the whole work.
@@ -314,6 +322,8 @@ type Context struct {
 	Plot          plot.Spine          `json:"plot"`
 	Notes         []NoteBrief         `json:"notes"`
 	Facts         []FactBrief         `json:"facts,omitempty"`
+	// FactsOmitted counts the cards the dossier's budget left out.
+	FactsOmitted int `json:"facts_omitted,omitempty"`
 	// WriterProfile and WorkNotes are the curated, budgeted memories: short
 	// documents the writer and the agent both maintain.
 	WriterProfile string `json:"writer_profile,omitempty"`
@@ -390,6 +400,8 @@ type FactBrief struct {
 	Category string            `json:"category,omitempty"`
 	Result   string            `json:"result,omitempty"`
 	Sources  []FactSourceBrief `json:"sources,omitempty"`
+	// Scene is set on a card attached to the brief's own scene.
+	Scene bool `json:"scene,omitempty"`
 }
 
 // FactSourceBrief is one source line under a fact card.

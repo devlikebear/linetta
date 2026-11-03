@@ -3,7 +3,9 @@ package ledger
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/devlikebear/linetta/engine/internal/node"
@@ -11,8 +13,18 @@ import (
 )
 
 const (
-	// briefMaxRunes bounds the ledger's share of the brief, due items first.
-	briefMaxRunes = 3000
+	// briefOwedRunes and briefSettledRunes bound the ledger's share of the
+	// brief. They are separate because one budget let the owed entries, which
+	// come first, use all of it: in a real work no settled entry reached a brief
+	// from the eighth episode on. What one side leaves, the other may use.
+	briefOwedRunes    = 2000
+	briefSettledRunes = 1600
+	// briefPinnedRunes bounds what the writer pinned, apart from the rest: these
+	// are the entries that must not lose out to anything else in the ledger.
+	briefPinnedRunes = 3000
+	// briefStateRunes bounds the current state, briefStateValueRunes one value.
+	briefStateRunes      = 2500
+	briefStateValueRunes = 80
 	// dueHorizon is how many scenes ahead counts as coming due.
 	dueHorizon = 3
 	// neglectedAfter is how many scenes an open promise may sit before the
@@ -34,6 +46,7 @@ func (r *Repo) ContextLedger(ctx context.Context, projectID, nodeID string) (sto
 		cur = len(t.leaves)
 	}
 	root := t.root(nodeID)
+	arc := t.arcOf(nodeID)
 
 	arcs, err := r.ListArcs(ctx, projectID)
 	if err != nil {
@@ -45,47 +58,171 @@ func (r *Repo) ContextLedger(ctx context.Context, projectID, nodeID string) (sto
 			ScenesLeft: t.scenesLeft(root, cur),
 		}
 	}
+	if a, ok := arcs[arc]; ok && arc != root {
+		out.Arc = &storycontext.PartArcBrief{
+			Label: t.byID[arc].Label, Role: a.Role, Goal: a.Goal, Tension: a.Tension,
+			ScenesLeft: t.scenesLeft(arc, cur),
+		}
+	}
 
 	entries, err := r.List(ctx, Filter{ProjectID: projectID, Status: StatusOpen})
 	if err != nil {
 		return out, err
 	}
-	budget := briefMaxRunes
-	take := func(line string, into *[]string) bool {
-		budget -= utf8.RuneCountInString(line)
-		if budget < 0 {
-			out.Omitted++
-			return false
-		}
-		*into = append(*into, line)
-		return true
-	}
+	out.State, out.Omitted = t.stateLines(entries, nodeID, cur)
 	var owed, settled []Entry
+	pinnedRoom := briefPinnedRunes
 	for _, e := range entries {
-		if e.Kind == KindCutPlan || t.after(e.PlantedNodeID, cur) {
+		if e.Kind == KindCutPlan || t.after(e.PlantedNodeID, cur) || e.SupersededBy != "" {
 			continue
 		}
-		if Tracked(e.Kind) {
-			owed = append(owed, e)
-		} else {
+		switch {
+		case e.Attribute != "" && !e.Pinned:
+			// A fact reaches the brief as the current state, or not at all.
+		case e.Pinned:
+			line := t.line(e, cur)
+			if cost := utf8.RuneCountInString(line); cost <= pinnedRoom {
+				pinnedRoom -= cost
+				out.Pinned = append(out.Pinned, line)
+			} else {
+				out.Omitted++
+			}
+		case Tracked(e.Kind):
+			if t.due(e, cur, root) || t.inReach(e, root, arc) {
+				owed = append(owed, e)
+			} else {
+				out.Omitted++
+			}
+		default:
 			settled = append(settled, e)
 		}
 	}
+	// Due items first, then the rest of what is owed.
+	var waiting []func() bool
+	budget := briefOwedRunes
+	fill := func(lines []string, into *[]string, room *int) []func() bool {
+		var left []func() bool
+		for _, line := range lines {
+			cost := utf8.RuneCountInString(line)
+			if cost <= *room {
+				*room -= cost
+				*into = append(*into, line)
+				continue
+			}
+			left = append(left, func() bool {
+				if cost > budget {
+					return false
+				}
+				budget -= cost
+				*into = append(*into, line)
+				return true
+			})
+		}
+		return left
+	}
+	var due, open []string
 	for _, e := range owed {
 		if t.due(e, cur, root) {
-			take(t.line(e, cur), &out.Due)
+			due = append(due, t.line(e, cur))
+		} else {
+			open = append(open, t.line(e, cur))
 		}
 	}
-	for _, e := range owed {
-		if !t.due(e, cur, root) {
-			take(t.line(e, cur), &out.Open)
-		}
+	waiting = append(waiting, fill(due, &out.Due, &budget)...)
+	waiting = append(waiting, fill(open, &out.Open, &budget)...)
+
+	budget += briefSettledRunes
+	lines := make([]string, 0, len(settled))
+	for _, e := range t.bySceneRelevance(settled, nodeID) {
+		lines = append(lines, t.line(e, cur))
 	}
-	// Newest first: what was settled last is likeliest to bear on this scene.
-	for i := len(settled) - 1; i >= 0; i-- {
-		take(t.line(settled[i], cur), &out.Settled)
+	waiting = append(fill(lines, &out.Settled, &budget), waiting...)
+	for _, retry := range waiting {
+		if !retry() {
+			out.Omitted++
+		}
 	}
 	return out, nil
+}
+
+// arcOf is the container nearest a scene: its arc in a work split into volumes
+// and arcs, its part in one that is not.
+func (t tree) arcOf(id string) string {
+	n, ok := t.byID[id]
+	if !ok || n.ParentID == nil {
+		return id
+	}
+	return *n.ParentID
+}
+
+// inReach says whether a promise is still in play where the story is now. One
+// planted nowhere has no place to fall out of sight from.
+func (t tree) inReach(e Entry, root, arc string) bool {
+	if e.Reach == ReachWork || e.PlantedNodeID == "" {
+		return true
+	}
+	if _, ok := t.byID[e.PlantedNodeID]; !ok {
+		return true
+	}
+	if e.Reach == ReachVolume {
+		return t.root(e.PlantedNodeID) == root
+	}
+	return t.arcOf(e.PlantedNodeID) == arc
+}
+
+// bySceneRelevance orders settled entries for a scene: those whose subject the
+// scene's plan or summary, or the previous scene's summary, talks about, then
+// newest first. It compares words, not meaning: the brief stays deterministic,
+// and an entry it misses is still one linetta_list_ledger away.
+func (t tree) bySceneRelevance(entries []Entry, nodeID string) []Entry {
+	text := t.sceneText(nodeID)
+	type scored struct {
+		e     Entry
+		score int
+	}
+	rows := make([]scored, 0, len(entries))
+	for i := len(entries) - 1; i >= 0; i-- {
+		rows = append(rows, scored{entries[i], subjectHits(entries[i].Subject, text)})
+	}
+	slices.SortStableFunc(rows, func(a, b scored) int { return b.score - a.score })
+	out := make([]Entry, len(rows))
+	for i, r := range rows {
+		out[i] = r.e
+	}
+	return out
+}
+
+// sceneText is what the scene says it is about.
+func (t tree) sceneText(nodeID string) string {
+	n, ok := t.byID[nodeID]
+	if !ok {
+		return ""
+	}
+	parts := []string{n.Plan, n.Summary}
+	if i, onStory := t.index[nodeID]; onStory && i > 0 {
+		parts = append(parts, t.leaves[i-1].Summary)
+	}
+	return strings.Join(parts, "\n")
+}
+
+// subjectHits counts the subject's words found in text. A Korean word may carry
+// a particle the text does not, so a word of three runes or more also matches
+// without its last one.
+func subjectHits(subject, text string) int {
+	hits := 0
+	for _, word := range strings.FieldsFunc(subject, func(r rune) bool {
+		return unicode.IsSpace(r) || unicode.IsPunct(r)
+	}) {
+		runes := []rune(word)
+		switch {
+		case len(runes) < 2:
+		case strings.Contains(text, word):
+			hits++
+		case len(runes) >= 3 && strings.Contains(text, string(runes[:len(runes)-1])):
+			hits++
+		}
+	}
+	return hits
 }
 
 // tree is the outline in story order.

@@ -8,12 +8,17 @@ const mocks = vi.hoisted(() => ({
   save: vi.fn(),
   remove: vi.fn(),
   setArc: vi.fn(),
+  setPinned: vi.fn(),
+  relinkWork: vi.fn(),
+  duplicate: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({ listen: () => Promise.resolve(() => undefined) }));
 vi.mock("../lib/rpc", () => ({
   settings: { get: vi.fn().mockResolvedValue({ language: "en" }) },
-  ledger: { list: mocks.list, save: mocks.save, remove: mocks.remove, setArc: mocks.setArc },
+  ledger: { list: mocks.list, save: mocks.save, remove: mocks.remove, setArc: mocks.setArc, setPinned: mocks.setPinned },
+  mentions: { relinkWork: mocks.relinkWork },
+  projects: { duplicate: mocks.duplicate },
 }));
 
 const entry = (over = {}) => ({
@@ -36,6 +41,68 @@ describe("LedgerSection", () => {
     });
     mocks.save.mockResolvedValue({});
     mocks.setArc.mockResolvedValue({});
+    mocks.setPinned.mockResolvedValue({});
+  });
+
+  it("pins a settled entry through its own RPC", async () => {
+    await renderSection();
+    fireEvent.click(await screen.findByRole("tab", { name: "Settled" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Pin" }));
+    await waitFor(() => expect(mocks.setPinned).toHaveBeenCalledWith("l2", true));
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
+
+  it("shows a fact's attribute, span and standing", async () => {
+    mocks.list.mockResolvedValue({
+      entries: [entry({ id: "l4", kind: "number", attribute: "위치", strength: "soft", valid_to_node_id: "n1", superseded_by: "l9" })],
+      parts: [],
+      labels: { n1: "3화" },
+    });
+    await renderSection();
+    fireEvent.click(await screen.findByRole("tab", { name: "Settled" }));
+    expect(await screen.findByText("위치")).toBeTruthy();
+    expect(screen.getByText("unconfirmed")).toBeTruthy();
+    expect(screen.getByText("replaced")).toBeTruthy();
+    expect(screen.getByText("until 3화")).toBeTruthy();
+  });
+
+  it("sets how far a promise reaches", async () => {
+    await renderSection();
+    const reach = (await screen.findAllByLabelText("Reach"))[0];
+    fireEvent.change(reach, { target: { value: "work" } });
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledWith({ id: "l1", reach: "work" }));
+  });
+
+  it("rebuilds the links and duplicates the work on request", async () => {
+    mocks.relinkWork.mockResolvedValue({ scenes: 2, links: 5 });
+    mocks.duplicate.mockResolvedValue({ project_id: "copy" });
+    await renderSection();
+    fireEvent.click(await screen.findByRole("button", { name: "Rebuild the appearance index" }));
+    expect((await screen.findByRole("status")).textContent).toContain("5");
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate this work" }));
+    await waitFor(() => expect(mocks.duplicate).toHaveBeenCalledWith("p", " (copy)"));
+  });
+
+  it("offers no pin on what the story still owes", async () => {
+    await renderSection();
+    await screen.findByText("금박 밑의 비밀");
+    expect(screen.queryByRole("button", { name: "Pin" })).toBeNull();
+  });
+
+  it("puts pinned entries first and warns when they outgrow the brief", async () => {
+    mocks.list.mockResolvedValue({
+      entries: [
+        entry({ id: "l2", kind: "decision", body: "둘째" }),
+        entry({ id: "l3", kind: "decision", body: "가".repeat(3100), pinned: true }),
+      ],
+      parts: [],
+      labels: {},
+    });
+    await renderSection();
+    fireEvent.click(await screen.findByRole("tab", { name: "Settled" }));
+    const items = await screen.findAllByRole("listitem");
+    expect(items[0].className).toContain("is-pinned");
+    expect(screen.getByRole("status").textContent).toMatch(/brief/i);
   });
 
   it("shows what is owed first and keeps settled matters and cut plans on their own tabs", async () => {

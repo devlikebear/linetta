@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useEngineEvent } from "../hooks/useEngineEvent";
 import type { McpChangedPayload } from "../hooks/useMcpChanges";
-import { ledger as ledgerApi } from "../lib/rpc";
+import { ledger as ledgerApi, mentions as mentionsApi, projects as projectsApi } from "../lib/rpc";
 import type { LedgerEntry, LedgerKind, LedgerState, LedgerStatus, PartArc } from "../lib/types";
 import { useI18n } from "../lib/i18n";
 import { rpcErrorMessage } from "../lib/rpcMessage";
@@ -23,6 +23,9 @@ type Tab = "owed" | "settled" | "closed" | "cut";
 const OWED: LedgerKind[] = ["promise", "gag", "question"];
 const ADDABLE: LedgerKind[] = ["promise", "gag", "question", "decision", "number", "timeline", "knowledge"];
 
+/** Matches the engine's briefPinnedRunes. Past it a pin may not reach the brief. */
+const PINNED_BUDGET_RUNES = 3000;
+
 function tabOf(e: LedgerEntry): Tab {
   if (e.kind === "cut_plan") return "cut";
   if (e.status !== "open") return "closed";
@@ -36,6 +39,7 @@ export function LedgerSection({ projectId, onOpenNode }: Readonly<Props>) {
   const [kind, setKind] = useState<LedgerKind>("promise");
   const [body, setBody] = useState("");
   const [error, setError] = useState<unknown>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -60,7 +64,18 @@ export function LedgerSection({ projectId, onOpenNode }: Readonly<Props>) {
     }
   };
 
-  const shown = useMemo(() => (state?.entries ?? []).filter((e) => tabOf(e) === tab), [state, tab]);
+  const shown = useMemo(
+    () => (state?.entries ?? [])
+      .filter((e) => tabOf(e) === tab)
+      .sort((a, b) => Number(b.pinned ?? false) - Number(a.pinned ?? false)),
+    [state, tab],
+  );
+  const pinnedOverBudget = useMemo(() => {
+    const used = (state?.entries ?? [])
+      .filter((e) => e.pinned)
+      .reduce((sum, e) => sum + [...e.subject].length + [...e.body].length, 0);
+    return used > PINNED_BUDGET_RUNES;
+  }, [state]);
   const owedCount = useMemo(() => (state?.entries ?? []).filter((e) => tabOf(e) === "owed").length, [state]);
 
   const add = () => run(async () => {
@@ -69,6 +84,14 @@ export function LedgerSection({ projectId, onOpenNode }: Readonly<Props>) {
   });
   const setStatus = (e: LedgerEntry, status: LedgerStatus) =>
     run(() => ledgerApi.save({ id: e.id, status }));
+  const relink = () => run(async () => {
+    const done = await mentionsApi.relinkWork(projectId);
+    setNotice(t("ledger.relinkDone", { scenes: String(done.scenes), links: String(done.links) }));
+  });
+  const duplicate = () => run(async () => {
+    await projectsApi.duplicate(projectId, t("ledger.duplicateSuffix"));
+    setNotice(t("ledger.duplicateDone"));
+  });
 
   return (
     <details className="sec es-field ledger-section">
@@ -103,14 +126,20 @@ export function LedgerSection({ projectId, onOpenNode }: Readonly<Props>) {
         ))}
       </div>
 
+      {tab === "settled" && <p className="style-hint">{t("ledger.pinHint")}</p>}
+      {tab === "settled" && pinnedOverBudget && <p role="status">{t("ledger.pinnedOverBudget")}</p>}
+
       {shown.length === 0 ? (
         <p className="style-hint">{t("ledger.empty")}</p>
       ) : (
         <ul className="ledger-list">
           {shown.map((e) => (
-            <li key={e.id}>
+            <li key={e.id} className={e.pinned ? "is-pinned" : undefined}>
               <span className="ledger-kind">{t(`ledger.kind.${e.kind}`)}</span>
               {e.subject && <span className="ledger-subject">{e.subject}</span>}
+              {e.attribute && <span className="ledger-kind">{e.attribute}</span>}
+              {e.strength === "soft" && <span className="ledger-kind">{t("ledger.softTag")}</span>}
+              {e.superseded_by && <span className="ledger-kind">{t("ledger.supersededTag")}</span>}
               <span className="ledger-body">{e.body}</span>
               {e.planted_node_id && (
                 <button type="button" className="ledger-where" onClick={() => onOpenNode?.(e.planted_node_id ?? "")}>
@@ -120,7 +149,29 @@ export function LedgerSection({ projectId, onOpenNode }: Readonly<Props>) {
               {e.due_node_id && (
                 <span className="ledger-where">{t("ledger.due", { label: state?.labels[e.due_node_id] ?? "" })}</span>
               )}
+              {e.valid_to_node_id && (
+                <span className="ledger-where">{t("ledger.validUntil", { label: state?.labels[e.valid_to_node_id] ?? "" })}</span>
+              )}
               <span className="ledger-actions">
+                {tabOf(e) === "owed" && (
+                  <select
+                    aria-label={t("ledger.reach.label")}
+                    value={e.reach ?? "arc"}
+                    onChange={(ev) => void run(() => ledgerApi.save({ id: e.id, reach: ev.target.value as LedgerEntry["reach"] }))}
+                  >
+                    {(["arc", "volume", "work"] as const).map((r) => <option key={r} value={r}>{t(`ledger.reach.${r}`)}</option>)}
+                  </select>
+                )}
+                {tabOf(e) === "settled" && (
+                  <button
+                    type="button"
+                    className="btn ghost sm"
+                    aria-pressed={e.pinned ?? false}
+                    onClick={() => void run(() => ledgerApi.setPinned(e.id, !e.pinned))}
+                  >
+                    {t(e.pinned ? "ledger.unpin" : "ledger.pin")}
+                  </button>
+                )}
                 {e.status === "open" && e.kind !== "cut_plan" && (
                   <button type="button" className="btn ghost sm" onClick={() => void setStatus(e, "dropped")}>
                     {t("ledger.drop")}
@@ -153,6 +204,11 @@ export function LedgerSection({ projectId, onOpenNode }: Readonly<Props>) {
         <button type="button" className="btn accent sm" disabled={body.trim() === ""} onClick={() => void add()}>
           {t("ledger.add")}
         </button>
+      </div>
+      <div className="ledger-tools">
+        <button type="button" className="btn ghost sm" onClick={() => void relink()}>{t("ledger.relink")}</button>
+        <button type="button" className="btn ghost sm" onClick={() => void duplicate()}>{t("ledger.duplicate")}</button>
+        {notice && <span className="style-hint" role="status">{notice}</span>}
       </div>
     </details>
   );

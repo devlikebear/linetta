@@ -229,6 +229,8 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 		// Settings has to take effect on the writer's very next message.
 		SelfReviewEnabled:    deps.settings.AgentSelfReviewEnabled,
 		EpisodeReviewEnabled: deps.settings.AgentEpisodeReviewEnabled,
+		SettlementEnabled:    deps.settings.AgentSettlementEnabled,
+		ImpactReviewEnabled:  deps.settings.AgentImpactReviewEnabled,
 		MaxToolCalls:         deps.settings.AgentMaxToolCalls,
 		HistoryBudget:        deps.settings.AgentHistoryBudget,
 		ActiveProvider:       deps.settings.ActiveProvider,
@@ -318,6 +320,14 @@ type agentHistoryRow struct {
 	// ReplayStart marks the first message the model still gets. Set only when
 	// earlier messages no longer go to it.
 	ReplayStart bool `json:"replay_start,omitempty"`
+}
+
+func (c *agentController) StartFresh(ctx context.Context, projectID string) error {
+	return c.svc.StartFresh(ctx, projectID)
+}
+
+func (c *agentController) StartSampleCheck(ctx context.Context, projectID, request string, maxCalls int) error {
+	return c.svc.StartSampleCheck(ctx, projectID, request, maxCalls)
 }
 
 func (c *agentController) Clear(ctx context.Context, projectID string) error {

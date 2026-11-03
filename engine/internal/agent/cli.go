@@ -122,6 +122,8 @@ func (t *cliTurn) call(name string, arguments json.RawMessage) *mcp.CallToolResu
 
 	if !result.IsError {
 		t.lastFail, t.repeats = "", 0
+		noteWrittenScene(t.st.written, name, args)
+		noteChangedFact(t.st.changed, name, args, result.Text)
 	} else {
 		if name == t.lastFail {
 			t.repeats++
@@ -139,6 +141,11 @@ func toolText(isError bool, text string) *mcp.CallToolResult {
 	return &mcp.CallToolResult{IsError: isError, Content: []mcp.Content{&mcp.TextContent{Text: text}}}
 }
 
+// toolCaller is what answers the bridge: a turn, or a pass after one.
+type toolCaller interface {
+	call(name string, arguments json.RawMessage) *mcp.CallToolResult
+}
+
 // cliBridge is the turn's MCP server on loopback.
 type cliBridge struct {
 	url   string
@@ -148,7 +155,7 @@ type cliBridge struct {
 
 // startCLIBridge serves schemas — the turn's own tool list, the one the
 // prompt describes — with every call going to turn.
-func startCLIBridge(turn *cliTurn, schemas []llm.ToolSchema) (*cliBridge, error) {
+func startCLIBridge(turn toolCaller, schemas []llm.ToolSchema) (*cliBridge, error) {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "linetta",
 		Title:   "Linetta",
@@ -232,6 +239,8 @@ func randomToken() (string, error) {
 // loopCLI is loop for a self-executing provider: one Chat call, with the
 // tools reachable over the bridge for as long as it runs.
 func (s *Service) loopCLI(ctx context.Context, st loopState) {
+	st.written = &[]string{}
+	st.changed = &[]string{}
 	msgs := s.openingMessages(ctx, st)
 	turn := &cliTurn{s: s, st: st, ctx: ctx}
 
@@ -288,8 +297,8 @@ func (s *Service) loopCLI(ctx context.Context, st loopState) {
 		RunID: st.runID, ProjectID: st.projectID, Seq: s.runs.next(st.runID), Model: st.model,
 		Usage: usagePayload{Input: resp.Usage.InputTokens, Output: resp.Usage.OutputTokens},
 	})
-	// No self-review: it is a second loop of its own that runs the tool
-	// calls a model hands back, which this provider never does — and a
-	// second CLI turn the writer did not ask for is a cost on their Claude
-	// plan they cannot see.
+	// No self-review: a second CLI turn the writer did not ask for is a cost on
+	// their Claude plan they cannot see. The passes below are the writer's own
+	// switches, off until they turn them on.
+	s.maybeEpisodeReview(ctx, st)
 }

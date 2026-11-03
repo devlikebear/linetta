@@ -522,6 +522,8 @@ export function AgentPanel({
   const [turnStartedAt, setTurnStartedAt] = useState<number | null>(null);
   const [canceling, setCanceling] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [confirmFresh, setConfirmFresh] = useState(false);
+  const [showLongform, setShowLongform] = useState(false);
   // Pictures waiting to go with the next message, picked, pasted or dropped.
   const [images, setImages] = useState<ReadImage[]>([]);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -1452,6 +1454,17 @@ export function AgentPanel({
     : "";
   const shownActiveText = useSmoothStream(activeAssistantText, running);
   const busy = sending || turnRunId !== null;
+
+  const startFresh = async () => {
+    setConfirmFresh(false);
+    setSendError(null);
+    try {
+      await agentApi.startFresh(projectId);
+      setLines((prev) => [...prev, { kind: "notice", id: `notice:fresh:${prev.length}`, variant: "historyCut" }]);
+    } catch (err) {
+      setSendError(rpcErrorMessage(err, t));
+    }
+  };
   // A question card waits until the writer says something after it.
   const lastUserLine = lines.map((l) => l.kind).lastIndexOf("user");
   const askOpen = lines.some((l, i) => l.kind === "tool" && l.ask && i > lastUserLine);
@@ -1480,8 +1493,72 @@ export function AgentPanel({
     <aside className="panel agent-panel" onMouseDown={(e) => e.stopPropagation()}>
       <div className="panel-head">
         <span className="ttl"><span className="ic"><Bot size={16} /></span> {t("agentPanel.title")}</span>
+        {ready && lines.length > 0 && (
+          <button
+            type="button"
+            className="btn ghost sm"
+            data-testid="agent-longform"
+            aria-expanded={showLongform}
+            onClick={() => setShowLongform((v) => !v)}
+          >
+            {t("agentPanel.longform")}
+          </button>
+        )}
+        {ready && lines.length > 0 && (
+          <button
+            type="button"
+            className="btn ghost sm"
+            data-testid="agent-start-fresh"
+            disabled={busy}
+            onClick={() => setConfirmFresh(true)}
+          >
+            {t("agentPanel.startFresh")}
+          </button>
+        )}
         <button type="button" className="panel-close" onClick={onClose} aria-label={t("common.close")}><X size={16} /></button>
       </div>
+      {showLongform && (
+        <div className="ai-chiprow agent-longform" data-testid="agent-longform-chips">
+          {(["closeArc", "rebuild", "impact"] as const).map((key) => (
+            <button
+              key={key}
+              type="button"
+              className="chip"
+              data-testid={`agent-longform-${key}`}
+              onClick={() => {
+                setShowLongform(false);
+                setDraft(t(`agentPanel.longform.${key}.prompt`));
+                composerRef.current?.focus();
+              }}
+            >
+              {t(`agentPanel.longform.${key}.label`)}
+            </button>
+          ))}
+        </div>
+      )}
+      {confirmFresh && (
+        <div className="agent-fresh" data-testid="agent-start-fresh-confirm" role="alertdialog" aria-label={t("agentPanel.startFresh")}>
+          <p>{t("agentPanel.startFresh.confirm")}</p>
+          <div className="agent-fresh-actions">
+            <button
+              type="button"
+              className="chip"
+              data-testid="agent-start-fresh-tidy"
+              onClick={() => {
+                setConfirmFresh(false);
+                setDraft(t("agentPanel.startFresh.tidyPrompt"));
+                composerRef.current?.focus();
+              }}
+            >
+              {t("agentPanel.startFresh.tidyLabel")}
+            </button>
+            <button type="button" className="btn ghost sm" onClick={() => setConfirmFresh(false)}>{t("common.cancel")}</button>
+            <button type="button" className="btn accent sm" data-testid="agent-start-fresh-go" disabled={busy} onClick={() => void startFresh()}>
+              {t("agentPanel.startFresh.go")}
+            </button>
+          </div>
+        </div>
+      )}
       {ready === null ? null : ready ? (
         <>
         <div

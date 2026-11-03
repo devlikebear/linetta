@@ -236,6 +236,9 @@ type loopState struct {
 	// written collects the scenes this turn wrote, for the review that may
 	// follow it. A pointer because the state is passed by value.
 	written *[]string
+	// changed collects the ledger entries this turn changed in a way the prose
+	// may not agree with, for the same reason.
+	changed *[]string
 	// projectID is the work this turn belongs to, trimmed. It is on every
 	// notification this file emits rather than only in the transcript,
 	// because a run id alone does not say whose conversation an event is —
@@ -367,6 +370,7 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 	// carries none of their manuscript.
 	usedTools := make([]string, 0, st.maxToolCalls)
 	st.written = &[]string{}
+	st.changed = &[]string{}
 	lastFailedTool := ""
 	repeats := 0
 
@@ -432,6 +436,7 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 			usedTools = append(usedTools, call.Name)
 			if !result.IsError {
 				noteWrittenScene(st.written, call.Name, call.Arguments)
+				noteChangedFact(st.changed, call.Name, call.Arguments, result.Text)
 			}
 			msgs = append(msgs, llm.ChatMessage{
 				Role:       "tool",
@@ -614,7 +619,7 @@ func (s *Service) openingMessages(ctx context.Context, st loopState) []llm.ChatM
 		}
 		filtered = append(filtered, m)
 	}
-	replay, start, cut, moved := s.replayHistory(st.projectID, filtered, st.historyBudget)
+	replay, start, cut, moved := s.replayHistory(ctx, st.projectID, filtered, st.historyBudget)
 	if cut {
 		msgs[0].Content += historyCutNote(start)
 	}
