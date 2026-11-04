@@ -297,6 +297,8 @@ func (s *Service) loopCLI(ctx context.Context, st loopState) {
 	})
 	// No self-review: a second CLI turn the writer did not ask for is a cost on
 	// their Claude plan they cannot see. The passes below are the writer's own
-	// switches, off until they turn them on.
+	// switches, off until they turn them on. The work is freed first, as in
+	// afterReply.
+	s.runs.release(st.projectID, st.runID)
 	s.maybeEpisodeReview(ctx, st)
 }
