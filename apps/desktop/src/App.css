@@ -1001,10 +1001,19 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
   display: flex; flex-direction: column;
 }
 .zen-bar {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 18px 28px; font-size: 11px; letter-spacing: var(--label-track); text-transform: var(--label-case);
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  /* Below the iPhone status bar, or the bar and its exit sit under the clock. */
+  padding: calc(18px + env(safe-area-inset-top)) 28px 18px;
+  font-size: 11px; letter-spacing: var(--label-track); text-transform: var(--label-case);
   color: var(--muted-2);
 }
+.zen-exit {
+  display: inline-flex; align-items: center; gap: 6px; flex: none;
+  padding: 6px 10px; border: 1px solid var(--line-soft); border-radius: var(--r-sm);
+  background: transparent; color: var(--muted-2);
+  font: inherit; letter-spacing: inherit; text-transform: inherit;
+}
+.zen-exit:hover { color: var(--ink); border-color: var(--line); }
 .zen-col { flex: 1; overflow-y: auto; }
 .zen-col .prose {
   width: min(640px, 84%); margin: 0 auto; padding: 6vh 0 40vh;

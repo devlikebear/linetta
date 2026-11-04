@@ -360,6 +360,9 @@ export interface DiagnosticsSnapshot {
   publish_available?: boolean;
   /** False on builds without the private vault (iOS). */
   vault_available?: boolean;
+  /** False on builds whose folders the writer cannot reach (iOS): no sync
+   *  folder to pick, no data or backup folder to open. */
+  folders_available?: boolean;
   /** Whether this library ever held a companion message. Decides whether the
    *  backup section offers the transcript export — a library that never used
    *  the companion has nothing to export. */

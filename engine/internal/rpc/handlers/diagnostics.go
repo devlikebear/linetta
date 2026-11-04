@@ -23,6 +23,10 @@ type Capabilities struct {
 	// VaultAvailable: this build can use the private vault. Off on mobile,
 	// like publishing.
 	VaultAvailable bool
+	// FoldersAvailable: the writer can reach folders on this device — pick a
+	// sync folder, open the data and backup folders. Off on mobile, where the
+	// library lives in the app's private container and no file manager opens it.
+	FoldersAvailable bool
 }
 
 type diagnosticsPayload struct {
@@ -36,6 +40,7 @@ type diagnosticsPayload struct {
 	AgentAvailable   bool   `json:"agent_available"`
 	PublishAvailable bool   `json:"publish_available"`
 	VaultAvailable   bool   `json:"vault_available"`
+	FoldersAvailable bool   `json:"folders_available"`
 
 	// CompanionHistoryExists says whether this library has ever held a
 	// companion message. It is the durable half of "is this an existing
@@ -85,6 +90,7 @@ func DiagnosticsVersion(st *store.Store, home string, version string, caps Capab
 			AgentAvailable:   caps.AgentAvailable,
 			PublishAvailable: caps.PublishAvailable,
 			VaultAvailable:   caps.VaultAvailable,
+			FoldersAvailable: caps.FoldersAvailable,
 
 			CompanionHistoryExists: companionHistory,
 		}

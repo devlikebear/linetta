@@ -152,6 +152,9 @@ export function Settings() {
   // Hidden on builds that cannot publish to Linetta Works (iOS).
   const [publishAvailable, setPublishAvailable] = useState(false);
   const [vaultAvailable, setVaultAvailable] = useState(false);
+  // Off on iOS, where the folder picker has nothing to pick. With git and the
+  // vault also off there, the whole sync tab goes.
+  const [foldersAvailable, setFoldersAvailable] = useState(false);
   const [current, setCurrent] = useState<SettingsRow | null>(null);
   const [tab, setTabState] = useState<SettingsTab>(initialTab);
   const [openOnImages] = useState(() => storedCategory() === "images");
@@ -191,6 +194,7 @@ export function Settings() {
         setAgentAvailable(diag.agent_available ?? false);
         setPublishAvailable(diag.publish_available ?? false);
         setVaultAvailable(diag.vault_available ?? false);
+        setFoldersAvailable(diag.folders_available ?? true);
         setCompanionHistoryExists(diag.companion_history_exists ?? true);
       })
       // Inside an effect: keeping `t` out of the deps avoids re-running the
@@ -331,6 +335,7 @@ export function Settings() {
   // Hidden on builds that have no agent and no external client: nothing there
   // could read a memory or load a skill.
   const agentPanes = mcpAvailable || agentAvailable;
+  const syncAvailable = gitSyncAvailable || vaultAvailable || foldersAvailable;
   const tabs: Array<{ id: SettingsTab; label: string }> = [
     { id: "general", label: t("settings.tab.general") },
     { id: "writing", label: t("settings.tab.writing") },
@@ -339,12 +344,19 @@ export function Settings() {
     ...(agentAvailable ? [{ id: "ai" as const, label: t("settings.tab.ai") }] : []),
     ...(agentPanes ? [{ id: "agent" as const, label: t("settings.tab.agent") }] : []),
     ...(mcpAvailable ? [{ id: "mcp" as const, label: t("settings.tab.mcp") }] : []),
-    { id: "sync", label: t("settings.tab.sync") },
+    ...(syncAvailable ? [{ id: "sync" as const, label: t("settings.tab.sync") }] : []),
     // Publishing sends text off the device, like sync does, so it sits
     // beside it rather than with the AI connections.
     ...(publishAvailable ? [{ id: "publish" as const, label: t("settings.tab.publish") }] : []),
     { id: "backup", label: t("settings.tab.backup") },
   ];
+
+  // A remembered tab this build does not show (sync on iOS) would render a
+  // pane with no tab to say where the writer is.
+  const tabShown = tabs.some((item) => item.id === tab);
+  useEffect(() => {
+    if (loaded && !tabShown) setTabState("general");
+  }, [loaded, tabShown]);
 
   /* The tool budget, but only when it is a real measurement (#99).
      Truthiness is not the test: an engine whose measurement failed answers
@@ -994,7 +1006,7 @@ export function Settings() {
             </section>
             )}
 
-            {tab === "sync" && (
+            {tab === "sync" && foldersAvailable && (
             <section className="settings-section">
               <h3>{t("settings.folder.title")}</h3>
               <p className="sd">{t("settings.sync.exportOnly")}</p>

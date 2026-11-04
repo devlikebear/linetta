@@ -91,6 +91,20 @@ describe("OutlinePanel", () => {
     expect(onCopyText).toHaveBeenCalledWith(scene);
   });
 
+  it("keeps the popup menu on screen when opened at the right edge", async () => {
+    renderOutline({ onCreateScene: vi.fn() });
+
+    fireEvent.contextMenu(screen.getByRole("button", { name: /씬 1/ }), {
+      clientX: window.innerWidth + 200,
+      clientY: window.innerHeight + 200,
+    });
+
+    const menu = await screen.findByRole("menu");
+    expect(menu.parentElement).toBe(document.body);
+    expect(parseFloat(menu.style.left)).toBeLessThanOrEqual(window.innerWidth - 8);
+    expect(parseFloat(menu.style.top)).toBeLessThanOrEqual(window.innerHeight - 8);
+  });
+
   it("renames a node title inline from the popup menu and commits with Enter", async () => {
     const user = userEvent.setup();
     const onRename = vi.fn().mockResolvedValue(undefined);

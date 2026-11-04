@@ -56,4 +56,13 @@ describe("ZenMode", () => {
 
     expect(container.querySelector<HTMLElement>(".zen-progress-fill")).toHaveStyle({ width: "50%" });
   });
+
+  it("offers a button out of ZEN for screens without Esc", async () => {
+    const onExit = vi.fn();
+    renderZen({ onExit });
+
+    fireEvent.click(await screen.findByRole("button", { name: "나가기" }));
+
+    expect(onExit).toHaveBeenCalledTimes(1);
+  });
 });

@@ -23,6 +23,14 @@
   min-height: 4em; /* always click-able even when the doc is empty */
 }
 
+/* On touch the editor never takes focus by itself, so the empty space under
+   a short scene must still be the editor: a tap there goes into the text. */
+@media (hover: none) {
+  .tiptap-editor .ProseMirror {
+    min-height: 40vh;
+  }
+}
+
 .tiptap-editor .ProseMirror p {
   min-height: calc(var(--edit-leading) * 1em);
 }
@@ -59,9 +67,11 @@
   }
 }
 
-/* Placeholder hint for empty docs so the click target is obvious. */
-.tiptap-editor .ProseMirror p.is-editor-empty:first-child::before {
-  content: "여기에 글을 쓰세요…";
+/* Placeholder hint for empty docs so the click target is obvious. The text
+   comes from the Placeholder extension; once the writer is in the scene the
+   blinking caret takes its place. */
+.tiptap-wrap:not(.empty-focused) .tiptap-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
   color: var(--muted-2);
   float: left;
   height: 0;

@@ -240,6 +240,29 @@ describe("Library", () => {
     expect(mocks.openPath).toHaveBeenCalledWith("/tmp/linetta");
   });
 
+  it("leaves the open-folder items out where no folder can be opened (iOS)", async () => {
+    const user = userEvent.setup();
+    mocks.diagnosticsGet.mockResolvedValue({
+      version: "0.0.1",
+      home: "/tmp/linetta",
+      db_path: "/tmp/linetta/library.db",
+      migration_version: 7,
+      migration_count: 7,
+      ops_status: [],
+      folders_available: false,
+    });
+    renderLibrary();
+
+    await waitFor(() => expect(mocks.diagnosticsGet).toHaveBeenCalled());
+    await user.click(await screen.findByLabelText("라이브러리 옵션"));
+
+    expect(await screen.findByRole("menuitem", { name: "전체 복구 백업 만들기" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole("menuitem", { name: "데이터 폴더 열기" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("menuitem", { name: "백업 폴더 열기" })).not.toBeInTheDocument();
+    });
+  });
+
   it("creates a versioned full-library recovery backup from the library menu", async () => {
     const user = userEvent.setup();
     mocks.settingsGet.mockResolvedValue({

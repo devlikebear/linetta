@@ -468,6 +468,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		AgentAvailable:   agentAvailable,
 		PublishAvailable: publishAvailable,
 		VaultAvailable:   vaultAvailable,
+		FoldersAvailable: foldersAvailable,
 	}
 	s.Handle("ping", handlers.Ping)
 	s.Handle("diagnostics.version", handlers.DiagnosticsVersion(st, home, DefaultVersion, caps))

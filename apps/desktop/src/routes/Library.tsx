@@ -72,6 +72,10 @@ export function Library() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [settingsRow, setSettingsRow] = useState<SettingsRow | null>(null);
   const [diagnostics, setDiagnostics] = useState<DiagnosticsSnapshot | null>(null);
+  // iOS keeps the library in the app's private container: nothing can open
+  // those folders, so the menu leaves them out. Until diagnostics answers, a
+  // desktop keeps its usual menu.
+  const foldersAvailable = diagnostics?.folders_available ?? true;
   const [safetyOpen, setSafetyOpen] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -357,7 +361,9 @@ export function Library() {
     {
       target: "library-settings",
       title: t("onboarding.library.settings.title"),
-      body: t("onboarding.library.settings.body"),
+      // A build without the agent (iOS) has no AI connection or GitHub sync
+      // to point at.
+      body: t((diagnostics?.agent_available ?? true) ? "onboarding.library.settings.body" : "onboarding.library.settings.bodyLocal"),
     },
   ];
 
@@ -409,12 +415,16 @@ export function Library() {
           </button>
           {menuOpen && (
             <div className="lib-menu" role="menu" onMouseLeave={() => setMenuOpen(false)}>
-              <button type="button" role="menuitem" onClick={openDataFolder}>
-                {t("library.menu.dataFolder")}
-              </button>
-              <button type="button" role="menuitem" onClick={openBackupFolder}>
-                {t("library.menu.backupFolder")}
-              </button>
+              {foldersAvailable && (
+                <>
+                  <button type="button" role="menuitem" onClick={openDataFolder}>
+                    {t("library.menu.dataFolder")}
+                  </button>
+                  <button type="button" role="menuitem" onClick={openBackupFolder}>
+                    {t("library.menu.backupFolder")}
+                  </button>
+                </>
+              )}
               <button type="button" role="menuitem" onClick={createRecoveryBackup}>
                 {t("library.menu.createRecoveryBackup")}
               </button>
@@ -521,9 +531,11 @@ export function Library() {
                     <button type="button" role="menuitem" onClick={() => handleProjectBackup(p)}>
                       <Download size={15} /> <span>{t("library.projectBackup")}</span>
                     </button>
-                    <button type="button" role="menuitem" onClick={openBackupFolder}>
-                      <FolderOpen size={15} /> <span>{t("library.menu.backupFolder")}</span>
-                    </button>
+                    {foldersAvailable && (
+                      <button type="button" role="menuitem" onClick={openBackupFolder}>
+                        <FolderOpen size={15} /> <span>{t("library.menu.backupFolder")}</span>
+                      </button>
+                    )}
                     <button type="button" role="menuitem" onClick={() => handleProjectArchive(p)}>
                       <Archive size={15} /> <span>{t("library.archive")}</span>
                     </button>

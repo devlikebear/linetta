@@ -233,6 +233,9 @@ export function Workspace() {
   // writer must never be told to go configure something Settings won't show
   // them (#95).
   const [agentAvailable, setAgentAvailable] = useState(false);
+  // The agent door on the top bar. A mobile engine still answers mcp.status
+  // (always off), so the toggle alone cannot tell it has no door to open.
+  const [mcpAvailable, setMcpAvailable] = useState(false);
   // Illustrations: the drawing dialog (with what it was opened from) and the
   // work's gallery. Both are modals over the editor rather than right-hand
   // panels, so they never compete with the four panels for that slot.
@@ -509,6 +512,7 @@ export function Workspace() {
         if (cancelled) return;
         setGitSyncAvailable(d.git_sync_available ?? true);
         setAgentAvailable(d.agent_available ?? false);
+        setMcpAvailable(d.mcp_available ?? false);
         setPublishAvailable(d.publish_available ?? false);
         setVaultAvailable(d.vault_available ?? false);
       })
@@ -2017,7 +2021,7 @@ export function Workspace() {
           </span>
         </Link>
         <div className="ws-top-actions" data-tour="workspace-navigation">
-          <McpToggle projectId={load.project.id} projectTitle={load.project.title} />
+          {mcpAvailable && <McpToggle projectId={load.project.id} projectTitle={load.project.title} />}
           {vaultState && (
             <button
               type="button"
@@ -2252,6 +2256,7 @@ export function Workspace() {
               onManualSave={handleManualSave}
               extensions={sceneExtensions}
               contentErrorNotice={t("editor.contentUnreadable")}
+              placeholder={t("editor.placeholder")}
               onMentionDoubleClick={(id) => {
                 setContextualEditOpen(false);
                 setEntitySheetId(id);

@@ -45,6 +45,17 @@ function clamp(n: number, min: number, max: number) {
   return Math.min(Math.max(n, min), max);
 }
 
+/** The iPhone status bar's height (0 elsewhere). env() only resolves inside a
+ *  style, so a throwaway element reports it. */
+function safeAreaTop(): number {
+  const probe = document.createElement("div");
+  probe.style.cssText = "position:fixed;visibility:hidden;padding-top:env(safe-area-inset-top)";
+  document.body.appendChild(probe);
+  const top = parseFloat(getComputedStyle(probe).paddingTop) || 0;
+  probe.remove();
+  return top;
+}
+
 export function OnboardingTour({ open, steps, onFinish, onSkip }: Props) {
   const { t } = useI18n();
   const [index, setIndex] = useState(0);
@@ -108,12 +119,16 @@ export function OnboardingTour({ open, steps, onFinish, onSkip }: Props) {
     if (!rect) return fallback;
     const vw = window.innerWidth || 1024;
     const vh = window.innerHeight || 768;
+    // A target as tall as the screen (the phone's outline drawer) leaves room
+    // neither above nor below; the card then sits at the top, which on an
+    // iPhone starts under the status bar.
+    const minTop = 18 + safeAreaTop();
     const below = rect.top + rect.height + GAP;
     const above = rect.top - CARD_HEIGHT - GAP;
-    const top = below + CARD_HEIGHT < vh ? below : Math.max(24, above);
+    const top = below + CARD_HEIGHT < vh ? below : Math.max(minTop, above);
     return {
       left: clamp(rect.left, 18, Math.max(18, vw - CARD_WIDTH - 18)),
-      top: clamp(top, 18, Math.max(18, vh - CARD_HEIGHT - 18)),
+      top: clamp(top, minTop, Math.max(minTop, vh - CARD_HEIGHT - 18)),
     };
   }, [rect]);
 
