@@ -1,5 +1,42 @@
 # Changelog
 
+## v1.21.0 - 2026-11-04
+
+- Fixed: on a long work, the brief the built-in agent reads could run past what
+  one tool result holds, so the world elements, plot, relationships and fact
+  notes at its end were cut off, and no settled ledger entry reached it at all.
+  The brief now fits, keeps settled entries beside what the story still owes,
+  and names any section it had to leave out.
+- Changed: the agent reads the ledger, the world elements and the outline in
+  pages, so a long list is no longer cut short. Ledger entries come newest
+  first.
+- Added: pin a settled ledger entry to make it a rule of the work. Pinned
+  entries reach every episode's brief, and the agent cannot change or delete
+  them.
+- Added: start the agent's conversation over without deleting it. The panel
+  and conversation search keep everything before it.
+- Added: a ledger fact can name its subject, what about it is fixed, and the
+  episodes it holds for. The brief shows the state at the episode being
+  written, and recording a different value reports the conflict instead of
+  quietly saving over it.
+- Fixed: "Review finished episodes independently" did nothing with the Claude
+  Code provider.
+- Added: two optional passes after a turn: settling what a finished episode
+  changed into the ledger, and finding the earlier episodes a changed decision
+  no longer agrees with. Both are off by default and send manuscript text to
+  your provider again.
+- Added: a promise in the ledger can reach an arc, a volume or the whole work,
+  and drops out of the brief past its reach unless it is due. A work split into
+  volumes and arcs shows the current arc in the brief.
+- Added: Sample check in continuity compares episodes two at a time, with no
+  conversation behind it, and records only contradictions.
+- Added: duplicate a work to try a large change on, and rebuild the appearance
+  index for episodes written before their names were registered.
+- Changed: editing a published episode now says readers keep the old text until
+  it is published again, and publishing shows any open high-severity findings.
+- Security: the updater no longer pulls in a zip library with a known flaw
+  (RUSTSEC-2026-0429).
+
 ## v1.20.3 - 2026-11-01
 
 - Changed: Settings is now eight tabs across the top instead of a sidebar with
