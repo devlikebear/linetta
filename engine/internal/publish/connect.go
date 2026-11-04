@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -91,6 +92,11 @@ func NewConnector(client *Client, creds Credentials, onSwitch func(ctx context.C
 func defaultDeviceName() string {
 	host, err := os.Hostname()
 	host = strings.TrimSuffix(strings.TrimSpace(host), ".local")
+	// iOS hands every app "localhost", which tells one device from another
+	// no better than nothing; name the platform instead.
+	if runtime.GOOS == "ios" {
+		host = "iOS"
+	}
 	if err != nil || host == "" {
 		return "Linetta"
 	}

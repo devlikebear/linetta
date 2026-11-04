@@ -1,4 +1,4 @@
-//go:build !mobile && !mas
+//go:build !mobile
 
 package engineapp
 
