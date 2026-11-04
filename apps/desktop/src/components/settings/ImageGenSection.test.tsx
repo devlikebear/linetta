@@ -53,6 +53,13 @@ describe("ImageGenSection", () => {
     await waitFor(() => expect(rpc.settingsSet).toHaveBeenCalledWith({ image_provider: "gemini-native" }));
   });
 
+  it("offers only the image providers the engine lists (no Codex on mobile)", async () => {
+    rpc.list.mockResolvedValue(rows(null).filter((r) => r.id === "gemini-native"));
+    render(<ImageGenSection onOpenProviders={() => {}} />);
+    expect(await screen.findByTestId("image-choice-gemini-native")).toBeInTheDocument();
+    expect(screen.queryByTestId("image-choice-openai-codex")).toBeNull();
+  });
+
   it("sends a provider that is not connected to the provider pane", async () => {
     rpc.list.mockResolvedValue(rows("gemini-native"));
     const onOpenProviders = vi.fn();

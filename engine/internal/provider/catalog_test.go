@@ -34,14 +34,18 @@ func TestList_reportsEveryProviderInOrderWithState(t *testing.T) {
 			t.Errorf("List[%d].ID = %q, want %q", i, got[i].ID, id)
 		}
 	}
-	if got[0].Auth != "oauth" || got[1].Auth != "api_key" {
-		t.Errorf("auth kinds = %q/%q", got[0].Auth, got[1].Auth)
+	byID := map[string]Status{}
+	for _, p := range got {
+		byID[p.ID] = p
 	}
-	a := got[1]
-	if !a.Active || !a.Configured || !a.Consented {
-		t.Errorf("anthropic = %+v, want active+configured+consented", a)
+	if c, ok := byID["openai-codex"]; ok && c.Auth != "oauth" {
+		t.Errorf("openai-codex auth = %q, want oauth", c.Auth)
 	}
-	if o := got[3]; o.Active || o.Configured || o.Consented {
+	a := byID["anthropic"]
+	if a.Auth != "api_key" || !a.Active || !a.Configured || !a.Consented {
+		t.Errorf("anthropic = %+v, want api_key, active+configured+consented", a)
+	}
+	if o := byID["openai"]; o.Active || o.Configured || o.Consented {
 		t.Errorf("openai = %+v, want nothing set", o)
 	}
 }

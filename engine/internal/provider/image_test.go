@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/devlikebear/linetta/engine/internal/rpc"
@@ -109,6 +110,7 @@ func TestImageGenerator_geminiHasNoDefaultModel(t *testing.T) {
 }
 
 func TestImageGenerator_codexDefaultsToTheAccountsFirstModel(t *testing.T) {
+	skipWithoutCodex(t)
 	src, st, codexHome, seen := newImageSource(t)
 	loginCodex(t, codexHome)
 	src.WithFetcher(&fakeFetcher{models: []string{"gpt-5.6-sol", "gpt-5.6-terra"}})
@@ -144,6 +146,7 @@ func TestImageGenerator_rejectsAProviderThatCannotDraw(t *testing.T) {
 }
 
 func TestListImageModels(t *testing.T) {
+	skipWithoutCodex(t)
 	src, st, codexHome, _ := newImageSource(t)
 	configure(t, st, settings.ProviderGeminiNative, "AIza-test", false)
 	src.WithFetcher(&fakeFetcher{models: []string{"models/gemini-3.1-flash-image", "gemini-3.8-flash", "gemini-2.5-flash-image", "text-embedding-004"}})
@@ -236,6 +239,7 @@ func TestDraw(t *testing.T) {
 }
 
 func TestImageList(t *testing.T) {
+	skipWithoutCodex(t)
 	src, st, _, _ := newImageSource(t)
 	configure(t, st, settings.ProviderGeminiNative, "AIza-test", false)
 	setImage(t, st, settings.ProviderGeminiNative, "gemini-3.1-flash-image", true)
@@ -249,5 +253,14 @@ func TestImageList(t *testing.T) {
 	}
 	if g := got[1]; !g.Active || !g.Configured || !g.Consented || g.Model != "gemini-3.1-flash-image" {
 		t.Fatalf("gemini = %+v", g)
+	}
+}
+
+// skipWithoutCodex skips a case that needs the ChatGPT sign-in, which mobile
+// does not offer.
+func skipWithoutCodex(t *testing.T) {
+	t.Helper()
+	if !slices.Contains(settings.ValidProviders(), settings.ProviderOpenAICodex) {
+		t.Skip("this build has no Codex sign-in")
 	}
 }

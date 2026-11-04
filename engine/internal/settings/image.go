@@ -9,9 +9,13 @@ import (
 // ValidImageProviders are the providers that can draw illustrations. They
 // reuse the agent providers' credentials — Codex's ChatGPT login, the Gemini
 // API key — but are chosen apart from the agent's: a writer can chat with
-// Claude and draw with Gemini.
+// Claude and draw with Gemini. Only those this build offers as agent
+// providers count, since the credential comes from there: mobile has no Codex
+// sign-in, so it draws with Gemini alone.
 func ValidImageProviders() []string {
-	return []string{ProviderOpenAICodex, ProviderGeminiNative}
+	return slices.DeleteFunc([]string{ProviderOpenAICodex, ProviderGeminiNative}, func(id string) bool {
+		return !slices.Contains(ValidProviders(), id)
+	})
 }
 
 // ImageProviderConfig is one image provider's stored entry. It never holds a

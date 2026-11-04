@@ -458,8 +458,8 @@ func NewForHomeWithSecretStore(home string, secrets SecretStore) (*Store, error)
 func defaults(home string) Config {
 	return Config{
 		Language:              "ko",
-		Provider:              ProviderOpenAICodex,
-		Providers:             map[string]ProviderConfig{ProviderOpenAICodex: {}},
+		Provider:              DefaultProvider,
+		Providers:             map[string]ProviderConfig{DefaultProvider: {}},
 		TypewriterDefault:     false,
 		Theme:                 "system",
 		Palette:               defaultPalette,

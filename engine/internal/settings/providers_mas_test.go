@@ -1,4 +1,4 @@
-//go:build mas || mobile
+//go:build mas
 
 package settings
 

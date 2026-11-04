@@ -779,7 +779,7 @@ export function ProviderSection() {
         </p>
       ) : null}
 
-      {active === "openai-codex" ? (
+      {active === "openai-codex" && list.some((r) => r.id === "openai-codex") ? (
         <div className="modal-field" data-testid="provider-codex">
           {codexStatus?.logged_in ? (
             <>

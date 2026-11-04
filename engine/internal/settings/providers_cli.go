@@ -8,3 +8,7 @@ package settings
 func ValidProviders() []string {
 	return []string{ProviderOpenAICodex, ProviderAnthropic, ProviderGeminiNative, ProviderOpenAI, ProviderClaudeCode}
 }
+
+// DefaultProvider is what a new library starts on, and what an id outside
+// ValidProviders falls back to.
+const DefaultProvider = ProviderOpenAICodex

@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -126,7 +127,7 @@ func TestSet_rejectsProvidersOutsideTheWhitelist(t *testing.T) {
 	}
 }
 
-func TestActiveProvider_fallsBackToCodexButLeavesDiskAlone(t *testing.T) {
+func TestActiveProvider_fallsBackToDefaultButLeavesDiskAlone(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("LINETTA_HOME", dir)
 	path := filepath.Join(dir, "settings.json")
@@ -139,8 +140,8 @@ func TestActiveProvider_fallsBackToCodexButLeavesDiskAlone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if got := s.ActiveProvider(); got != "openai-codex" {
-		t.Errorf("ActiveProvider = %q, want openai-codex fallback", got)
+	if got := s.ActiveProvider(); got != DefaultProvider {
+		t.Errorf("ActiveProvider = %q, want %s fallback", got, DefaultProvider)
 	}
 	if _, err := s.Set(context.Background(), Patch{Theme: strPtr("dark")}); err != nil {
 		t.Fatalf("Set: %v", err)
@@ -259,6 +260,9 @@ func TestSet_baseURL_isOpenAIOnly(t *testing.T) {
 	s := newStoreOnTemp(t)
 	ctx := context.Background()
 	for _, id := range []string{"anthropic", "gemini-native", "openai-codex"} {
+		if !slices.Contains(ValidProviders(), id) {
+			continue // not offered on this build (Codex on mobile)
+		}
 		if _, err := s.Set(ctx, Patch{Providers: map[string]ProviderPatch{
 			id: {BaseURL: strPtr("https://evil.example/v1")},
 		}}); err == nil {

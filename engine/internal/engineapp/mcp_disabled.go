@@ -4,85 +4,16 @@ package engineapp
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 
-	"github.com/devlikebear/linetta/engine/internal/agentmemory"
-	"github.com/devlikebear/linetta/engine/internal/agentskills"
-	"github.com/devlikebear/linetta/engine/internal/beat"
-	"github.com/devlikebear/linetta/engine/internal/companion"
-	"github.com/devlikebear/linetta/engine/internal/continuity"
-	"github.com/devlikebear/linetta/engine/internal/entity"
-	"github.com/devlikebear/linetta/engine/internal/fact"
-	"github.com/devlikebear/linetta/engine/internal/forecast"
-	"github.com/devlikebear/linetta/engine/internal/illustration"
-	"github.com/devlikebear/linetta/engine/internal/ledger"
-	"github.com/devlikebear/linetta/engine/internal/manuscript"
-	"github.com/devlikebear/linetta/engine/internal/manuscriptedit"
-	"github.com/devlikebear/linetta/engine/internal/mention"
-	"github.com/devlikebear/linetta/engine/internal/node"
-	"github.com/devlikebear/linetta/engine/internal/plot"
-	"github.com/devlikebear/linetta/engine/internal/project"
-	"github.com/devlikebear/linetta/engine/internal/proposals"
-	"github.com/devlikebear/linetta/engine/internal/publish"
-	"github.com/devlikebear/linetta/engine/internal/relationship"
-	"github.com/devlikebear/linetta/engine/internal/settings"
-	"github.com/devlikebear/linetta/engine/internal/snapshot"
-	"github.com/devlikebear/linetta/engine/internal/storycontext"
-	"github.com/devlikebear/linetta/engine/internal/storyops"
-	"github.com/devlikebear/linetta/engine/internal/style"
-	"github.com/devlikebear/linetta/engine/internal/thread"
-	"github.com/devlikebear/linetta/engine/internal/visual"
+	"github.com/devlikebear/linetta/engine/internal/mcphost"
 )
 
-// Mobile builds cannot host a local server, so MCP is compiled out entirely —
-// the SDK is never linked into the mobile engine.
+// Mobile builds cannot host a local server, so no external agent can connect:
+// the settings pane and the top-bar toggle hide on this flag. The built-in
+// agent still has the tools (see setupMCP below).
 const mcpAvailable = false
-
-type mcpDeps struct {
-	settingsStore *settings.Store
-	home          string
-	repos         mcpToolRepos
-}
-
-// mcpToolRepos mirrors the enabled build's shape so register() compiles
-// unchanged; mobile never reads these.
-type mcpToolRepos struct {
-	visuals       *visual.Repo
-	illustrations *illustration.Repo
-	// requests are the pictures agents asked for (illustration Phase 4).
-	requests      *illustration.RequestService
-	style         *style.Repo
-	projects      *project.Repo
-	nodes         *node.Repo
-	entities      *entity.Repo
-	mentions      *mention.Repo
-	facts         *fact.Repo
-	beats         *beat.Repo
-	relationships *relationship.Repo
-	threads       *thread.Repo
-	continuity    *continuity.Repo
-	ledger        *ledger.Repo
-	proposals     *proposals.Service
-	forecasts     *forecast.Service
-	plot          *plot.Builder
-	manuscript    *manuscript.Searcher
-	context       *storycontext.ContextBuilder
-	snapshots     *snapshot.Repo
-	story         *storyops.Service
-	msEdit        *manuscriptedit.Service
-	memory        *agentmemory.Repo
-	// history backs the agent-only conversation tools.
-	history      *companion.HistoryRepo
-	skills       *agentskills.Store
-	skillHistory *agentskills.History
-	publish      *publish.Service
-	enqueue      func(nodeID string)
-	notify       func(method string, params any)
-	clock        func() int64
-	db           *sql.DB
-}
 
 // mcpController answers status queries with a disabled state and refuses
 // mutations, so the frontend gets a clear message rather than a missing method
@@ -91,12 +22,10 @@ type mcpController struct{}
 
 var errMCPUnavailable = errors.New("mcp is not available in this build")
 
-// agentToolDeps is empty on mobile: the MCP tool layer is not compiled, so
-// there is nothing to hand the agent — which is also not compiled.
-type agentToolDeps = struct{}
-
-func setupMCP(mcpDeps) (*mcpController, agentToolDeps, func() error) {
-	return &mcpController{}, agentToolDeps{}, func() error { return nil }
+// setupMCP hosts nothing on mobile, but the built-in agent still gets the
+// whole tool set: it reaches the tools over an in-memory pipe, not a port.
+func setupMCP(deps mcpDeps) (*mcpController, agentToolDeps, func() error) {
+	return &mcpController{}, buildToolDeps(deps, mcphost.NewActivityRepo(deps.repos.db)), func() error { return nil }
 }
 
 func (c *mcpController) Status() (json.RawMessage, error) {

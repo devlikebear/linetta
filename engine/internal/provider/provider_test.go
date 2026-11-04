@@ -104,6 +104,7 @@ func TestNewSource_forcesTheFileRefreshStoreForCodex(t *testing.T) {
 }
 
 func TestResolve_emptyMeansTheActiveProvider(t *testing.T) {
+	skipWithoutCodex(t)
 	src, _, codexHome := newSource(t)
 	r, err := src.Resolve("")
 	if err != nil {
