@@ -1,6 +1,7 @@
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import type { Schema } from "@tiptap/pm/model";
 import StarterKit from "@tiptap/starter-kit";
+import { Placeholder } from "@tiptap/extensions";
 import { IllustrationExtension } from "./IllustrationExtension";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { FocusExtension, focusKey } from "./FocusExtension";
@@ -78,10 +79,13 @@ interface Props {
   /** Shown above the editor when `initialDoc` holds nodes this editor's
    *  extensions don't define, and the editor is held read-only. */
   contentErrorNotice?: string;
+  /** Hint drawn in an empty scene, so a writer on a touch screen — where the
+   *  editor does not take focus on its own — can see where the text goes. */
+  placeholder?: string;
 }
 
 export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEditor(
-  { initialDoc, onChange, onCharCount, typewriter, onManualSave, extensions, onMentionDoubleClick, focus, onSelectionContextMenu, contentErrorNotice },
+  { initialDoc, onChange, onCharCount, typewriter, onManualSave, extensions, onMentionDoubleClick, focus, onSelectionContextMenu, contentErrorNotice, placeholder },
   ref,
 ) {
   // Stable reference for the initial doc to avoid resetting on every render.
@@ -96,6 +100,9 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
   // `enableContentCheck` would catch this too, but it also runs ProseMirror's
   // stricter `check()`, which rejects docs Tiptap reads fine today.
   const unreadDocRef = useRef<object | null>(null);
+  // Read at draw time, so a language change shows without recreating the editor.
+  const placeholderRef = useRef(placeholder ?? "");
+  placeholderRef.current = placeholder ?? "";
 
   const editor = useEditor(
     {
@@ -105,6 +112,7 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
         // In the base set rather than `sceneEditorExtensions`: it needs no
         // per-project setup, so every editor gets it whatever it is passed.
         IllustrationExtension,
+        Placeholder.configure({ placeholder: () => placeholderRef.current }),
         ...(extensions ?? []),
         // Always present — toggling `focus` flips its `enabled` plugin state
         // via a transaction meta below instead of adding/removing the

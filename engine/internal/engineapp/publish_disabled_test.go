@@ -24,6 +24,16 @@ func TestPublishIsUnavailableOnMobile(t *testing.T) {
 	}
 }
 
+// iOS keeps the library in the app's private container, so diagnostics tells
+// the UI to leave out folder sync and the open-folder actions.
+func TestFoldersAreUnavailableOnMobile(t *testing.T) {
+	app := openTestApp(t, t.TempDir())
+	raw, err := app.Handle(context.Background(), []byte(`{"jsonrpc":"2.0","id":1,"method":"diagnostics.version","params":null}`))
+	if err != nil || !strings.Contains(string(raw), `"folders_available":false`) {
+		t.Fatalf("diagnostics.version: %s %v", raw, err)
+	}
+}
+
 func TestVaultIsUnavailableOnMobile(t *testing.T) {
 	app := openTestApp(t, t.TempDir())
 	raw, err := app.Handle(context.Background(), []byte(`{"jsonrpc":"2.0","id":1,"method":"diagnostics.version","params":null}`))

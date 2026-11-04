@@ -1,5 +1,6 @@
 import type { AnyExtension } from "@tiptap/core";
 import { useEffect, useRef, useState } from "react";
+import { Minimize2 } from "lucide-react";
 import "./ZenMode.css";
 import { TiptapEditor, type TiptapHandle } from "./editor/Tiptap";
 import { localeForLanguage, useI18n } from "../lib/i18n";
@@ -102,6 +103,10 @@ export function ZenMode({
       <div className="zen-bar">
         <span>ZEN</span>
         <span>{statusText}</span>
+        {/* Esc is the keyboard's way out; a touch screen has no Esc. */}
+        <button type="button" className="zen-exit" onClick={onExit}>
+          <Minimize2 size={14} /> {t("workspace.zenExit")}
+        </button>
       </div>
       <div className="zen-col">
         <TiptapEditor
@@ -112,6 +117,7 @@ export function ZenMode({
           initialDoc={initialDoc}
           extensions={extensions}
           contentErrorNotice={t("editor.contentUnreadable")}
+          placeholder={t("editor.placeholder")}
           onChange={onChange}
           onCharCount={onCharCount}
           onManualSave={onManualSave}

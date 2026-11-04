@@ -1,4 +1,5 @@
-import { useEffect, useState, type DragEvent, type MouseEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type MouseEvent } from "react";
+import { createPortal } from "react-dom";
 import { AlertTriangle, ChevronLeft, Compass, Copy, FilePlus2, FolderPlus, Globe, Layers, MoreHorizontal, Pencil, Stethoscope, Trash2, ArrowUp, ArrowDown } from "lucide-react";
 import type { TreeNode } from "../hooks/useFirstLeaf";
 import { flatten, sumLeafChars } from "../hooks/useFirstLeaf";
@@ -104,6 +105,7 @@ export function OutlinePanel({
 }: Props) {
   const { language, t } = useI18n();
   const [menu, setMenu] = useState<MenuState | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const [doctorOpen, setDoctorOpen] = useState(false);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
@@ -145,6 +147,17 @@ export function OutlinePanel({
       window.removeEventListener("click", close);
       window.removeEventListener("keydown", onKey);
     };
+  }, [menu]);
+
+  // The menu opens at the pointer. Near the right or bottom edge — every tap
+  // on a phone's "…" button — it would run off the screen, so pull it back in.
+  useLayoutEffect(() => {
+    const el = menuRef.current;
+    if (!menu || !el) return;
+    const margin = 8;
+    const { width, height } = el.getBoundingClientRect();
+    el.style.left = `${Math.max(margin, Math.min(menu.x, window.innerWidth - width - margin))}px`;
+    el.style.top = `${Math.max(margin, Math.min(menu.y, window.innerHeight - height - margin))}px`;
   }, [menu]);
 
   const openMenu = (e: MouseEvent, node: TreeNode) => {
@@ -356,8 +369,12 @@ export function OutlinePanel({
           />
         ))}
       </div>
-      {menu && (
+      {/* On the body, not in the rail: the phone's rail slides in with a
+          transform, and a fixed menu inside a transformed box is placed and
+          clipped by that box instead of the screen. */}
+      {menu && createPortal(
         <div
+          ref={menuRef}
           role="menu"
           className="outline-menu"
           style={{ left: menu.x, top: menu.y }}
@@ -430,7 +447,8 @@ export function OutlinePanel({
               <Trash2 size={13} /> {t("workspace.delete")}
             </button>
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </nav>
   );

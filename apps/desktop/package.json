@@ -20,6 +20,7 @@
     "@tauri-apps/plugin-fs": "^2.5.1",
     "@tiptap/core": "~3.30.6",
     "@tiptap/extension-mention": "~3.30.6",
+    "@tiptap/extensions": "~3.30.6",
     "@tiptap/pm": "~3.30.6",
     "@tiptap/react": "~3.30.6",
     "@tiptap/starter-kit": "~3.30.6",
