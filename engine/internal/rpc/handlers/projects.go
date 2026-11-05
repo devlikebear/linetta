@@ -103,7 +103,8 @@ func UpdateProject(repo *project.Repo, now Clock) rpc.Handler {
 		}
 		if errors.Is(err, project.ErrInvalidInput) ||
 			errors.Is(err, project.ErrInvalidOutlinePreset) ||
-			errors.Is(err, project.ErrInvalidEpisodeCharTarget) {
+			errors.Is(err, project.ErrInvalidEpisodeCharTarget) ||
+			errors.Is(err, project.ErrInvalidCharCountBasis) {
 			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
 		}
 		if err != nil {

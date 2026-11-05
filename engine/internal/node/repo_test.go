@@ -997,3 +997,81 @@ func TestRepo_UpdateContent_callsResyncer(t *testing.T) {
 		t.Errorf("resyncer args wrong: id=%q docLen=%d", gotID, len(gotDoc))
 	}
 }
+
+func TestCharCountBasisCountsScenesAndWorkTotal(t *testing.T) {
+	s, p := newStoreAndProject(t)
+	ctx := context.Background()
+	r := NewRepo(s)
+	pr := project.NewRepo(s)
+	if p.CharCountBasis != "with_spaces" {
+		t.Fatalf("new work basis = %q, want with_spaces", p.CharCountBasis)
+	}
+	leaf := *p.LastOpenedNodeID
+	if err := r.UpdateContent(ctx, leaf, textDoc("가 나 다"), 2000); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := r.Get(ctx, leaf); n.WordCount != 5 {
+		t.Fatalf("with spaces scene = %d, want 5", n.WordCount)
+	}
+
+	without := "without_spaces"
+	got, err := pr.Update(ctx, 3000, project.UpdateInput{ID: p.ID, CharCountBasis: &without})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.CharCountBasis != without || got.WordCount != 3 {
+		t.Fatalf("after switch: basis %q total %d, want without_spaces 3", got.CharCountBasis, got.WordCount)
+	}
+	if n, _ := r.Get(ctx, leaf); n.WordCount != 3 {
+		t.Fatalf("recounted scene = %d, want 3", n.WordCount)
+	}
+
+	if err := r.UpdateContent(ctx, leaf, textDoc("가 나 다 라"), 4000); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := r.Get(ctx, leaf); n.WordCount != 4 {
+		t.Fatalf("saved scene under without_spaces = %d, want 4", n.WordCount)
+	}
+	if got, _ := pr.Get(ctx, p.ID); got.WordCount != 4 {
+		t.Fatalf("work total = %d, want 4", got.WordCount)
+	}
+
+	bogus := "bogus"
+	if _, err := pr.Update(ctx, 5000, project.UpdateInput{ID: p.ID, CharCountBasis: &bogus}); !errors.Is(err, project.ErrInvalidCharCountBasis) {
+		t.Fatalf("invalid basis err = %v", err)
+	}
+}
+
+func TestCharCountBasisSwitchLeavesWritingRecordAlone(t *testing.T) {
+	s, p := newStoreAndProject(t)
+	ctx := context.Background()
+	pr := project.NewRepo(s)
+	r := NewRepo(s)
+	statRepo := stats.NewRepoWithLocation(s, time.UTC)
+	r.SetWritingStatsRecorder(statRepo)
+	day := millisUTC(2026, 11, 5)
+	leaf := *p.LastOpenedNodeID
+
+	without, with := "without_spaces", "with_spaces"
+	if _, err := pr.Update(ctx, day, project.UpdateInput{ID: p.ID, CharCountBasis: &without}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.UpdateContent(ctx, leaf, textDoc("가 나 다"), day); err != nil {
+		t.Fatal(err)
+	}
+	// Switching recounts the scene from 3 to 5 without writing a word, and
+	// saving the same text afterwards adds nothing either.
+	if _, err := pr.Update(ctx, day, project.UpdateInput{ID: p.ID, CharCountBasis: &with}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.UpdateContent(ctx, leaf, textDoc("가 나 다"), day); err != nil {
+		t.Fatal(err)
+	}
+	got, err := statRepo.GetDay(ctx, p.ID, "2026-11-05")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.CharsAdded != 3 {
+		t.Fatalf("chars_added = %d, want the 3 written that day", got.CharsAdded)
+	}
+}

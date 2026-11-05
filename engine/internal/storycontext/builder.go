@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/devlikebear/linetta/engine/internal/beat"
+	"github.com/devlikebear/linetta/engine/internal/charcount"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/illustref"
 	"github.com/devlikebear/linetta/engine/internal/mention"
@@ -432,7 +433,8 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 			Synopsis:     proj.Synopsis,
 			// Left at the default it says nothing the writer chose, and could
 			// only argue with a length they gave in conversation.
-			EpisodeCharTarget: chosenEpisodeCharTarget(proj.EpisodeCharTarget),
+			EpisodeCharTarget: chosenEpisodeCharTarget(proj),
+			CharCountBasis:    charcount.Normalize(proj.CharCountBasis),
 		},
 		Outline:       proj.Outline,
 		Hierarchical:  hierarchical,
@@ -455,11 +457,15 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 	}, nil
 }
 
-func chosenEpisodeCharTarget(target int) int {
-	if target == project.DefaultEpisodeCharTarget {
+// chosenEpisodeCharTarget is the episode target when the writer chose one:
+// a target of their own, or the default measured without spaces, which is a
+// different length from the default the agents would otherwise assume.
+func chosenEpisodeCharTarget(proj project.Project) int {
+	if proj.EpisodeCharTarget == project.DefaultEpisodeCharTarget &&
+		charcount.Normalize(proj.CharCountBasis) == charcount.WithSpaces {
 		return 0
 	}
-	return target
+	return proj.EpisodeCharTarget
 }
 
 // loadEntityBriefs builds the entity section. An entity's Recent lines come

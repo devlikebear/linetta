@@ -4,6 +4,7 @@ import { Minimize2 } from "lucide-react";
 import "./ZenMode.css";
 import { TiptapEditor, type TiptapHandle } from "./editor/Tiptap";
 import { localeForLanguage, useI18n } from "../lib/i18n";
+import type { CharCountBasis } from "../lib/types";
 
 interface Props {
   initialDoc: object;
@@ -18,6 +19,7 @@ interface Props {
   extensions: AnyExtension[];
   onChange: (doc: object) => void;
   onCharCount: (n: number) => void;
+  charCountBasis?: CharCountBasis;
   onManualSave: (doc: object) => void;
   onMountEditor?: (handle: TiptapHandle | null) => void;
   onExit: () => void;
@@ -33,6 +35,7 @@ export function ZenMode({
   extensions,
   onChange,
   onCharCount,
+  charCountBasis,
   onManualSave,
   onMountEditor,
   onExit,
@@ -120,6 +123,7 @@ export function ZenMode({
           placeholder={t("editor.placeholder")}
           onChange={onChange}
           onCharCount={onCharCount}
+          charCountBasis={charCountBasis}
           onManualSave={onManualSave}
         />
       </div>

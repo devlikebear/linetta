@@ -78,6 +78,10 @@ func TestExportEpisodeMarkdown_oneScene(t *testing.T) {
 	if got.CharCount != 7 {
 		t.Errorf("char count = %d, want 7", got.CharCount)
 	}
+	// The site counts without spaces; the writer sees the work's basis.
+	if got.WorkChars != 9 {
+		t.Errorf("work chars = %d, want 9 (with spaces)", got.WorkChars)
+	}
 	// What linetta-artworks' contentHash() gives for the same string.
 	if got.ContentHash != "4540b219cb36b0edbd608b1602395ab1e60a741aba163922898e8eccd6616013" {
 		t.Errorf("hash = %q", got.ContentHash)

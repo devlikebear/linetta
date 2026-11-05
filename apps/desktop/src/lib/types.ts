@@ -13,6 +13,8 @@ export interface Project {
   outline: string;
   outline_preset?: OutlinePreset;
   episode_char_target: number;
+  /** How the work counts characters; scenes' and the work's word_count follow it. */
+  char_count_basis?: CharCountBasis;
   synopsis: string;
   word_count: number;
   last_opened_node_id?: string;
@@ -27,9 +29,12 @@ export interface UpdateProjectInput {
   outline?: string;
   outline_preset?: OutlinePreset;
   episode_char_target?: number;
+  char_count_basis?: CharCountBasis;
   synopsis?: string;
   style_notes?: string;
 }
+
+export type CharCountBasis = "with_spaces" | "without_spaces";
 
 export interface NewProjectInput {
   title: string;

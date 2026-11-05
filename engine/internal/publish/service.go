@@ -53,9 +53,11 @@ type EpisodeView struct {
 	// LeafIDs are the scenes the episode is made of, so the app can find
 	// the episode a selected scene belongs to without its own copy of the
 	// rules.
-	LeafIDs   []string `json:"leaf_ids,omitempty"`
-	CharCount int      `json:"char_count"`
-	Empty     bool     `json:"empty,omitempty"`
+	LeafIDs []string `json:"leaf_ids,omitempty"`
+	// CharCount is counted under the work's basis for an episode in the work,
+	// and is the site's count (without spaces) for one only on the site.
+	CharCount int  `json:"char_count"`
+	Empty     bool `json:"empty,omitempty"`
 	// Illustrations is how many pictures go up with the episode.
 	Illustrations int    `json:"illustrations,omitempty"`
 	State         string `json:"state"`
@@ -341,7 +343,7 @@ func remoteFromStates(states []EpisodeState) []RemoteEpisode {
 func merge(ep localEpisode, r *RemoteEpisode) EpisodeView {
 	v := EpisodeView{
 		NodeID: ep.NodeID, Label: ep.Label, Title: ep.payload.Title, Ordinal: ep.Ordinal, LeafIDs: ep.LeafIDs,
-		CharCount: ep.payload.CharCount, Empty: ep.payload.Markdown == "", State: EpisodeUnpublished,
+		CharCount: ep.payload.WorkChars, Empty: ep.payload.Markdown == "", State: EpisodeUnpublished,
 		Illustrations: len(ep.payload.Illustrations),
 	}
 	if r == nil {

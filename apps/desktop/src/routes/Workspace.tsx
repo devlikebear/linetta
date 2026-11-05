@@ -8,6 +8,7 @@ import { McpToggle } from "../components/McpToggle";
 import { sceneEditorExtensions } from "../components/editor/sceneExtensions";
 import { NotePopover } from "../components/NotePopover";
 import type { NodeRow, Project, Entity, SearchResult, Settings as SettingsRow, NodeStatus, PublishWorkStatus, IllustrationMeta, IllustrationsChangedPayload } from "../lib/types";
+import { charCountBasisLabelKey, charCountBasisOf } from "../lib/charCount";
 import { buildMentionExtension, type MentionPickerState } from "../components/editor/MentionExtension";
 import { MentionPicker } from "../components/editor/MentionPicker";
 import { EntitySheet } from "../components/EntitySheet";
@@ -677,6 +678,23 @@ export function Workspace() {
       void refreshTreeKeepNode(loadRef.current.node.id);
     }
   });
+
+  // A new basis counts every scene again, so the outline's counts are reread;
+  // the open scene's count comes from the editor, which may be ahead of the save.
+  const handleProjectChanged = useCallback(
+    (p: Project) => {
+      const basisChanged = loadRef.current !== null && charCountBasisOf(loadRef.current.project) !== charCountBasisOf(p);
+      setLoad((prev) => (prev ? { ...prev, project: p } : prev));
+      if (!basisChanged) return;
+      void nodes
+        .listTree(p.id)
+        .then((flat) => setLoad((prev) => (prev && prev.project.id === p.id ? { ...prev, tree: buildTree(flat) } : prev)))
+        .catch(() => {
+          /* The outline keeps its old counts until the next refresh. */
+        });
+    },
+    [],
+  );
 
   const refreshTreeKeepNode = useCallback(
     async (currentNodeId: string) => {
@@ -1878,6 +1896,7 @@ export function Workspace() {
   );
   const isWebnovelProject = outlinePresetId === "webnovel";
   const episodeCharTarget = load?.project.episode_char_target ?? 5000;
+  const charCountBasis = charCountBasisOf(load?.project);
   const currentEpisodeCharCount = useMemo(() => {
     if (!load || !isWebnovelProject) return charCount;
     const current = flatten(load.tree).find((n) => n.id === load.node.id);
@@ -2251,6 +2270,7 @@ export function Workspace() {
                 throttledLastOpened();
               }}
               onCharCount={setCharCount}
+              charCountBasis={charCountBasis}
               typewriter={typewriter}
               focus={focus}
               onManualSave={handleManualSave}
@@ -2300,10 +2320,14 @@ export function Workspace() {
                   })}
                 </span>
                 <span>·</span>
-                <span>{t("workspace.charCountWithSpaces")}</span>
+                <span>{t(charCountBasisLabelKey(charCountBasis))}</span>
               </>
             ) : (
-              <span>{t("workspace.charCount", { count: charCount.toLocaleString(locale) })}</span>
+              <>
+                <span>{t("workspace.charCount", { count: charCount.toLocaleString(locale) })}</span>
+                <span>·</span>
+                <span>{t(charCountBasisLabelKey(charCountBasis))}</span>
+              </>
             )}
           </div>
         </section>
@@ -2485,9 +2509,7 @@ export function Workspace() {
             autoMentionFound={autoMentionFound}
             onOpenThread={setThreadSheetId}
             onProjectTitleChange={handleProjectTitleCommit}
-            onProjectChanged={(p) =>
-              setLoad((prev) => (prev ? { ...prev, project: p } : prev))
-            }
+            onProjectChanged={handleProjectChanged}
             tourTarget="workspace-context"
             onOpenContinuity={openContinuityForScene}
           />
@@ -2538,6 +2560,7 @@ export function Workspace() {
             markActivity();
           }}
           onCharCount={setCharCount}
+          charCountBasis={charCountBasis}
           onManualSave={handleManualSave}
           onMountEditor={(h) => { zenEditorRef.current = h; }}
           onExit={exitZen}
@@ -2584,6 +2607,7 @@ export function Workspace() {
           open
           projectId={load.project.id}
           nodeId={publishTarget}
+          charCountBasis={charCountBasis}
           onClose={closePublish}
           onOpenSettings={() => {
             setPublishTarget(null);

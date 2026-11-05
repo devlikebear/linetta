@@ -158,6 +158,9 @@ type ProjectMeta struct {
 	// EpisodeCharTarget is the length the writer set for an episode, or 0 when
 	// they left it at the default.
 	EpisodeCharTarget int `json:"episode_char_target,omitempty"`
+	// CharCountBasis is how the work counts characters (charcount.WithSpaces
+	// or charcount.WithoutSpaces), which a length target is measured in.
+	CharCountBasis string `json:"char_count_basis,omitempty"`
 }
 
 // LedgerBrief is the work's ledger as one scene's brief sees it. Each line is

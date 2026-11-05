@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/devlikebear/linetta/engine/internal/beat"
+	"github.com/devlikebear/linetta/engine/internal/charcount"
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/mdmeta"
 	"github.com/devlikebear/linetta/engine/internal/node"
@@ -60,6 +61,9 @@ func RestoreProjectDetails(ctx context.Context, pr *project.Repo, now int64, met
 	}
 	if pm.EpisodeCharTarget > 0 {
 		in.EpisodeCharTarget = ptrutil.To(pm.EpisodeCharTarget)
+	}
+	if charcount.Valid(pm.CharCountBasis) {
+		in.CharCountBasis = ptrutil.To(pm.CharCountBasis)
 	}
 	updated, err := pr.Update(ctx, now, in)
 	if err != nil {

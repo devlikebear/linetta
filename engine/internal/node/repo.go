@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/devlikebear/linetta/engine/internal/charcount"
 	"github.com/devlikebear/linetta/engine/internal/store"
 	"github.com/google/uuid"
 )
@@ -93,8 +94,6 @@ func (r *Repo) UpdateContentIfVersion(ctx context.Context, id string, doc string
 }
 
 func (r *Repo) updateContent(ctx context.Context, id string, doc string, expectedVersion *int, now int64) error {
-	count := CountChars([]byte(doc))
-
 	tx, err := r.s.DB().BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -106,8 +105,12 @@ func (r *Repo) updateContent(ctx context.Context, id string, doc string, expecte
 		projectID      string
 		previousCount  int
 		currentVersion int
+		basis          string
 	)
-	if err := tx.QueryRowContext(ctx, `SELECT kind, project_id, word_count, content_version FROM nodes WHERE id = ?`, id).Scan(&kind, &projectID, &previousCount, &currentVersion); err != nil {
+	if err := tx.QueryRowContext(ctx, `
+SELECT n.kind, n.project_id, n.word_count, n.content_version, p.char_count_basis
+  FROM nodes n JOIN projects p ON p.id = n.project_id
+ WHERE n.id = ?`, id).Scan(&kind, &projectID, &previousCount, &currentVersion, &basis); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -119,6 +122,7 @@ func (r *Repo) updateContent(ctx context.Context, id string, doc string, expecte
 	if expectedVersion != nil && currentVersion != *expectedVersion {
 		return ErrContentConflict
 	}
+	count := charcount.Doc([]byte(doc), basis)
 
 	updateSQL := `
 UPDATE nodes
@@ -948,12 +952,14 @@ func (r *Repo) RestoreOutline(ctx context.Context, projectID string, snapshot []
 	}
 	defer tx.Rollback()
 
-	var projectExists int
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM projects WHERE id = ?`, projectID).Scan(&projectExists); err != nil {
+	// A snapshot's counts were taken under the basis the work had then; the
+	// scenes it brings back are counted under the one it has now.
+	var basis string
+	if err := tx.QueryRowContext(ctx, `SELECT char_count_basis FROM projects WHERE id = ?`, projectID).Scan(&basis); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
 		return err
-	}
-	if projectExists == 0 {
-		return ErrNotFound
 	}
 
 	rows, err := tx.QueryContext(ctx, `SELECT id FROM nodes WHERE project_id = ?`, projectID)
@@ -978,8 +984,10 @@ func (r *Repo) RestoreOutline(ctx context.Context, projectID string, snapshot []
 			continue
 		}
 		var contentDoc any
+		wordCount := n.WordCount
 		if n.ContentDoc != nil {
 			contentDoc = *n.ContentDoc
+			wordCount = charcount.Doc([]byte(*n.ContentDoc), basis)
 		}
 		if _, err := tx.ExecContext(ctx, `
 INSERT INTO nodes (id, project_id, parent_id, ordinal, kind, label, title,
@@ -987,7 +995,7 @@ INSERT INTO nodes (id, project_id, parent_id, ordinal, kind, label, title,
                    summary_for_version, summary_written, plan, created_at, updated_at)
 VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			n.ID, n.ProjectID, n.Ordinal, n.Kind, n.Label, n.Title, contentDoc,
-			n.Status, n.WordCount, n.Summary, n.ContentVersion, n.SummaryForVersion,
+			n.Status, wordCount, n.Summary, n.ContentVersion, n.SummaryForVersion,
 			n.SummaryWritten, n.Plan, n.CreatedAt, now); err != nil {
 			return err
 		}

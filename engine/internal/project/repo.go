@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/devlikebear/linetta/engine/internal/charcount"
 	"github.com/devlikebear/linetta/engine/internal/store"
 	"github.com/google/uuid"
 )
@@ -20,6 +21,7 @@ var (
 	ErrInvalidDefaultPOV        = errors.New("invalid default_pov")
 	ErrInvalidOutlinePreset     = errors.New("invalid outline_preset")
 	ErrInvalidEpisodeCharTarget = errors.New("invalid episode_char_target")
+	ErrInvalidCharCountBasis    = errors.New("invalid char_count_basis")
 )
 
 // Repo persists Projects (and the auto-created first leaf node) in SQLite.
@@ -225,6 +227,14 @@ func (r *Repo) Update(ctx context.Context, now int64, in UpdateInput) (Project, 
 		}
 		cur.EpisodeCharTarget = *in.EpisodeCharTarget
 	}
+	recount := false
+	if in.CharCountBasis != nil {
+		if !charcount.Valid(*in.CharCountBasis) {
+			return Project{}, ErrInvalidCharCountBasis
+		}
+		recount = *in.CharCountBasis != cur.CharCountBasis
+		cur.CharCountBasis = *in.CharCountBasis
+	}
 	if in.Title != nil {
 		if *in.Title == "" {
 			return Project{}, fmt.Errorf("%w: title required", ErrInvalidInput)
@@ -254,9 +264,14 @@ func (r *Repo) Update(ctx context.Context, now int64, in UpdateInput) (Project, 
 		return Project{}, err
 	}
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE projects SET title = ?, genres = ?, length_target = ?, default_pov = ?, style_notes = ?, outline = ?, outline_preset = ?, episode_char_target = ?, synopsis = ?, updated_at = ? WHERE id = ?`,
-		cur.Title, string(genresJSON), cur.LengthTarget, cur.DefaultPOV, cur.StyleNotes, cur.Outline, cur.OutlinePreset, cur.EpisodeCharTarget, cur.Synopsis, now, in.ID); err != nil {
+		`UPDATE projects SET title = ?, genres = ?, length_target = ?, default_pov = ?, style_notes = ?, outline = ?, outline_preset = ?, episode_char_target = ?, char_count_basis = ?, synopsis = ?, updated_at = ? WHERE id = ?`,
+		cur.Title, string(genresJSON), cur.LengthTarget, cur.DefaultPOV, cur.StyleNotes, cur.Outline, cur.OutlinePreset, cur.EpisodeCharTarget, cur.CharCountBasis, cur.Synopsis, now, in.ID); err != nil {
 		return Project{}, err
+	}
+	if recount {
+		if err := recountWork(ctx, tx, in.ID, cur.CharCountBasis); err != nil {
+			return Project{}, fmt.Errorf("recount work: %w", err)
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return Project{}, err
@@ -265,7 +280,7 @@ func (r *Repo) Update(ctx context.Context, now int64, in UpdateInput) (Project, 
 }
 
 const baseSelect = `
-SELECT id, title, genres, length_target, default_pov, style_notes, outline, outline_preset, episode_char_target, synopsis,
+SELECT id, title, genres, length_target, default_pov, style_notes, outline, outline_preset, episode_char_target, char_count_basis, synopsis,
        word_count, last_opened_node_id, created_at, updated_at, archived_at
 FROM projects`
 
@@ -282,7 +297,7 @@ func scan(row scanner) (Project, error) {
 		archivedAt sql.NullInt64
 	)
 	if err := row.Scan(&p.ID, &p.Title, &genresJSON, &p.LengthTarget, &p.DefaultPOV,
-		&p.StyleNotes, &p.Outline, &p.OutlinePreset, &p.EpisodeCharTarget, &p.Synopsis, &p.WordCount, &lastNode, &p.CreatedAt, &p.UpdatedAt, &archivedAt); err != nil {
+		&p.StyleNotes, &p.Outline, &p.OutlinePreset, &p.EpisodeCharTarget, &p.CharCountBasis, &p.Synopsis, &p.WordCount, &lastNode, &p.CreatedAt, &p.UpdatedAt, &archivedAt); err != nil {
 		return Project{}, err
 	}
 	if err := json.Unmarshal([]byte(genresJSON), &p.Genres); err != nil {
@@ -297,4 +312,43 @@ func scan(row scanner) (Project, error) {
 		p.ArchivedAt = &v
 	}
 	return p, nil
+}
+
+// recountWork counts every scene of the work again under basis and sets the
+// work's total to their sum. The writing record is left alone: what a day
+// added was counted under the basis the work had that day.
+func recountWork(ctx context.Context, tx *sql.Tx, projectID, basis string) error {
+	rows, err := tx.QueryContext(ctx, `SELECT id, content_doc FROM nodes WHERE project_id = ? AND kind = 'leaf'`, projectID)
+	if err != nil {
+		return err
+	}
+	counts := map[string]int{}
+	for rows.Next() {
+		var (
+			id  string
+			doc sql.NullString
+		)
+		if err := rows.Scan(&id, &doc); err != nil {
+			rows.Close()
+			return err
+		}
+		counts[id] = charcount.Doc([]byte(doc.String), basis)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for id, n := range counts {
+		if _, err := tx.ExecContext(ctx, `UPDATE nodes SET word_count = ? WHERE id = ?`, n, id); err != nil {
+			return err
+		}
+	}
+	_, err = tx.ExecContext(ctx, `
+UPDATE projects
+   SET word_count = COALESCE((SELECT SUM(word_count) FROM nodes WHERE project_id = ? AND kind = 'leaf'), 0)
+ WHERE id = ?`, projectID, projectID)
+	return err
 }

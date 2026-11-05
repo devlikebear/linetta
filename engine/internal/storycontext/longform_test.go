@@ -257,8 +257,27 @@ func TestEpisodeTargetRendersOnlyWhenTheWriterSetOne(t *testing.T) {
 	if _, err := f.projects.Update(ctx, 1500, project.UpdateInput{ID: p.ID, EpisodeCharTarget: &target}); err != nil {
 		t.Fatal(err)
 	}
-	if out := build(); !strings.Contains(out, "회차 목표 분량: 3000자") {
+	if out := build(); !strings.Contains(out, "회차 목표 분량: 3000자(공백 포함)") {
 		t.Fatalf("target missing:\n%s", out)
+	}
+}
+
+func TestEpisodeTargetNamesTheWorksCharCountBasis(t *testing.T) {
+	f := newCtxFixture(t)
+	ctx := context.Background()
+	p := f.project(t, project.NewInput{Title: "t", LengthTarget: "series", DefaultPOV: "first"})
+	without := "without_spaces"
+	if _, err := f.projects.Update(ctx, 1500, project.UpdateInput{ID: p.ID, CharCountBasis: &without}); err != nil {
+		t.Fatal(err)
+	}
+	c, err := f.builder().Build(ctx, *p.LastOpenedNodeID, "", "", Options{Language: "ko"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The default length means a different length without spaces, so it is
+	// said once the writer chose that basis.
+	if _, user := Render(c); !strings.Contains(user, "회차 목표 분량: 5000자(공백 제외)") {
+		t.Fatalf("basis missing:\n%s", user)
 	}
 }
 
