@@ -1,5 +1,3 @@
-//go:build !mobile && !mas
-
 package engineapp
 
 import (
@@ -14,8 +12,10 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/settings"
 )
 
-// Publishing to Linetta Works is on in the desktop builds outside the Mac App
-// Store. The feature only talks to the site once the writer connects.
+// Publishing to Linetta Works is on in every build, the App Store ones
+// included. The feature only talks to the site once the writer connects, and
+// pairing needs no local listener: the writer approves a code in the browser
+// while the app polls.
 const publishAvailable = true
 
 type publishDeps struct {

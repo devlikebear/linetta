@@ -4,8 +4,9 @@
 <dict>
 	<!-- Only the store builds read this key. They use standard HTTPS/TLS and
 	     the macOS Keychain, both exempt from U.S. export encryption
-	     regulations. Linetta Works encryption is compiled out of them
-	     (engineapp/vault_disabled.go); turning it on there makes this false. -->
+	     regulations; publishing to Linetta Works is plain HTTPS. The Works
+	     sync encryption is compiled out of them (engineapp/vault_disabled.go);
+	     turning it on there makes this true. -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 </dict>
