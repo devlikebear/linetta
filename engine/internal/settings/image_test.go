@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -48,6 +49,9 @@ func TestImageSettings_roundTripThroughDisk(t *testing.T) {
 }
 
 func TestImageSettings_patchMergesPerProviderAndPerField(t *testing.T) {
+	if !slices.Contains(ValidImageProviders(), ProviderOpenAICodex) {
+		t.Skip("this build draws with Gemini only")
+	}
 	s := newStoreOnTemp(t)
 	ctx := context.Background()
 	mustSet := func(p Patch) {

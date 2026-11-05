@@ -1,5 +1,3 @@
-//go:build !mobile
-
 // Package agenttest is test-only scaffolding: a scripted tars/pkg/llm.Client
 // for driving the built-in agent's loop without a network. It is a separate
 // package from internal/agent — not a file inside it — precisely so nothing

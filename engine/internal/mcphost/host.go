@@ -1,5 +1,3 @@
-//go:build !mobile
-
 // Package mcphost serves Linetta's story tools to external MCP clients
 // (Claude Code, Claude Desktop) over a loopback-only Streamable HTTP endpoint.
 //

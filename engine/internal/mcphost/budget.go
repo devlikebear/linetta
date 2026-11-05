@@ -1,5 +1,3 @@
-//go:build !mobile
-
 package mcphost
 
 import (
@@ -198,7 +196,7 @@ func measureToolSchemaBytes() map[string]int {
 // can only ever be offered fewer.
 //
 // It satisfies settings.ToolBudgetFunc, which is how it reaches settings.get
-// without settings importing this //go:build !mobile package.
+// without settings importing this package, which imports settings.
 //
 // The false return is the measurement having failed — the in-memory transport
 // refused, or tools/list did. It is NOT the same as a budget of zero, and the

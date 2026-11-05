@@ -1,5 +1,3 @@
-//go:build !mobile
-
 package agent
 
 import (
@@ -407,8 +405,7 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 			// button, which reads as the agent having silently given up.
 			if reason, message, stopped := silentStop(resp); stopped {
 				s.endWithReason(ctx, st, reason, message, companion.HistoryStatusDone)
-				s.maybeSelfReview(ctx, st, toolCalls, usedTools)
-				s.maybeEpisodeReview(ctx, st)
+				s.afterReply(ctx, st, toolCalls, usedTools)
 				return
 			}
 			s.endDone(ctx, st, usage, toolCalls, usedTools)
@@ -480,9 +477,17 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 // endDone ends a turn that finished.
 func (s *Service) endDone(ctx context.Context, st loopState, usage usagePayload, toolCalls int, usedTools []string) {
 	s.notify("agent.done", donePayload{RunID: st.runID, ProjectID: st.projectID, Seq: s.runs.next(st.runID), Model: st.model, Usage: usage})
-	// After the reply has gone, and only for a turn that did real work: ask
-	// what was learned. It runs on its own goroutine with its own context, so
-	// this returns immediately and the writer's next message never waits on it.
+	s.afterReply(ctx, st, toolCalls, usedTools)
+}
+
+// afterReply runs once the turn's reply has gone. The turn gives up its claim
+// on the work first: the panel was just told the turn is over, so the writer's
+// next message must be accepted at once, not after the reviews below have
+// started (they claim nothing — see runs.track). Then, only for a turn that did
+// real work, it asks what was learned; each review runs on its own goroutine,
+// so this returns immediately.
+func (s *Service) afterReply(ctx context.Context, st loopState, toolCalls int, usedTools []string) {
+	s.runs.release(st.projectID, st.runID)
 	s.maybeSelfReview(ctx, st, toolCalls, usedTools)
 	s.maybeEpisodeReview(ctx, st)
 }
@@ -528,8 +533,7 @@ func (s *Service) stopAtWall(ctx context.Context, st loopState, msgs []llm.ChatM
 	s.endAtWall(ctx, st, why)
 	// The wall ends the turn "done" on purpose (see endAtWall): a turn that
 	// got this far did work, and work is exactly what the review is for.
-	s.maybeSelfReview(ctx, st, toolCalls, usedTools)
-	s.maybeEpisodeReview(ctx, st)
+	s.afterReply(ctx, st, toolCalls, usedTools)
 }
 
 // wrapUp gives a turn at the wall one last round-trip, with tool calls

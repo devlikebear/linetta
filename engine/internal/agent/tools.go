@@ -1,5 +1,3 @@
-//go:build !mobile
-
 // Package agent is Linetta's built-in writing agent. It is a client of
 // Linetta's own MCP server rather than a second tool layer: the same
 // ToolDeps that serve Claude Desktop over HTTP are registered on a second

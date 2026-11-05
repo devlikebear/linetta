@@ -1,5 +1,3 @@
-//go:build !mobile
-
 package agent
 
 import (
@@ -182,6 +180,17 @@ func (r *runRegistry) cancel(runID string) bool {
 // finish releases the work. The runID is checked against the current holder
 // so a late teardown from a run that has already been replaced cannot evict
 // its successor and let a third run start.
+// release frees the work this turn held, leaving the rest of its bookkeeping
+// for finish. A turn calls it once its reply has gone, so the next turn on the
+// work can start while this one's goroutine is still winding down.
+func (r *runRegistry) release(projectID, runID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.byProject[projectID] == runID {
+		delete(r.byProject, projectID)
+	}
+}
+
 func (r *runRegistry) finish(projectID, runID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

@@ -36,8 +36,8 @@ func TestLoad_missingFileReturnsDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	if got.Provider != "openai-codex" {
-		t.Errorf("provider = %q, want openai-codex", got.Provider)
+	if got.Provider != DefaultProvider {
+		t.Errorf("provider = %q, want %s", got.Provider, DefaultProvider)
 	}
 	if got.Language != "ko" {
 		t.Errorf("language = %q, want ko", got.Language)
@@ -77,7 +77,7 @@ func TestSet_partialPatchPreservesUntouchedFields(t *testing.T) {
 		t.Fatalf("Set: %v", err)
 	}
 	got, _ := s.Get(context.Background())
-	if got.Provider != "openai-codex" {
+	if got.Provider != DefaultProvider {
 		t.Errorf("provider mutated to %q", got.Provider)
 	}
 	if !got.TypewriterDefault {
@@ -95,7 +95,7 @@ func TestSet_persistsToDisk(t *testing.T) {
 		t.Fatalf("re-New: %v", err)
 	}
 	got, _ := s2.Get(context.Background())
-	if got.Provider != "openai-codex" {
+	if got.Provider != DefaultProvider {
 		t.Errorf("provider not persisted across reload: %q", got.Provider)
 	}
 }
@@ -138,7 +138,7 @@ func TestLoad_corruptFileReturnsDefaults(t *testing.T) {
 		t.Fatalf("New on corrupt: %v", err)
 	}
 	got, _ := s.Get(context.Background())
-	if got.Provider != "openai-codex" {
+	if got.Provider != DefaultProvider {
 		t.Errorf("did not fall back to defaults: %+v", got)
 	}
 }

@@ -28,7 +28,7 @@ func TestGetSettingsHandler_returnsDefaults(t *testing.T) {
 	if err := json.Unmarshal(res, &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if got.Provider != "openai-codex" {
+	if got.Provider != settings.DefaultProvider {
 		t.Errorf("provider = %q", got.Provider)
 	}
 	if got.BackupDir == "" {

@@ -6,6 +6,8 @@ import { imageProviders as imageProvidersApi, settings as settingsApi } from "..
 import { rpcErrorMessage } from "../../lib/rpcMessage";
 import type { ImageProviderID, ImageProviderStatus, SettingsPatch } from "../../lib/types";
 
+/** Display order. Only those the engine lists are shown: mobile has no
+ *  ChatGPT sign-in, so it draws with Gemini alone. */
 const IMAGE_PROVIDERS: ImageProviderID[] = ["openai-codex", "gemini-native"];
 
 /* Settings → Image generation. Which provider draws illustrations, with what
@@ -102,7 +104,7 @@ export function ImageGenSection({ onOpenProviders }: { onOpenProviders: () => vo
         >
           {t("settings.images.off")}
         </button>
-        {IMAGE_PROVIDERS.map((id) => (
+        {IMAGE_PROVIDERS.filter((id) => list?.some((s) => s.id === id)).map((id) => (
           <button
             key={id}
             type="button"

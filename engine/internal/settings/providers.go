@@ -4,7 +4,8 @@ import "slices"
 
 // ActiveProvider returns the provider the built-in agent uses. An id outside
 // the whitelist — a pre-1.0 "claude-code-cli" or "openrouter" still on disk —
-// is not an error: it stays on disk untouched and Codex is used instead.
+// is not an error: it stays on disk untouched and DefaultProvider is used
+// instead.
 func (s *Store) ActiveProvider() string {
 	s.mu.RLock()
 	id := s.cfg.Provider
@@ -12,7 +13,7 @@ func (s *Store) ActiveProvider() string {
 	if slices.Contains(ValidProviders(), id) {
 		return id
 	}
-	return ProviderOpenAICodex
+	return DefaultProvider
 }
 
 // HasProviderConsent reports whether the writer agreed to send manuscript

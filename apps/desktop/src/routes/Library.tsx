@@ -361,9 +361,15 @@ export function Library() {
     {
       target: "library-settings",
       title: t("onboarding.library.settings.title"),
-      // A build without the agent (iOS) has no AI connection or GitHub sync
-      // to point at.
-      body: t((diagnostics?.agent_available ?? true) ? "onboarding.library.settings.body" : "onboarding.library.settings.bodyLocal"),
+      // Name only what this build's Settings has: iOS has the AI connection
+      // but no GitHub sync.
+      body: t(
+        !(diagnostics?.agent_available ?? true)
+          ? "onboarding.library.settings.bodyLocal"
+          : (diagnostics?.git_sync_available ?? true)
+            ? "onboarding.library.settings.body"
+            : "onboarding.library.settings.bodyNoSync",
+      ),
     },
   ];
 

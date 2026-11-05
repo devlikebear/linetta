@@ -1,5 +1,3 @@
-//go:build !mobile
-
 package engineapp
 
 import (
