@@ -1,6 +1,7 @@
 import { ScenePlanField } from "./ScenePlanField";
 import { useEffect, useRef, useState } from "react";
-import type { NodeRow, Project, Entity, EntityKind } from "../lib/types";
+import type { CharCountBasis, NodeRow, Project, Entity, EntityKind } from "../lib/types";
+import { charCountBasisOf } from "../lib/charCount";
 import { changesContinuity } from "../lib/agentTools";
 import { projects as projectsApi, continuity as continuityApi } from "../lib/rpc";
 import { PlotPanel } from "./PlotPanel";
@@ -192,6 +193,21 @@ export function ContextPanel({ project, node, charCount, todayChars = null, epis
     onProjectChanged?.(updated);
   };
 
+  const charCountBasis = charCountBasisOf(project);
+  const [basisBusy, setBasisBusy] = useState(false);
+  const saveCharCountBasis = async (next: CharCountBasis) => {
+    if (next === charCountBasis) return;
+    setBasisBusy(true);
+    try {
+      const updated = await projectsApi.update({ id: project.id, char_count_basis: next });
+      onProjectChanged?.(updated);
+    } catch {
+      /* benign; the select stays on the basis the work still has */
+    } finally {
+      setBasisBusy(false);
+    }
+  };
+
   const clearSynopsis = async () => {
     if (synopsisSaveTimer.current) window.clearTimeout(synopsisSaveTimer.current);
     setSynopsisBusy("clear");
@@ -282,6 +298,18 @@ export function ContextPanel({ project, node, charCount, todayChars = null, epis
               )}
             </div>
           </div>
+          <label className="char-basis-row">
+            <span>{t("workspace.charCountBasis")}</span>
+            <select
+              value={charCountBasis}
+              disabled={basisBusy}
+              onChange={(e) => void saveCharCountBasis(e.target.value as CharCountBasis)}
+              data-testid="char-count-basis"
+            >
+              <option value="with_spaces">{t("workspace.charCountWithSpaces")}</option>
+              <option value="without_spaces">{t("workspace.charCountWithoutSpaces")}</option>
+            </select>
+          </label>
           <div className="toggles">
             <button type="button" className="toggle-row" onClick={onToggleTypewriter}>
               <span className="lbl">

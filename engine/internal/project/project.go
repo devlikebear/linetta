@@ -57,12 +57,15 @@ type Project struct {
 	Outline           string   `json:"outline"`
 	OutlinePreset     string   `json:"outline_preset"`
 	EpisodeCharTarget int      `json:"episode_char_target"`
-	Synopsis          string   `json:"synopsis"`
-	WordCount         int      `json:"word_count"`
-	LastOpenedNodeID  *string  `json:"last_opened_node_id,omitempty"`
-	CreatedAt         int64    `json:"created_at"`
-	UpdatedAt         int64    `json:"updated_at"`
-	ArchivedAt        *int64   `json:"archived_at,omitempty"`
+	// CharCountBasis is how the work counts characters: charcount.WithSpaces
+	// or charcount.WithoutSpaces. WordCount and every scene's count follow it.
+	CharCountBasis   string  `json:"char_count_basis"`
+	Synopsis         string  `json:"synopsis"`
+	WordCount        int     `json:"word_count"`
+	LastOpenedNodeID *string `json:"last_opened_node_id,omitempty"`
+	CreatedAt        int64   `json:"created_at"`
+	UpdatedAt        int64   `json:"updated_at"`
+	ArchivedAt       *int64  `json:"archived_at,omitempty"`
 }
 
 // NewInput is what the UI submits from the New Project modal.
@@ -92,5 +95,6 @@ type UpdateInput struct {
 	Outline           *string   `json:"outline,omitempty"`
 	OutlinePreset     *string   `json:"outline_preset,omitempty"`
 	EpisodeCharTarget *int      `json:"episode_char_target,omitempty"`
+	CharCountBasis    *string   `json:"char_count_basis,omitempty"`
 	Synopsis          *string   `json:"synopsis,omitempty"`
 }

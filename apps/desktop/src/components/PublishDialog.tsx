@@ -4,10 +4,12 @@ import { Copy, ExternalLink } from "lucide-react";
 import { useI18n } from "../lib/i18n";
 import { continuity as continuityApi, openExternalUrl, publishApi } from "../lib/rpc";
 import { rpcErrorMessage } from "../lib/rpcMessage";
+import { charCountBasisLabelKey, DEFAULT_CHAR_COUNT_BASIS } from "../lib/charCount";
 import { PUBLISH_STATE_KEYS, findPublishEpisode } from "../lib/publish";
 import { SHARE_TARGETS, shareAction, type ShareTarget } from "../lib/share";
 import { PublishSheetsSection } from "./PublishSheetsSection";
 import type {
+  CharCountBasis,
   PublishConnectStatus,
   PublishEpisodeView,
   PublishSerialStatus,
@@ -37,6 +39,8 @@ export interface PublishDialogProps {
   onOpenSettings: () => void;
   /** Called with the fresh status after anything changed on the site. */
   onChanged?: (status: PublishWorkStatus) => void;
+  /** The work's basis, which an episode's count is in. */
+  charCountBasis?: CharCountBasis;
 }
 
 function reasonOf(error: unknown): string | null {
@@ -44,7 +48,7 @@ function reasonOf(error: unknown): string | null {
   return typeof data?.reason === "string" ? data.reason : null;
 }
 
-export function PublishDialog({ open, projectId, nodeId, onClose, onOpenSettings, onChanged }: PublishDialogProps) {
+export function PublishDialog({ open, projectId, nodeId, onClose, onOpenSettings, onChanged, charCountBasis = DEFAULT_CHAR_COUNT_BASIS }: PublishDialogProps) {
   const { language, t } = useI18n();
   const [connection, setConnection] = useState<PublishConnectStatus | null>(null);
   const [status, setStatus] = useState<PublishWorkStatus | null>(null);
@@ -288,7 +292,10 @@ export function PublishDialog({ open, projectId, nodeId, onClose, onOpenSettings
                   </span>
                 </div>
                 <p className="sd">
-                  {t("publish.charCount", { count: episode.char_count.toLocaleString(language) })}
+                  {t("publish.charCount", {
+                    count: episode.char_count.toLocaleString(language),
+                    basis: t(charCountBasisLabelKey(charCountBasis)),
+                  })}
                   {shown?.number ? ` · ${t("publish.number", { number: String(shown.number) })}` : ""}
                 </p>
                 {episode.empty && <p className="sd" role="alert">{t("errors.publishEmptyEpisode")}</p>}

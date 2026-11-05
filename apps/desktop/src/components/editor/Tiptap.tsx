@@ -7,6 +7,8 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import { FocusExtension, focusKey } from "./FocusExtension";
 import { SearchHighlightExtension, SearchHighlightPluginKey } from "./SearchHighlightExtension";
 import "./Tiptap.css";
+import { countDocChars, DEFAULT_CHAR_COUNT_BASIS } from "../../lib/charCount";
+import type { CharCountBasis } from "../../lib/types";
 
 export interface TiptapHandle {
   /** Move keyboard focus into the editor (end of current document). */
@@ -64,6 +66,8 @@ interface Props {
   onChange: (doc: object) => void;
   /** Called with the character count after each change (whitespace-included). */
   onCharCount?: (count: number) => void;
+  /** The work's basis for onCharCount; with spaces when left out. */
+  charCountBasis?: CharCountBasis;
   /** Typewriter scroll: keeps the active line near the viewport center. */
   typewriter?: boolean;
   /** Manual-save hotkey handler — receives the current doc; consumer issues the RPC. */
@@ -85,7 +89,7 @@ interface Props {
 }
 
 export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEditor(
-  { initialDoc, onChange, onCharCount, typewriter, onManualSave, extensions, onMentionDoubleClick, focus, onSelectionContextMenu, contentErrorNotice, placeholder },
+  { initialDoc, onChange, onCharCount, charCountBasis = DEFAULT_CHAR_COUNT_BASIS, typewriter, onManualSave, extensions, onMentionDoubleClick, focus, onSelectionContextMenu, contentErrorNotice, placeholder },
   ref,
 ) {
   // Stable reference for the initial doc to avoid resetting on every render.
@@ -100,6 +104,9 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
   // `enableContentCheck` would catch this too, but it also runs ProseMirror's
   // stricter `check()`, which rejects docs Tiptap reads fine today.
   const unreadDocRef = useRef<object | null>(null);
+  // onUpdate is bound once per editor; it reads the basis the work has now.
+  const basisRef = useRef(charCountBasis);
+  basisRef.current = charCountBasis;
   // Read at draw time, so a language change shows without recreating the editor.
   const placeholderRef = useRef(placeholder ?? "");
   placeholderRef.current = placeholder ?? "";
@@ -137,7 +144,7 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
         if (unreadDocRef.current) return;
         const doc = editor.getJSON();
         onChange(doc);
-        if (onCharCount) onCharCount(countChars(doc));
+        if (onCharCount) onCharCount(countDocChars(doc, basisRef.current));
       },
     },
     // Re-create the editor only when the initial doc actually changes id —
@@ -158,8 +165,8 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
 
   useEffect(() => {
     if (!editor) return;
-    if (onCharCount) onCharCount(countChars(unreadDocRef.current ?? editor.getJSON()));
-  }, [editor, onCharCount]);
+    if (onCharCount) onCharCount(countDocChars(unreadDocRef.current ?? editor.getJSON(), charCountBasis));
+  }, [editor, onCharCount, charCountBasis]);
 
   useEffect(() => {
     if (!editor) {
@@ -438,14 +445,3 @@ function setSearchHighlights(editor: Editor, matches: TextMatch[], activeIndex: 
   }));
 }
 
-/** Lightweight TS port of engine/internal/node.CountChars. */
-function countChars(node: any): number {
-  if (!node || typeof node !== "object") return 0;
-  if (node.type === "text" && typeof node.text === "string") return [...node.text].length;
-  if (Array.isArray(node.content)) {
-    let n = 0;
-    for (const c of node.content) n += countChars(c);
-    return n;
-  }
-  return 0;
-}

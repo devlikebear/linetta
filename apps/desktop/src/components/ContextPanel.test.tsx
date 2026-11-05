@@ -119,6 +119,20 @@ function renderContextPanel(props: Partial<ComponentProps<typeof ContextPanel>> 
 }
 
 describe("ContextPanel", () => {
+  it("switches the work's character count basis and hands the recounted work back", async () => {
+    const recounted = { ...project, char_count_basis: "without_spaces" as const, word_count: 3 };
+    mocks.projectsUpdate.mockResolvedValueOnce(recounted);
+    const onProjectChanged = vi.fn();
+    renderContextPanel({ onProjectChanged });
+
+    const select = screen.getByTestId("char-count-basis") as HTMLSelectElement;
+    expect(select.value).toBe("with_spaces");
+    await userEvent.selectOptions(select, "without_spaces");
+
+    await waitFor(() => expect(onProjectChanged).toHaveBeenCalledWith(recounted));
+    expect(mocks.projectsUpdate).toHaveBeenCalledWith({ id: project.id, char_count_basis: "without_spaces" });
+  });
+
   it("places the writer's direction section at the top of the panel, wired to the open project and scene", async () => {
     renderContextPanel();
     const section = await screen.findByTestId("direction-section");

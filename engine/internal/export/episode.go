@@ -7,8 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"unicode"
 
+	"github.com/devlikebear/linetta/engine/internal/charcount"
 	"github.com/devlikebear/linetta/engine/internal/episode"
 	"github.com/devlikebear/linetta/engine/internal/node"
 )
@@ -25,6 +25,10 @@ type EpisodePayload struct {
 	// CharCount counts characters other than whitespace, the way the site
 	// counts them against its length limit.
 	CharCount int `json:"char_count"`
+	// WorkChars is the sum of the scenes' counts under the work's own basis,
+	// the number the writer sees for the episode everywhere else in the app.
+	// It stays on this device.
+	WorkChars int `json:"-"`
 	// ContentHash is the lowercase hex SHA-256 of Markdown's UTF-8 bytes,
 	// which the site recomputes and compares (docs/api.md in linetta-artworks).
 	ContentHash string `json:"content_hash"`
@@ -49,6 +53,7 @@ type EpisodePayload struct {
 func ExportEpisodeMarkdown(ctx context.Context, nr *node.Repo, ep episode.Episode, workTitle string, known map[string]bool) (EpisodePayload, error) {
 	var parts []string
 	var pictures []string
+	workChars := 0
 	seen := map[string]bool{}
 	opts := MarkdownOptions{Illustration: func(id, caption string) string {
 		if !known[id] {
@@ -65,6 +70,7 @@ func ExportEpisodeMarkdown(ctx context.Context, nr *node.Repo, ep episode.Episod
 		if err != nil {
 			return EpisodePayload{}, err
 		}
+		workChars += n.WordCount
 		if n.ContentDoc == nil {
 			continue
 		}
@@ -81,6 +87,7 @@ func ExportEpisodeMarkdown(ctx context.Context, nr *node.Repo, ep episode.Episod
 		Markdown:    md,
 		Title:       EpisodeTitle(ep, workTitle),
 		CharCount:   CharCount(md),
+		WorkChars:   workChars,
 		ContentHash: ContentHash(md),
 
 		Illustrations: pictures,
@@ -116,13 +123,7 @@ func ContentHash(s string) string {
 
 // CharCount counts the runes in s that are not whitespace.
 func CharCount(s string) int {
-	count := 0
-	for _, r := range s {
-		if !unicode.IsSpace(r) {
-			count++
-		}
-	}
-	return count
+	return charcount.Text(s, charcount.WithoutSpaces)
 }
 
 // PublishDocToMarkdown is DocToMarkdown for a reader rather than for the

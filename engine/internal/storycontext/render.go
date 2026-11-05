@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/devlikebear/linetta/engine/internal/charcount"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 )
@@ -747,9 +748,19 @@ func renderProjectMeta(m ProjectMeta, lang string) string {
 		parts = append(parts, langPick(lang, "시점: ", "POV: ", "視点: ")+mapDefaultPOV(m.DefaultPOV, lang))
 	}
 	if m.EpisodeCharTarget > 0 {
-		parts = append(parts, fmt.Sprintf(langPick(lang, "회차 목표 분량: %d자", "Episode length target: %d characters", "各話の目標分量: %d字"), m.EpisodeCharTarget))
+		target := fmt.Sprintf(langPick(lang, "회차 목표 분량: %d자", "Episode length target: %d characters", "各話の目標分量: %d字"), m.EpisodeCharTarget)
+		parts = append(parts, target+renderCharCountBasis(m.CharCountBasis, lang))
 	}
 	return strings.Join(parts, " · ")
+}
+
+// renderCharCountBasis names the characters a length target counts, so an
+// agent aims for the length the writer measures.
+func renderCharCountBasis(basis, lang string) string {
+	if charcount.Normalize(basis) == charcount.WithoutSpaces {
+		return langPick(lang, "(공백 제외)", " (excluding spaces)", "(空白除く)")
+	}
+	return langPick(lang, "(공백 포함)", " (including spaces)", "(空白含む)")
 }
 
 func mapLengthTarget(v, lang string) string {

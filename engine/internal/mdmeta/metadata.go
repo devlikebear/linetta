@@ -40,6 +40,7 @@ type ProjectMeta struct {
 	Synopsis          string   `yaml:"synopsis,omitempty" json:"synopsis,omitempty"`
 	Outline           string   `yaml:"outline,omitempty" json:"outline,omitempty"`
 	EpisodeCharTarget int      `yaml:"episode_char_target,omitempty" json:"episode_char_target,omitempty"`
+	CharCountBasis    string   `yaml:"char_count_basis,omitempty" json:"char_count_basis,omitempty"`
 }
 
 // Node is one manuscript node in export document order (the same pre-order
