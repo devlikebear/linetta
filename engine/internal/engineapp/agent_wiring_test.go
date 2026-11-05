@@ -195,11 +195,6 @@ func skipToolDep(name string) string {
 		// side is asserted in TestProductionToolDepsCarryEveryCollaborator.
 		return "only the built-in agent has attachments"
 	}
-	if name == "Publish" && !publishAvailable {
-		// The Mac App Store build leaves publishing out on purpose, and the
-		// tools that read this field refuse there.
-		return "this build does not publish"
-	}
 	return ""
 }
 

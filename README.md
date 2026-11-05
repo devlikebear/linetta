@@ -52,11 +52,10 @@ Product overview and downloads: [linetta.marvin-42.com](https://linetta.marvin-4
 
 Linetta is free on the [Mac App Store](https://apps.apple.com/app/id6781664781).
 
-The Mac App Store build leaves out Linetta Works: it has no publishing, no
-Linetta Works sync, no automatic sync and no sealed folder mirror, so it sends
-nothing to a server the developer runs. Folder Sync there is a plain Markdown
-export. To publish or sync through Linetta Works on a Mac, use the Homebrew
-build.
+The Mac App Store build publishes to Linetta Works but leaves sync out: it has
+no Linetta Works sync, no automatic sync and no sealed folder mirror. Folder
+Sync there is a plain Markdown export. To sync through Linetta Works on a Mac,
+use the Homebrew build.
 
 ### Homebrew on Apple Silicon
 
@@ -641,7 +640,7 @@ locally, and stops the moment you turn it off.
 [Linetta Works](https://works.marvin-42.com) is a reading site for fiction
 written in Linetta. Publishing to it is optional: nothing is sent to the site
 until you connect an account, and after that only the episodes you choose to
-publish. Publishing is not in the Mac App Store build.
+publish. Every build can publish, the Mac App Store and iOS apps included.
 
 **Connect.** Open **Settings → Publishing**, read what publishing sends, tick
 the box, and press **Connect in browser**. The site opens in your browser with
