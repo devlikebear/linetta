@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.22.0 - 2026-11-05
+
+- Added: the iOS app has the built-in agent. It connects with an API key
+  (Anthropic, Google Gemini or an OpenAI-compatible endpoint) kept in the iOS
+  Keychain. A turn in progress may stop when the app goes to the background.
+- Added: the iOS app and the Mac App Store app can connect a Linetta Works
+  account and publish episodes, sheets and the cover. Linetta Works sync stays
+  out of the App Store builds.
+- Added: choose per work whether characters are counted with or without
+  spaces. The editor, outline, episode progress, publish dialog and the
+  agent's brief all follow it; existing works keep counting with spaces.
+- Fixed (iOS): an empty scene showed no cursor or hint, so it was hard to find
+  where to type; tapping the empty area below a scene now goes into the text.
+- Fixed (iOS): ZEN mode had no way back on a touch screen. It now has an Exit
+  button below the status bar.
+- Fixed (iOS): the first-run tour card and the outline's "…" menu were cut off
+  at the screen edge.
+- Changed (iOS): folder sync, the open-folder menu items and the MCP button,
+  none of which can work on iOS, are no longer shown.
+- Fixed: a message sent right as the agent finished a turn could be refused
+  as "this work already has a turn running" while a review started.
+
 ## v1.21.0 - 2026-11-04
 
 - Fixed: on a long work, the brief the built-in agent reads could run past what
