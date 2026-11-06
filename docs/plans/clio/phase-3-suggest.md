@@ -36,7 +36,7 @@ _상태: 대기 (게이트 있음)_
 ### 작업 그룹 A: 프로바이더
 
 - [ ] **T3.A.1** — Clio 앱에 프로바이더 연결
-  - 파일: `engine/internal/clio/app/app.go`, `app/providers.go`, `engine/internal/rpc/handlers/clio_providers.go`(필요할 때만)
+  - 파일: `engine/internal/clio/app/app.go`, `app/providers.go`, `engine/internal/clio/handlers/providers.go`(필요할 때만)
   - 내용: `settings.NewStore(<home>, secrets)`와 `provider.NewSource(settingsStore, codexHome)`를 만들고, `engineapp/providers.go`가 등록하는 `settings.get`, `settings.set`, `providers.list`, `providers.list_models`, `providers.test` 핸들러를 같은 팩토리로 등록한다. 핸들러를 복사하지 않고 그대로 쓴다. Clio 쪽에서 프로바이더 목록을 세 개로 거르는 것은 프런트엔드에서 한다
   - 검증: `scripts/validate-story-core-deps.sh` 통과
 
@@ -72,7 +72,7 @@ _상태: 대기 (게이트 있음)_
     - 비슷한 글은 맥락과 말투가 다르면 고르지 않는다
 
 - [ ] **T3.B.2** — 받기와 버전
-  - 파일: `engine/internal/clio/migrations/0003_draft_versions.sql`, `engine/internal/clio/draft/versions.go`, `versions_test.go`, `engine/internal/rpc/handlers/clio_suggest.go`(+ `_test.go`)
+  - 파일: `engine/internal/clio/migrations/0003_draft_versions.sql`, `engine/internal/clio/draft/versions.go`, `versions_test.go`, `engine/internal/clio/handlers/suggest.go`(+ `_test.go`)
   - 내용:
     - 테이블: `draft_versions(id, draft_id, body, reason TEXT CHECK (reason IN ('suggestion','manual')), created_at)`
     - RPC: `suggest.request`(`Request` → 후보), `suggest.accept`(`{draft_id, content_version, start, end, text}`). 받기 전 본문을 버전으로 남긴 뒤 구간을 바꾸고, `content_version`이 틀리면 `CodeContentConflict`를 낸다. 함께 `drafts.versions`, `drafts.restore`
@@ -85,7 +85,7 @@ _상태: 대기 (게이트 있음)_
 ### 작업 그룹 C: 메모로 초안 (게이트 통과 시에만)
 
 - [ ] **T3.C.1** — 초안 생성
-  - 파일: `engine/internal/clio/suggest/draft.go`, `draft_test.go`, `handlers/clio_suggest.go`
+  - 파일: `engine/internal/clio/suggest/draft.go`, `draft_test.go`, `clio/handlers/suggest.go`
   - 내용: `suggest.draft`(`{note, platform, kind, register}` → 본문). 실험의 B 방식(프로필 수치 + 비슷한 글 + 메모)이다. 다만 `register`는 작가가 고른다(`존댓말`, `반말`). 결과는 새 초안으로 저장하고 바로 `check.run`을 보여 준다. 자동 고쳐 쓰기는 없다
   - UI: 새 초안 버튼 옆에 "메모로 시작"을 둔다. 메모, 맥락, 말투를 입력한다
 
