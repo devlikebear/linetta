@@ -564,6 +564,13 @@ func (s *Store) load() error {
 	if _, ok := raw["agent_self_review_enabled"]; ok {
 		s.cfg.AgentSelfReviewEnabled = disk.AgentSelfReviewEnabled
 	}
+	// The three passes that send the manuscript again default to off, so a
+	// plain assignment is right: a file that predates a key decodes to the
+	// default. Switch one to default-on and it needs the presence guard above.
+	s.cfg.AgentEpisodeReviewEnabled = disk.AgentEpisodeReviewEnabled
+	s.cfg.AgentSettlementEnabled = disk.AgentSettlementEnabled
+	s.cfg.AgentImpactReviewEnabled = disk.AgentImpactReviewEnabled
+	s.cfg.StyleAvoidPhrases = disk.StyleAvoidPhrases
 	// Out of range — including the zero a file from a build that predates
 	// the key decodes to — keeps the default.
 	if validAgentMaxToolCalls(disk.AgentMaxToolCalls) {
@@ -1152,16 +1159,20 @@ func (s *Store) persistWith(next Config, legacy legacyPlaintextKeys) error {
 		// The line everyone forgets: a field missing from this literal is
 		// never written to disk, so the writer's choice survives until the
 		// next restart and no further.
-		AgentSelfReviewEnabled:   next.AgentSelfReviewEnabled,
-		AgentMaxToolCalls:        next.AgentMaxToolCalls,
-		AgentHistoryBudget:       next.AgentHistoryBudget,
-		VisualWriteToolsDisabled: next.VisualWriteToolsDisabled,
-		MemoryToolsEnabled:       next.MemoryToolsEnabled,
-		SkillToolsEnabled:        next.SkillToolsEnabled,
-		ReviewToolsEnabled:       next.ReviewToolsEnabled,
-		PublishAccount:           next.PublishAccount,
-		ImageProvider:            next.ImageProvider,
-		ImageProviders:           next.ImageProviders,
+		AgentSelfReviewEnabled:    next.AgentSelfReviewEnabled,
+		AgentEpisodeReviewEnabled: next.AgentEpisodeReviewEnabled,
+		AgentSettlementEnabled:    next.AgentSettlementEnabled,
+		AgentImpactReviewEnabled:  next.AgentImpactReviewEnabled,
+		StyleAvoidPhrases:         next.StyleAvoidPhrases,
+		AgentMaxToolCalls:         next.AgentMaxToolCalls,
+		AgentHistoryBudget:        next.AgentHistoryBudget,
+		VisualWriteToolsDisabled:  next.VisualWriteToolsDisabled,
+		MemoryToolsEnabled:        next.MemoryToolsEnabled,
+		SkillToolsEnabled:         next.SkillToolsEnabled,
+		ReviewToolsEnabled:        next.ReviewToolsEnabled,
+		PublishAccount:            next.PublishAccount,
+		ImageProvider:             next.ImageProvider,
+		ImageProviders:            next.ImageProviders,
 	}
 	// sanitizeConfigForDisk has just blanked every api_key, which is right for
 	// every key the SecretStore holds. It is wrong for the pre-1.0 ones it
