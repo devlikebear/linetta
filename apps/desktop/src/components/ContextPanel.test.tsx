@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -20,6 +20,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 const mocks = vi.hoisted(() => ({
   settingsGet: vi.fn(),
+  settingsSet: vi.fn(),
   projectsUpdate: vi.fn(),
   projectsRewriteSynopsis: vi.fn(),
   projectsClearSynopsis: vi.fn(),
@@ -29,6 +30,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../lib/rpc", () => ({
   settings: {
     get: mocks.settingsGet,
+    set: mocks.settingsSet,
   },
   projects: {
     update: mocks.projectsUpdate,
@@ -99,6 +101,11 @@ const node: NodeRow = {
   updated_at: 1,
 };
 
+function cleanupAndRender(props: Partial<ComponentProps<typeof ContextPanel>>) {
+  cleanup();
+  return renderContextPanel(props);
+}
+
 function renderContextPanel(props: Partial<ComponentProps<typeof ContextPanel>> = {}) {
   return render(
     <I18nProvider>
@@ -119,6 +126,89 @@ function renderContextPanel(props: Partial<ComponentProps<typeof ContextPanel>> 
 }
 
 describe("ContextPanel", () => {
+  const webnovel: Project = { ...project, outline_preset: "webnovel" };
+  const saved = { id: "mine", name: "내 공모전", char_count_basis: "without_spaces" as const, episode_char_target: 3500 };
+
+  it("offers length presets only on a webnovel work", () => {
+    renderContextPanel();
+    expect(screen.queryByTestId("char-count-preset")).toBeNull();
+  });
+
+  it("applies a length preset's basis and episode target in one update", async () => {
+    const applied = { ...webnovel, char_count_basis: "without_spaces" as const, episode_char_target: 4000 };
+    mocks.projectsUpdate.mockResolvedValueOnce(applied);
+    const onProjectChanged = vi.fn();
+    renderContextPanel({ project: webnovel, onProjectChanged });
+
+    const select = screen.getByTestId("char-count-preset-select") as HTMLSelectElement;
+    expect(select.value).toBe("builtin:standard-with-spaces");
+    await userEvent.selectOptions(select, "builtin:standard-without-spaces");
+
+    await waitFor(() => expect(onProjectChanged).toHaveBeenCalledWith(applied));
+    expect(mocks.projectsUpdate).toHaveBeenCalledWith({
+      id: webnovel.id,
+      char_count_basis: "without_spaces",
+      episode_char_target: 4000,
+    });
+  });
+
+  it("shows a hand-set rule as custom and lists the writer's saved presets", async () => {
+    mocks.settingsGet.mockResolvedValue({ language: "ko", char_count_presets: [saved] });
+    renderContextPanel({ project: { ...webnovel, char_count_basis: "without_spaces", episode_char_target: 3500 } });
+
+    const select = screen.getByTestId("char-count-preset-select") as HTMLSelectElement;
+    await waitFor(() => expect(select.value).toBe("user:mine"));
+    expect(screen.getByRole("option", { name: "내 공모전 · 공백 제외 3,500자" })).toBeTruthy();
+    cleanupAndRender({ project: { ...webnovel, episode_char_target: 4321 } });
+    await waitFor(() => expect((screen.getByTestId("char-count-preset-select") as HTMLSelectElement).value).toBe(""));
+  });
+
+  it("saves the work's current rule as a named preset in the app settings", async () => {
+    mocks.settingsSet.mockImplementation(async (patch: { char_count_presets: unknown[] }) => ({
+      language: "ko",
+      char_count_presets: patch.char_count_presets,
+    }));
+    renderContextPanel({ project: { ...webnovel, char_count_basis: "without_spaces", episode_char_target: 3500 } });
+
+    await userEvent.click(screen.getByTestId("char-count-preset-save"));
+    await userEvent.type(screen.getByTestId("char-count-preset-name"), "  내 공모전 ");
+    await userEvent.click(screen.getByRole("button", { name: "저장" }));
+
+    await waitFor(() => expect(mocks.settingsSet).toHaveBeenCalledTimes(1));
+    const stored = mocks.settingsSet.mock.calls[0][0].char_count_presets;
+    expect(stored).toEqual([
+      expect.objectContaining({ name: "내 공모전", char_count_basis: "without_spaces", episode_char_target: 3500 }),
+    ]);
+    await waitFor(() =>
+      expect((screen.getByTestId("char-count-preset-select") as HTMLSelectElement).value).toBe(`user:${stored[0].id}`),
+    );
+    expect(screen.queryByTestId("char-count-preset-name")).toBeNull();
+  });
+
+  it("deletes the saved preset the work matches", async () => {
+    mocks.settingsGet.mockResolvedValue({ language: "ko", char_count_presets: [saved] });
+    mocks.settingsSet.mockResolvedValue({ language: "ko", char_count_presets: [] });
+    renderContextPanel({ project: { ...webnovel, char_count_basis: "without_spaces", episode_char_target: 3500 } });
+
+    await userEvent.click(await screen.findByTestId("char-count-preset-delete"));
+
+    await waitFor(() => expect(mocks.settingsSet).toHaveBeenCalledWith({ char_count_presets: [] }));
+    await waitFor(() => expect(screen.queryByTestId("char-count-preset-delete")).toBeNull());
+    expect((screen.getByTestId("char-count-preset-select") as HTMLSelectElement).value).toBe("");
+  });
+
+  it("keeps the name field open and says so when saving a preset fails", async () => {
+    mocks.settingsSet.mockRejectedValue(new Error("disk full"));
+    renderContextPanel({ project: webnovel });
+
+    await userEvent.click(screen.getByTestId("char-count-preset-save"));
+    await userEvent.type(screen.getByTestId("char-count-preset-name"), "연재처");
+    await userEvent.click(screen.getByRole("button", { name: "저장" }));
+
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByTestId("char-count-preset-name")).toBeTruthy();
+  });
+
   it("switches the work's character count basis and hands the recounted work back", async () => {
     const recounted = { ...project, char_count_basis: "without_spaces" as const, word_count: 3 };
     mocks.projectsUpdate.mockResolvedValueOnce(recounted);
