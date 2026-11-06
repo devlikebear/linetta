@@ -1,10 +1,18 @@
-.PHONY: help dev site-dev site-build site-check test validate-mcp-bridge-targets test-go test-desktop test-tauri test-mobile-engine test-mas-engine audit audit-go audit-desktop audit-rust validate-actions-runtime validate-distribution build-engine build-mcp-bridge build-mobile-engine-ios build-mobile-engine-android mobile-ios-init mobile-android-init build-mobile-ios-sim smoke-mobile-ios-sim dev-mobile-ios build-mobile-android-debug build-mobile-android-release-smoke patch-mobile-android-signing build-desktop release-macos-local build-mas-local release-mas-local bump-version ci
+.PHONY: help dev clio-dev test-clio site-dev site-build site-check test validate-mcp-bridge-targets test-go test-desktop test-tauri test-mobile-engine test-mas-engine audit audit-go audit-desktop audit-rust validate-actions-runtime validate-distribution build-engine build-mcp-bridge build-mobile-engine-ios build-mobile-engine-android mobile-ios-init mobile-android-init build-mobile-ios-sim smoke-mobile-ios-sim dev-mobile-ios build-mobile-android-debug build-mobile-android-release-smoke patch-mobile-android-signing build-desktop release-macos-local build-mas-local release-mas-local bump-version ci
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9_-]+:.*##/ {printf "%-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 dev: ## Start the desktop app in dev mode
 	bash scripts/dev.sh
+
+clio-dev: ## Start the Clio app in dev mode
+	bash scripts/clio-dev.sh
+
+test-clio: ## Run Clio verification (not part of test/ci yet; CI joins in Phase 4)
+	cd engine && CGO_ENABLED=0 go test ./internal/clio/... ./cmd/clio-voice/
+	cd apps/clio && pnpm install --frozen-lockfile && pnpm lint && pnpm test && pnpm build
+	export PATH="$$HOME/.cargo/bin:$$PATH"; cd apps/clio/src-tauri && cargo check && cargo test
 
 site-dev: ## Start the marketing site in dev mode
 	cd apps/site && pnpm install && pnpm dev

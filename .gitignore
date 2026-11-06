@@ -16,12 +16,19 @@ apps/desktop/.vite/
 apps/desktop/*.tsbuildinfo
 apps/desktop/vite.config.d.ts
 apps/desktop/vite.config.js
+apps/clio/dist/
+apps/clio/.vite/
+apps/clio/*.tsbuildinfo
+apps/clio/vite.config.d.ts
+apps/clio/vite.config.js
 apps/site/build/
 apps/site/.svelte-kit/
 
 # Rust / Tauri
 apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/gen/
+apps/clio/src-tauri/target/
+apps/clio/src-tauri/gen/
 # Built by scripts/build-mcp-bridge.sh; the directory's README.md is committed.
 apps/desktop/src-tauri/resources/linetta-mcp
 apps/desktop/src-tauri/resources/linetta-mcp.exe
