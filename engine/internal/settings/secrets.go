@@ -48,7 +48,7 @@ func defaultSecretStore() SecretStore {
 	if testing.Testing() {
 		return unsupportedSecretStore{}
 	}
-	return platformSecretStore()
+	return PlatformSecretStore(linettaSecretService)
 }
 
 // NewMemorySecretStore returns an in-memory secret backend for tests.
@@ -90,4 +90,15 @@ func (m *memorySecretStore) Delete(name string) error {
 	defer m.mu.Unlock()
 	delete(m.data, name)
 	return nil
+}
+
+// linettaSecretService is Linetta's OS credential-store service name. Existing
+// users' saved keys live under it, so it must never change.
+const linettaSecretService = "devlikebear.linetta"
+
+// credentialTarget builds the Windows Credential Manager target for a secret.
+// It is pure so the Linetta value can be pinned by a cross-platform test:
+// "devlikebear.linetta:<name>" is what existing installs already stored.
+func credentialTarget(service, name string) string {
+	return service + ":" + name
 }

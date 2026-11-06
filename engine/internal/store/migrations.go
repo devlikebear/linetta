@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/fs"
-	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -18,6 +17,16 @@ import (
 // the highest version already recorded in schema_migrations. Idempotent: a
 // second call is a no-op.
 func ApplyMigrations(ctx context.Context, db *sql.DB) error {
+	fsys, err := fs.Sub(MigrationsFS, "migrations")
+	if err != nil {
+		return fmt.Errorf("embedded migrations: %w", err)
+	}
+	return ApplyMigrationsFS(ctx, db, fsys)
+}
+
+// ApplyMigrationsFS is ApplyMigrations over an injected chain. fsys holds the
+// `NNNN_name.sql` files at its root.
+func ApplyMigrationsFS(ctx context.Context, db *sql.DB, fsys fs.FS) error {
 	if err := ensureMigrationTable(ctx, db); err != nil {
 		return err
 	}
@@ -26,7 +35,7 @@ func ApplyMigrations(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 
-	entries, err := fs.ReadDir(MigrationsFS, "migrations")
+	entries, err := fs.ReadDir(fsys, ".")
 	if err != nil {
 		return fmt.Errorf("read embedded migrations: %w", err)
 	}
@@ -40,7 +49,7 @@ func ApplyMigrations(ctx context.Context, db *sql.DB) error {
 		if err != nil {
 			return err
 		}
-		body, err := fs.ReadFile(MigrationsFS, path.Join("migrations", e.Name()))
+		body, err := fs.ReadFile(fsys, e.Name())
 		if err != nil {
 			return fmt.Errorf("read %s: %w", e.Name(), err)
 		}
@@ -65,7 +74,17 @@ func ApplyMigrations(ctx context.Context, db *sql.DB) error {
 }
 
 func migrationPending(ctx context.Context, db *sql.DB) (bool, int, error) {
-	entries, err := fs.ReadDir(MigrationsFS, "migrations")
+	fsys, err := fs.Sub(MigrationsFS, "migrations")
+	if err != nil {
+		return false, 0, err
+	}
+	return migrationPendingFS(ctx, db, fsys)
+}
+
+// migrationPendingFS reports whether fsys has unapplied migrations and returns
+// the latest version in fsys (the pre-migration backup's target version).
+func migrationPendingFS(ctx context.Context, db *sql.DB, fsys fs.FS) (bool, int, error) {
+	entries, err := fs.ReadDir(fsys, ".")
 	if err != nil {
 		return false, 0, fmt.Errorf("read embedded migrations: %w", err)
 	}

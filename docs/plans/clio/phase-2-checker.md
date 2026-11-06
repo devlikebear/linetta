@@ -88,7 +88,7 @@ _상태: 대기_
   - 내용: 테이블 `drafts(id, body, platform, kind, content_version INTEGER NOT NULL DEFAULT 1, published_at INTEGER NOT NULL DEFAULT 0, created_at, updated_at)`. `Update`는 `content_version`이 맞을 때만 쓰고 1 올린다. 틀리면 `ErrConflict`(핸들러에서 `CodeContentConflict`)
 
 - [ ] **T2.C.2** — RPC
-  - 파일: `engine/internal/rpc/handlers/clio_drafts.go`, `clio_check.go`(+ `_test.go`), `engine/internal/clio/app/app.go`
+  - 파일: `engine/internal/clio/handlers/drafts.go`, `check.go`(+ 테스트), `engine/internal/clio/app/app.go`
   - 내용: `drafts.create`, `drafts.get`, `drafts.list`, `drafts.update`, `drafts.delete`, `check.run`(`{body, platform, kind}` → `{findings, context_used}`). 프로필과 Corpus는 앱 안에 캐시하고, `posts.import` 뒤에 무효화한다. Tauri `RENDERER_ENGINE_METHODS`에 정렬해서 넣는다
 
 - [ ] **T2.C.3** — 편집기 화면

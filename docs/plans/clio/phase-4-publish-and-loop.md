@@ -39,7 +39,7 @@ _상태: 대기_
   - 블로그 맥락은 복사만 둔다
 
 - [ ] **T4.A.2** — 게시 표시
-  - 파일: `engine/internal/clio/draft/publish.go`, `publish_test.go`, `engine/internal/rpc/handlers/clio_drafts.go`
+  - 파일: `engine/internal/clio/draft/publish.go`, `publish_test.go`, `engine/internal/clio/handlers/drafts.go`
   - 내용: `drafts.mark_published`(`{draft_id, content_version}`)는 한 트랜잭션에서 두 가지를 한다. `drafts.published_at`을 기록하고, 같은 본문으로 `posts`에 `source='written'`, 초안의 platform과 kind로 넣는다. 같은 본문이 이미 있으면(다시 가져온 경우) 새로 넣지 않는다. `drafts.unmark_published`는 written 글을 지운다. 단일 연결이니 트랜잭션 안에서 다른 쿼리를 열지 않는다
   - 테스트: 표시 → 글 수 +1, 같은 본문 두 번 → +1, 표시 해제 → 원래대로, `content_version` 충돌
 
@@ -50,7 +50,7 @@ _상태: 대기_
   - 내용: 프로필과 Corpus 캐시를 `posts`의 변경 카운터(가져오기, 게시 표시, 해제)로 무효화한다. `voice.profile` 응답에 `n`, `written_n`, `computed_at`을 더한다. 내 말투 화면에 "가져온 글 150 · Clio로 쓴 글 3"을 표시한다
 
 - [ ] **T4.B.2** — 사용 통계
-  - 파일: `engine/internal/clio/migrations/000N_publish_findings.sql`(N은 전제 조건의 다음 번호), `engine/internal/clio/stats/stats.go`, `stats_test.go`, `engine/internal/rpc/handlers/clio_stats.go`, `apps/clio/src/routes/Stats.tsx`
+  - 파일: `engine/internal/clio/migrations/000N_publish_findings.sql`(N은 전제 조건의 다음 번호), `engine/internal/clio/stats/stats.go`, `stats_test.go`, `engine/internal/clio/handlers/stats.go`, `apps/clio/src/routes/Stats.tsx`
   - 내용: `stats.summary`(`{since}`)는 다음을 집계한다
     - 만든 초안 수와 게시 표시 수
     - 규칙별 지적 수. `check.run` 결과를 저장하지 않으니, 게시 표시 순간의 지적을 `publish_findings(draft_id, rule, severity)`에 남긴다

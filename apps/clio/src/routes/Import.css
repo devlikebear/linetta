@@ -1,0 +1,12 @@
+.import { max-width: 640px; }
+.import .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 20px; }
+.import .field label { font-weight: 600; font-size: 13px; }
+.import .note { color: var(--c-muted); font-size: 12px; }
+.import .preview { margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--c-line); }
+.import .total { font-size: 18px; font-weight: 600; margin: 0 0 12px; }
+.import .counts { list-style: none; padding: 0; margin: 0 0 16px; }
+.import .counts li { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--c-line); }
+.import .samples { list-style: none; padding: 0; margin: 0 0 24px; display: flex; flex-direction: column; gap: 8px; }
+.import .samples li { background: var(--c-surface); border: 1px solid var(--c-line); border-radius: 8px; padding: 10px 12px; white-space: pre-wrap; }
+.clamp2 { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.import .result { margin-top: 24px; padding: 12px 14px; border-radius: 8px; background: var(--c-surface); border: 1px solid var(--c-line); }

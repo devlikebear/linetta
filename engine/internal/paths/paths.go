@@ -20,8 +20,18 @@ const AppIdentifier = "com.devlikebear.linetta"
 // override that points outside the container will fail at write time — it is a
 // power-user escape hatch only meaningful for the non-sandboxed build.
 func Home() (string, error) {
-	if v := os.Getenv("LINETTA_HOME"); v != "" {
-		return v, nil
+	return HomeFor(AppIdentifier, "LINETTA_HOME")
+}
+
+// HomeFor returns the data directory for the app identified by appID. If
+// envVar is non-empty and set in the environment, its value wins; an empty
+// envVar means there is no environment override. Otherwise the OS default
+// location joined with appID is used (see Home for platform details).
+func HomeFor(appID, envVar string) (string, error) {
+	if envVar != "" {
+		if v := os.Getenv(envVar); v != "" {
+			return v, nil
+		}
 	}
 	switch runtime.GOOS {
 	case "darwin":
@@ -29,19 +39,19 @@ func Home() (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return filepath.Join(home, "Library", "Application Support", AppIdentifier), nil
+		return filepath.Join(home, "Library", "Application Support", appID), nil
 	case "linux":
 		if xdg := os.Getenv("XDG_DATA_HOME"); xdg != "" {
-			return filepath.Join(xdg, AppIdentifier), nil
+			return filepath.Join(xdg, appID), nil
 		}
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return "", err
 		}
-		return filepath.Join(home, ".local", "share", AppIdentifier), nil
+		return filepath.Join(home, ".local", "share", appID), nil
 	case "windows":
 		if appdata := os.Getenv("APPDATA"); appdata != "" {
-			return filepath.Join(appdata, AppIdentifier), nil
+			return filepath.Join(appdata, appID), nil
 		}
 		return "", fmt.Errorf("APPDATA unset on Windows")
 	default:

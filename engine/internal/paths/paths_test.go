@@ -65,3 +65,36 @@ func TestEnsureHome_createsDir(t *testing.T) {
 		t.Fatalf("%q is not a directory", tmp)
 	}
 }
+
+func TestHomeFor(t *testing.T) {
+	cases := []struct {
+		name, appID, envVar, envVal string
+		wantEnv                     bool
+	}{
+		{"env override wins", "com.example.clio", "CLIO_HOME", "/custom/clio", true},
+		{"env unset falls back to OS default", "com.example.clio", "CLIO_HOME", "", false},
+		{"empty envVar means no override", "com.example.clio", "", "", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if c.envVar != "" {
+				t.Setenv(c.envVar, c.envVal)
+			}
+			// A stray LINETTA_HOME must not leak into other apps.
+			t.Setenv("LINETTA_HOME", "/linetta/should/not/apply")
+			got, err := HomeFor(c.appID, c.envVar)
+			if err != nil {
+				t.Fatalf("HomeFor: %v", err)
+			}
+			if c.wantEnv {
+				if got != c.envVal {
+					t.Errorf("got %q, want %q", got, c.envVal)
+				}
+				return
+			}
+			if filepath.Base(got) != c.appID {
+				t.Errorf("got %q, want base %q", got, c.appID)
+			}
+		})
+	}
+}

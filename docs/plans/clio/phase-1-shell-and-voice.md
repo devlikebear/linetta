@@ -91,7 +91,7 @@ _상태: 대기_
   - 내용: `clio-voice <file> [--kind post|reply]`가 `voiceimport.Parse` → `voice.Build` → JSON을 stdout에 쓴다. `engine/cmd/style-measure`와 같은 구조. Checkpoint에서 Python 결과와 맞춰 보는 데 쓴다
 
 - [ ] **T1.B.5** — Clio 엔진 앱과 FFI
-  - 파일: `engine/internal/clio/app/app.go`, `app_test.go`, `engine/internal/rpc/handlers/clio_posts.go`, `clio_voice.go`(+ `_test.go`), `engine/cmd/clio-ffi/ffi.go`
+  - 파일: `engine/internal/clio/app/app.go`, `app_test.go`, `engine/internal/clio/handlers/posts.go`, `voice.go`, `ping.go`(+ 테스트), `engine/cmd/clio-ffi/ffi.go`
   - 내용:
     - `app.Open(ctx, Options{Home, Secrets})`: 홈을 만들고, `store.OpenWith(<home>/clio.db, cliomigrations.FS)`로 연 뒤 `rpc.NewServer()`에 핸들러를 등록한다. `engineapp.Open`의 구조를 따르되 리네타 저장소는 하나도 만들지 않는다
     - RPC: `posts.import_preview`(`{file_name, content, default_kind, own_user_id}` → 개수, 맥락별 개수, 버린 이유, 앞의 5편), `posts.import`(같은 입력 → inserted, skipped), `posts.list`, `posts.counts`, `voice.profile`(`{platform, kind}` → `ContextProfile`). 엔진은 디스크를 읽지 않는다. 파일 내용은 프런트엔드가 넘긴다(`imports.markdown`과 같은 원칙)
@@ -111,7 +111,7 @@ _상태: 대기_
 - [ ] **T1.C.3** — Tauri 크레이트
   - 파일: `apps/clio/src-tauri/Cargo.toml`, `build.rs`, `tauri.conf.json`, `capabilities/default.json`, `src/main.rs`, `src/lib.rs`, `src/ffi.rs`
   - 내용:
-    - `Cargo.toml`: 크레이트 `clio-desktop`, lib `clio_desktop_lib`, Tauri 2.12, 플러그인은 dialog, opener만
+    - `Cargo.toml`: 크레이트 `clio-desktop`, lib `clio_desktop_lib`, Tauri 2.12, 플러그인은 opener만(파일은 웹뷰의 파일 입력으로 읽는다)
     - `build.rs`: `apps/desktop/src-tauri/build.rs`의 `build_go_engine()`을 줄여서 `./cmd/clio-ffi`를 c-archive(`libclio_engine_ffi.a`)로 빌드한다. macOS와 Linux만
     - `ffi.rs`: 데스크톱 `ffi.rs`의 정적 링크 경로만 복사하고 심볼 이름을 바꾼다. `libloading`(Windows) 경로는 뺀다
     - `lib.rs`: 명령은 `engine_call`, `engine_status`, `open_external_url`. `RENDERER_ENGINE_METHODS`는 정렬된 상수 배열로 두고, 정렬 테스트를 복사한다. `EXTERNAL_URL_HOSTS`는 `x.com`, `www.threads.com`
@@ -119,7 +119,7 @@ _상태: 대기_
 
 - [ ] **T1.C.4** — 가져오기 화면
   - 파일: `apps/clio/src/routes/Import.tsx`, `Import.css`, `Import.test.tsx`
-  - 내용: 파일 선택(`tauri-plugin-dialog` + 프런트엔드에서 읽기) → 플랫폼과 기본 종류 선택 → X 사용자 id(선택, 아카이브의 내 스레드 판별용) → `posts.import_preview` 결과(전체, 맥락별, 버린 이유, 예시 5편) → 가져오기 → 결과 토스트
+  - 내용: 파일 선택(`<input type="file">` + `File.text()`, 플러그인 없음) → 플랫폼과 기본 종류 선택 → X 사용자 id(선택, 아카이브의 내 스레드 판별용) → `posts.import_preview` 결과(전체, 맥락별, 버린 이유, 예시 5편) → 가져오기 → 결과 토스트
 
 - [ ] **T1.C.5** — 내 말투 화면
   - 파일: `apps/clio/src/routes/Voice.tsx`, `Voice.css`, `Voice.test.tsx`
@@ -160,3 +160,11 @@ _상태: 대기_
 
 **이 체크포인트를 통과하면 사용자에게 확인 요청 후 다음으로 진행.**
 만약 실패하면: 실패 항목 보고 → 사용자와 함께 원인 파악 → 수정 → 재검증.
+
+## 구현 메모 (2026-11-06)
+
+- Clio 핸들러는 `engine/internal/rpc/handlers`가 아니라 `engine/internal/clio/handlers`에 둔다. 공용 `rpc/handlers`를 쓰면 Clio 엔진이 리네타 도메인 패키지 40여 개와 tars를 끌어온다. `scripts/validate-story-core-deps.sh`가 `clio/app`과 `cmd/clio-ffi`에 `rpc/handlers`와 tars가 없는지 검사한다
+- 엔진 준비 확인용 `ping`을 Clio에도 둔다(`engine_ping`)
+- 프로필 백분위는 nearest-rank(관측값 중 하나)다. `MixedShare`는 한 글 안에 존댓말과 반말 끝맺음이 모두 있는 글의 비율이다
+- 실측(`x-posts.json`): X 글 112편 존댓말 0.08·섞임 0.07, X 답글 38편 존댓말 0.33·섞임 0.18
+- 아이콘은 리네타 것을 임시로 쓴다

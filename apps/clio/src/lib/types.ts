@@ -1,0 +1,112 @@
+// Wire types for Clio's RPC methods. Each mirrors a Go struct 1:1:
+//   post.*        engine/internal/clio/post/post.go
+//   voice.*       engine/internal/clio/voice/profile.go
+//   import/preview engine/internal/clio/handlers/posts.go
+
+export type Platform = "x" | "threads" | "blog";
+export type PostKind = "post" | "reply";
+
+/** post.NewPost: a post not yet stored. */
+export interface NewPost {
+  body: string;
+  platform: Platform;
+  kind: PostKind;
+  source: "import" | "written";
+  external_id: string;
+  posted_at: number;
+}
+
+/** post.Post: a stored post. */
+export interface Post extends NewPost {
+  id: string;
+  created_at: number;
+}
+
+/** post.ContextCount */
+export interface ContextCount {
+  platform: Platform;
+  kind: PostKind;
+  count: number;
+}
+
+/** handlers.clioImportParams (posts.import_preview and posts.import). */
+export interface ImportParams {
+  file_name: string;
+  content: string;
+  default_kind: PostKind;
+  platform: Platform;
+  own_user_id: string;
+}
+
+/** posts.import_preview result. `skipped` is keyed by reason: retweet, short, duplicate. */
+export interface ImportPreview {
+  total: number;
+  contexts: ContextCount[];
+  skipped: Record<string, number>;
+  preview: NewPost[];
+}
+
+/** posts.import result. */
+export interface ImportResult {
+  inserted: number;
+  skipped: number;
+}
+
+/** posts.list params. Empty platform/kind match any; limit 0 means the default (50), max 500. */
+export interface ListPostsParams {
+  platform?: Platform | "";
+  kind?: PostKind | "";
+  limit?: number;
+  offset?: number;
+}
+
+/** voice.profile params. platform and kind accept "*" for all. */
+export interface VoiceProfileParams {
+  platform: Platform | "*";
+  kind: PostKind | "*";
+}
+
+/** voice.Stat */
+export interface VoiceStat {
+  mean: number;
+  p10: number;
+  p50: number;
+  p90: number;
+}
+
+/** voice.ContextProfile. `key` is the context asked for, `fallback` the one used. */
+export interface ContextProfile {
+  key: string;
+  fallback: string;
+  n: number;
+  features: Record<string, VoiceStat>;
+  endings: Record<string, number>;
+  top: { ending: string; share: number }[];
+  polite_share: number;
+  mixed_share: number;
+  /** Ids of up to five example posts (resolve bodies with posts.list). */
+  examples: string[];
+}
+
+/** voice.FeatureNames, in engine order. */
+export const FEATURE_NAMES = [
+  "length",
+  "lines",
+  "segment_length",
+  "punctuated",
+  "polite",
+  "emoji",
+  "laugh",
+  "cry",
+  "hashtag",
+  "ellipsis",
+  "exclaim",
+  "ai_tells",
+] as const;
+export type FeatureName = (typeof FEATURE_NAMES)[number];
+
+/** engine_status Tauri command. */
+export interface EngineStatus {
+  ok: boolean;
+  error: string | null;
+}
