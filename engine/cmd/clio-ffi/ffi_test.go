@@ -16,21 +16,21 @@ import (
 	"testing"
 )
 
-func TestHandleRequestCounts(t *testing.T) {
+func TestHandleRequestPing(t *testing.T) {
 	if err := startEngine(t.TempDir()); err != nil {
 		t.Fatalf("startEngine: %v", err)
 	}
 	defer stopEngine()
 
-	resp := handleRequest([]byte(`{"jsonrpc":"2.0","id":1,"method":"posts.counts"}`))
+	resp := handleRequest([]byte(`{"jsonrpc":"2.0","id":1,"method":"ping"}`))
 	var env struct {
 		Result json.RawMessage `json:"result"`
 	}
 	if err := json.Unmarshal(resp, &env); err != nil {
 		t.Fatalf("unmarshal %q: %v", resp, err)
 	}
-	if string(env.Result) != `[]` {
-		t.Fatalf("result = %s, want []", env.Result)
+	if string(env.Result) != `"pong"` {
+		t.Fatalf("result = %s, want \"pong\"", env.Result)
 	}
 }
 

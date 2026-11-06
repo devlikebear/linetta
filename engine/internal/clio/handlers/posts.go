@@ -1,3 +1,5 @@
+// Package handlers holds Clio's RPC methods. It is separate from the Linetta
+// handlers so the Clio engine links none of the story domain packages.
 package handlers
 
 import (
@@ -32,7 +34,7 @@ type clioImportParams struct {
 	OwnUserID   string `json:"own_user_id"`
 }
 
-func parseClioImport(params json.RawMessage) (voiceimport.Result, error) {
+func parseImport(params json.RawMessage) (voiceimport.Result, error) {
 	var in clioImportParams
 	if err := json.Unmarshal(params, &in); err != nil {
 		return voiceimport.Result{}, clioInvalid("invalid params")
@@ -59,11 +61,11 @@ type clioPreviewResult struct {
 	Preview  []post.NewPost      `json:"preview"`
 }
 
-// ClioImportPreview returns a handler for posts.import_preview: what an import
+// ImportPreview returns a handler for posts.import_preview: what an import
 // would keep, without storing anything.
-func ClioImportPreview() rpc.Handler {
+func ImportPreview() rpc.Handler {
 	return func(_ context.Context, params json.RawMessage) (json.RawMessage, error) {
-		res, err := parseClioImport(params)
+		res, err := parseImport(params)
 		if err != nil {
 			return nil, err
 		}
@@ -87,9 +89,9 @@ func ClioImportPreview() rpc.Handler {
 }
 
 // ClioImport returns a handler for posts.import.
-func ClioImport(repo *post.Repo) rpc.Handler {
+func Import(repo *post.Repo) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
-		res, err := parseClioImport(params)
+		res, err := parseImport(params)
 		if err != nil {
 			return nil, err
 		}
@@ -104,8 +106,8 @@ func ClioImport(repo *post.Repo) rpc.Handler {
 	}
 }
 
-// ClioListPosts returns a handler for posts.list.
-func ClioListPosts(repo *post.Repo) rpc.Handler {
+// ListPosts returns a handler for posts.list.
+func ListPosts(repo *post.Repo) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var in struct {
 			Platform string `json:"platform"`
@@ -135,8 +137,8 @@ func ClioListPosts(repo *post.Repo) rpc.Handler {
 	}
 }
 
-// ClioCountPosts returns a handler for posts.counts.
-func ClioCountPosts(repo *post.Repo) rpc.Handler {
+// CountPosts returns a handler for posts.counts.
+func CountPosts(repo *post.Repo) rpc.Handler {
 	return func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
 		counts, err := repo.Counts(ctx)
 		if err != nil {

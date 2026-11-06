@@ -10,11 +10,11 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/devlikebear/linetta/engine/internal/clio/handlers"
 	cliomigrations "github.com/devlikebear/linetta/engine/internal/clio/migrations"
 	"github.com/devlikebear/linetta/engine/internal/clio/post"
 	"github.com/devlikebear/linetta/engine/internal/paths"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
-	"github.com/devlikebear/linetta/engine/internal/rpc/handlers"
 	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/linetta/engine/internal/store"
 )
@@ -59,11 +59,12 @@ func Open(ctx context.Context, opts Options) (*App, error) {
 	}
 	a := &App{server: rpc.NewServer(), cancel: cancel, st: st}
 	posts := post.NewRepo(st)
-	a.server.Handle("posts.import_preview", handlers.ClioImportPreview())
-	a.server.Handle("posts.import", handlers.ClioImport(posts))
-	a.server.Handle("posts.list", handlers.ClioListPosts(posts))
-	a.server.Handle("posts.counts", handlers.ClioCountPosts(posts))
-	a.server.Handle("voice.profile", handlers.ClioVoiceProfile(posts))
+	a.server.Handle("ping", handlers.Ping)
+	a.server.Handle("posts.import_preview", handlers.ImportPreview())
+	a.server.Handle("posts.import", handlers.Import(posts))
+	a.server.Handle("posts.list", handlers.ListPosts(posts))
+	a.server.Handle("posts.counts", handlers.CountPosts(posts))
+	a.server.Handle("voice.profile", handlers.VoiceProfile(posts))
 	return a, nil
 }
 

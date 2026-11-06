@@ -59,4 +59,13 @@ if [ -n "$importers" ]; then
   exit 1
 fi
 
-echo "engine deps OK: pkg/llm only in provider/agent; no agentloop/session; story core clean"
+# Clio is a sibling app that reuses only the engine's plumbing. Its app and
+# FFI entry point must not link the Linetta RPC handlers (and with them the
+# story domain) nor any tars package. Captured first, like the checks above.
+clio_deps=$(go list -deps ./internal/clio/app ./cmd/clio-ffi)
+if grep -E 'internal/rpc/handlers|github.com/devlikebear/tars/' <<<"$clio_deps"; then
+  echo "error: internal/clio/app and cmd/clio-ffi must not link internal/rpc/handlers or tars" >&2
+  exit 1
+fi
+
+echo "engine deps OK: pkg/llm only in provider/agent; no agentloop/session; story core clean; clio app free of rpc/handlers and tars"

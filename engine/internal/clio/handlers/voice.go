@@ -9,11 +9,11 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 )
 
-// ClioVoiceProfile returns a handler for voice.profile. platform and kind pick
+// VoiceProfile returns a handler for voice.profile. platform and kind pick
 // the context ("*" for all); the reply says which context it actually used in
 // "fallback" when the one asked for had too few posts. The profile is computed
 // on demand from every stored post.
-func ClioVoiceProfile(repo *post.Repo) rpc.Handler {
+func VoiceProfile(repo *post.Repo) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var in struct {
 			Platform string `json:"platform"`
