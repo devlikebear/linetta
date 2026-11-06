@@ -173,6 +173,9 @@ type Config struct {
 	AgentImpactReviewEnabled bool `json:"agent_impact_review_enabled"`
 	// StyleAvoidPhrases are checked in every work, on top of a work's own list.
 	StyleAvoidPhrases []string `json:"style_avoid_phrases,omitempty"`
+	// CharCountPresets are the writer's own length rules (#239), applied to a
+	// work from its panel. The built-in presets are the app's, not stored.
+	CharCountPresets []CharCountPreset `json:"char_count_presets,omitempty"`
 	// AgentMaxToolCalls is how many tool calls the built-in agent may execute
 	// in one turn before it is stopped and asked to say how far it got. A
 	// batch job — "summarise every scene" — costs a read and a write per
@@ -381,6 +384,7 @@ type Patch struct {
 	AgentSettlementEnabled    *bool                    `json:"agent_settlement_enabled,omitempty"`
 	AgentImpactReviewEnabled  *bool                    `json:"agent_impact_review_enabled,omitempty"`
 	StyleAvoidPhrases         *[]string                `json:"style_avoid_phrases,omitempty"`
+	CharCountPresets          *[]CharCountPreset       `json:"char_count_presets,omitempty"`
 	AgentMaxToolCalls         *int                     `json:"agent_max_tool_calls,omitempty"`
 	AgentHistoryBudget        *int                     `json:"agent_history_budget,omitempty"`
 	VisualWriteToolsDisabled  *bool                    `json:"visual_write_tools_disabled,omitempty"`
@@ -599,6 +603,7 @@ func (s *Store) load() error {
 	if disk.PublishAccount != nil && disk.PublishAccount.Handle != "" {
 		s.cfg.PublishAccount = disk.PublishAccount
 	}
+	s.cfg.CharCountPresets = loadCharCountPresets(disk.CharCountPresets)
 	s.cfg = normalizeMCPPreferences(s.cfg)
 	// Migration cannot fail the load any more (#113). A pre-1.0 plaintext key
 	// on a platform with no secret store used to return an error from here,
@@ -991,6 +996,13 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	if p.StyleAvoidPhrases != nil {
 		next.StyleAvoidPhrases = *p.StyleAvoidPhrases
 	}
+	if p.CharCountPresets != nil {
+		presets, err := validateCharCountPresets(*p.CharCountPresets)
+		if err != nil {
+			return Config{}, err
+		}
+		next.CharCountPresets = presets
+	}
 	if p.AgentSelfReviewEnabled != nil {
 		next.AgentSelfReviewEnabled = *p.AgentSelfReviewEnabled
 	}
@@ -1171,6 +1183,7 @@ func (s *Store) persistWith(next Config, legacy legacyPlaintextKeys) error {
 		SkillToolsEnabled:         next.SkillToolsEnabled,
 		ReviewToolsEnabled:        next.ReviewToolsEnabled,
 		PublishAccount:            next.PublishAccount,
+		CharCountPresets:          next.CharCountPresets,
 		ImageProvider:             next.ImageProvider,
 		ImageProviders:            next.ImageProviders,
 	}

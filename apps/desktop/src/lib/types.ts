@@ -885,6 +885,15 @@ export type ThemePreference = "system" | "light" | "dark";
 export type PalettePreference = "hanji" | "paper" | "bone" | "press";
 export type PlatformProfileId = "plain" | "munpia" | "series" | "joara";
 
+/** A saved length rule applied to a work in one step: the basis a site or
+ *  contest counts in and one episode's length under it. */
+export interface CharCountPreset {
+  id: string;
+  name: string;
+  char_count_basis: CharCountBasis;
+  episode_char_target: number;
+}
+
 /** One switchable tool group's share of the budget: how many tools it adds
  *  and how many bytes of tool schema they cost in every request. Reported
  *  whether or not the group is currently on, because the writer deciding
@@ -958,6 +967,8 @@ export interface Settings {
   agent_impact_review_enabled?: boolean;
   /** Phrases to keep out of every work. */
   style_avoid_phrases?: string[];
+  /** The writer's own length presets (#239); the built-in ones live in the app. */
+  char_count_presets?: CharCountPreset[];
   /** How many tool calls one turn of the built-in agent may execute before
    *  it is stopped and asked to say how far it got. Missing (an older
    *  engine) means the default, 48. */
@@ -1034,6 +1045,8 @@ export interface SettingsPatch {
   agent_impact_review_enabled?: boolean;
   /** Phrases to keep out of every work. */
   style_avoid_phrases?: string[];
+  /** The writer's own length presets (#239); the built-in ones live in the app. */
+  char_count_presets?: CharCountPreset[];
   agent_max_tool_calls?: number;
   agent_history_budget?: number;
   visual_write_tools_disabled?: boolean;

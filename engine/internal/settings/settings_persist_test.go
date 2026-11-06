@@ -114,8 +114,11 @@ func validSeeds() map[string]any {
 		"AgentMaxToolCalls":  MinAgentMaxToolCalls + 1,
 		"AgentHistoryBudget": MinAgentHistoryBudget + 1,
 		"PublishAccount":     &PublishAccount{Handle: "writer"},
-		"ImageProvider":      ValidImageProviders()[0],
-		"ImageProviders":     map[string]ImageProviderConfig{ValidImageProviders()[0]: {Model: "img-test"}},
+		"CharCountPresets": []CharCountPreset{{
+			ID: "persist-check", Name: "persist-check", CharCountBasis: "without_spaces", EpisodeCharTarget: 4321,
+		}},
+		"ImageProvider":  ValidImageProviders()[0],
+		"ImageProviders": map[string]ImageProviderConfig{ValidImageProviders()[0]: {Model: "img-test"}},
 	}
 }
 

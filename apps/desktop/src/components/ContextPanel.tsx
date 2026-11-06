@@ -7,6 +7,7 @@ import { projects as projectsApi, continuity as continuityApi } from "../lib/rpc
 import { PlotPanel } from "./PlotPanel";
 import { User, MapPin, Box, Lightbulb, Book, Search } from "../lib/icons";
 import { InlineEditableText } from "./InlineEditableText";
+import { CharCountPresetPicker } from "./CharCountPresetPicker";
 import { localeForLanguage, useI18n } from "../lib/i18n";
 import type { EpisodeStatusCounts } from "../hooks/useFirstLeaf";
 import { StatsSection } from "./StatsSection";
@@ -298,6 +299,7 @@ export function ContextPanel({ project, node, charCount, todayChars = null, epis
               )}
             </div>
           </div>
+          {isWebnovelProject && <CharCountPresetPicker project={project} onProjectChanged={onProjectChanged} />}
           <label className="char-basis-row">
             <span>{t("workspace.charCountBasis")}</span>
             <select
