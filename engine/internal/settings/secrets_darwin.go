@@ -86,12 +86,13 @@ import (
 )
 
 const (
-	keychainService    = "devlikebear.linetta"
+	keychainService    = linettaSecretService
 	errSecItemNotFound = -25300
 )
 
-func platformSecretStore() SecretStore {
-	return keychainSecretStore{service: keychainService}
+// PlatformSecretStore returns the macOS Keychain store scoped to service.
+func PlatformSecretStore(service string) SecretStore {
+	return keychainSecretStore{service: service}
 }
 
 type keychainSecretStore struct {

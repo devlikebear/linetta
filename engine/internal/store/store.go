@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io/fs"
 	"path/filepath"
 	"time"
 
@@ -19,6 +20,19 @@ type Store struct {
 // Open opens or creates the database at path, applies pragmas, runs migrations,
 // and returns the Store. Closes any partial state on error.
 func Open(ctx context.Context, path string) (*Store, error) {
+	fsys, err := fs.Sub(MigrationsFS, "migrations")
+	if err != nil {
+		return nil, fmt.Errorf("embedded migrations: %w", err)
+	}
+	return OpenWith(ctx, path, fsys)
+}
+
+// OpenWith is Open with an injected migration chain. migrations holds the
+// `NNNN_name.sql` files directly at its root (no subdirectory); the highest
+// version found there is the target version used for the pre-migration backup.
+// A sibling app supplies its own chain so its database never gets Linetta's
+// tables.
+func OpenWith(ctx context.Context, path string, migrations fs.FS) (*Store, error) {
 	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, fmt.Errorf("sql.Open: %w", err)
@@ -42,7 +56,7 @@ func Open(ctx context.Context, path string) (*Store, error) {
 			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
 		}
 	}
-	if pending, targetVersion, err := migrationPending(ctx, db); err != nil {
+	if pending, targetVersion, err := migrationPendingFS(ctx, db, migrations); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("inspect migrations: %w", err)
 	} else if pending {
@@ -52,7 +66,7 @@ func Open(ctx context.Context, path string) (*Store, error) {
 			return nil, fmt.Errorf("pre-migration backup: %w", err)
 		}
 	}
-	if err := ApplyMigrations(ctx, db); err != nil {
+	if err := ApplyMigrationsFS(ctx, db, migrations); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}

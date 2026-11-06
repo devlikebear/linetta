@@ -27,8 +27,6 @@ var (
 )
 
 const (
-	credentialTargetPrefix = "devlikebear.linetta:"
-
 	credTypeGeneric         = 1 // CRED_TYPE_GENERIC
 	credPersistLocalMachine = 2 // CRED_PERSIST_LOCAL_MACHINE
 
@@ -37,8 +35,11 @@ const (
 	credMaxBlobSize = 5 * 512
 )
 
-func platformSecretStore() SecretStore {
-	return credentialSecretStore{prefix: credentialTargetPrefix}
+// PlatformSecretStore returns the Credential Manager store whose targets are
+// "<service>:<name>". For Linetta's service that is byte-identical to the
+// targets earlier releases wrote.
+func PlatformSecretStore(service string) SecretStore {
+	return credentialSecretStore{prefix: credentialTarget(service, "")}
 }
 
 type credentialSecretStore struct {

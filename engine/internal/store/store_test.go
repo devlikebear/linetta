@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
+	"testing/fstest"
 )
 
 func TestOpen_appliesMigrations_andEnablesFKs(t *testing.T) {
@@ -59,4 +60,36 @@ func TestOpen_idempotent(t *testing.T) {
 		t.Fatalf("Open #2: %v", err)
 	}
 	defer s2.Close()
+}
+
+func TestOpenWith_injectedChain(t *testing.T) {
+	ctx := context.Background()
+	fsys := fstest.MapFS{
+		"0001_a.sql": {Data: []byte(`CREATE TABLE a (id INTEGER PRIMARY KEY);`)},
+		"0002_b.sql": {Data: []byte(`CREATE TABLE b (id INTEGER PRIMARY KEY);`)},
+	}
+	s, err := OpenWith(ctx, filepath.Join(t.TempDir(), "x.db"), fsys)
+	if err != nil {
+		t.Fatalf("OpenWith: %v", err)
+	}
+	defer s.Close()
+
+	count := func(q string) int {
+		var n int
+		if err := s.DB().QueryRowContext(ctx, q).Scan(&n); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+		return n
+	}
+	for _, tbl := range []string{"a", "b"} {
+		if count(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='`+tbl+`'`) != 1 {
+			t.Errorf("table %s missing", tbl)
+		}
+	}
+	if n := count(`SELECT COUNT(*) FROM schema_migrations WHERE version IN (1,2)`); n != 2 {
+		t.Errorf("schema_migrations rows = %d, want 2", n)
+	}
+	if n := count(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='projects'`); n != 0 {
+		t.Errorf("linetta table projects must not exist")
+	}
 }
