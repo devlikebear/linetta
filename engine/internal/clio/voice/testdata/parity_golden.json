@@ -1,0 +1,269 @@
+{
+ "posts": [
+  "오늘 점심은 김치찌개 먹었다 ㅋㅋ 생각보다 맛있어서 놀람",
+  "퇴근길에 비가 와서 우산 없이 뛰었습니다.\n집에 오니 완전히 젖어 있었어요!",
+  "주말에 뭐 할지 아직도 못 정했다...\n영화를 볼까 산책을 갈까 고민 중",
+  "새 키보드가 도착했다 😀 타건감이 너무 좋아서 계속 치게 됨 #키보드 #일상",
+  "아 진짜 오늘 너무 힘들었어 ㅠㅠ 내일은 좀 쉬고 싶다",
+  "회의가 길어져서 점심을 놓쳤습니다. 다음부터는 미리 챙겨 먹어야겠어요. 감사합니다",
+  "그건 좀 아닌 것 같은데요? 저는 반대입니다!",
+  "이 글 읽어봤는데 결론적으로 다양한 인사이트를 얻을 수 있었다 ✨ 여러분도 해보세요",
+  "링크 공유함  이거 꽤 유용하다 한번 봐봐",
+  "커피 한 잔 마시면서 책 읽는 중\n조용해서 좋다\n아무 생각도 안 난다",
+  "Today I tried a new editor and honestly it feels great 그런데 설정이 좀 복잡하네",
+  "내일 발표 준비 아직 반도 못 했는데 괜찮겠지 싶다가도 불안해진다…",
+  "요즘 날씨가 너무 좋아서 자꾸 밖에 나가고 싶어져요. 근데 일이 많네요"
+ ],
+ "features": [
+  {
+   "length": 31,
+   "lines": 1,
+   "segment_length": 31,
+   "punctuated": 0.0,
+   "polite": 0.0,
+   "emoji": 0,
+   "laugh": 1,
+   "cry": 0,
+   "hashtag": 0,
+   "ellipsis": 0,
+   "exclaim": 0,
+   "ai_tells": 0
+  },
+  {
+   "length": 42,
+   "lines": 2,
+   "segment_length": 20.5,
+   "punctuated": 1.0,
+   "polite": 1.0,
+   "emoji": 0,
+   "laugh": 0,
+   "cry": 0,
+   "hashtag": 0,
+   "ellipsis": 0,
+   "exclaim": 1,
+   "ai_tells": 0
+  },
+  {
+   "length": 40,
+   "lines": 2,
+   "segment_length": 19.5,
+   "punctuated": 0.5,
+   "polite": 0.0,
+   "emoji": 0,
+   "laugh": 0,
+   "cry": 0,
+   "hashtag": 0,
+   "ellipsis": 1,
+   "exclaim": 0,
+   "ai_tells": 0
+  },
+  {
+   "length": 42,
+   "lines": 1,
+   "segment_length": 42,
+   "punctuated": 0.0,
+   "polite": 0.0,
+   "emoji": 1,
+   "laugh": 0,
+   "cry": 0,
+   "hashtag": 2,
+   "ellipsis": 0,
+   "exclaim": 0,
+   "ai_tells": 0
+  },
+  {
+   "length": 30,
+   "lines": 1,
+   "segment_length": 30,
+   "punctuated": 0.0,
+   "polite": 0.0,
+   "emoji": 0,
+   "laugh": 0,
+   "cry": 1,
+   "hashtag": 0,
+   "ellipsis": 0,
+   "exclaim": 0,
+   "ai_tells": 0
+  },
+  {
+   "length": 45,
+   "lines": 1,
+   "segment_length": 14.333333333333334,
+   "punctuated": 0.6666666666666666,
+   "polite": 1.0,
+   "emoji": 0,
+   "laugh": 0,
+   "cry": 0,
+   "hashtag": 0,
+   "ellipsis": 0,
+   "exclaim": 0,
+   "ai_tells": 0
+  },
+  {
+   "length": 25,
+   "lines": 1,
+   "segment_length": 12,
+   "punctuated": 1.0,
+   "polite": 1.0,
+   "emoji": 0,
+   "laugh": 0,
+   "cry": 0,
+   "hashtag": 0,
+   "ellipsis": 0,
+   "exclaim": 1,
+   "ai_tells": 0
+  },
+  {
+   "length": 46,
+   "lines": 1,
+   "segment_length": 46,
+   "punctuated": 0.0,
+   "polite": 1.0,
+   "emoji": 1,
+   "laugh": 0,
+   "cry": 0,
+   "hashtag": 0,
+   "ellipsis": 0,
+   "exclaim": 0,
+   "ai_tells": 6
+  },
+  {
+   "length": 23,
+   "lines": 1,
+   "segment_length": 23,
+   "punctuated": 0.0,
+   "polite": 0.0,
+   "emoji": 0,
+   "laugh": 0,
+   "cry": 0,
+   "hashtag": 0,
+   "ellipsis": 0,
+   "exclaim": 0,
+   "ai_tells": 0
+  },
+  {
+   "length": 38,
+   "lines": 3,
+   "segment_length": 12,
+   "punctuated": 0.0,
+   "polite": 0.0,
+   "emoji": 0,
+   "laugh": 0,
+   "cry": 0,
+   "hashtag": 0,
+   "ellipsis": 0,
+   "exclaim": 0,
+   "ai_tells": 0
+  },
+  {
+   "length": 69,
+   "lines": 1,
+   "segment_length": 69,
+   "punctuated": 0.0,
+   "polite": 0.0,
+   "emoji": 0,
+   "laugh": 0,
+   "cry": 0,
+   "hashtag": 0,
+   "ellipsis": 0,
+   "exclaim": 0,
+   "ai_tells": 0
+  },
+  {
+   "length": 37,
+   "lines": 1,
+   "segment_length": 37,
+   "punctuated": 1.0,
+   "polite": 0.0,
+   "emoji": 0,
+   "laugh": 0,
+   "cry": 0,
+   "hashtag": 0,
+   "ellipsis": 1,
+   "exclaim": 0,
+   "ai_tells": 0
+  },
+  {
+   "length": 39,
+   "lines": 1,
+   "segment_length": 19,
+   "punctuated": 0.5,
+   "polite": 1.0,
+   "emoji": 0,
+   "laugh": 0,
+   "cry": 0,
+   "hashtag": 0,
+   "ellipsis": 0,
+   "exclaim": 0,
+   "ai_tells": 0
+  }
+ ],
+ "endings": {
+  "놀람": 0.047619047619047616,
+  "니다": 0.19047619047619047,
+  "어요": 0.09523809523809523,
+  "했다": 0.047619047619047616,
+  "민중": 0.047619047619047616,
+  "일상": 0.047619047619047616,
+  "싶다": 0.047619047619047616,
+  "데요": 0.047619047619047616,
+  "세요": 0.047619047619047616,
+  "봐봐": 0.047619047619047616,
+  "는중": 0.047619047619047616,
+  "좋다": 0.047619047619047616,
+  "난다": 0.047619047619047616,
+  "하네": 0.047619047619047616,
+  "진다": 0.047619047619047616,
+  "져요": 0.047619047619047616,
+  "네요": 0.047619047619047616
+ },
+ "segments": [
+  [
+   "오늘 점심은 김치찌개 먹었다 ㅋㅋ 생각보다 맛있어서 놀람"
+  ],
+  [
+   "퇴근길에 비가 와서 우산 없이 뛰었습니다.",
+   "집에 오니 완전히 젖어 있었어요!"
+  ],
+  [
+   "주말에 뭐 할지 아직도 못 정했다...",
+   "영화를 볼까 산책을 갈까 고민 중"
+  ],
+  [
+   "새 키보드가 도착했다 😀 타건감이 너무 좋아서 계속 치게 됨 #키보드 #일상"
+  ],
+  [
+   "아 진짜 오늘 너무 힘들었어 ㅠㅠ 내일은 좀 쉬고 싶다"
+  ],
+  [
+   "회의가 길어져서 점심을 놓쳤습니다.",
+   "다음부터는 미리 챙겨 먹어야겠어요.",
+   "감사합니다"
+  ],
+  [
+   "그건 좀 아닌 것 같은데요?",
+   "저는 반대입니다!"
+  ],
+  [
+   "이 글 읽어봤는데 결론적으로 다양한 인사이트를 얻을 수 있었다 ✨ 여러분도 해보세요"
+  ],
+  [
+   "링크 공유함  이거 꽤 유용하다 한번 봐봐"
+  ],
+  [
+   "커피 한 잔 마시면서 책 읽는 중",
+   "조용해서 좋다",
+   "아무 생각도 안 난다"
+  ],
+  [
+   "Today I tried a new editor and honestly it feels great 그런데 설정이 좀 복잡하네"
+  ],
+  [
+   "내일 발표 준비 아직 반도 못 했는데 괜찮겠지 싶다가도 불안해진다…"
+  ],
+  [
+   "요즘 날씨가 너무 좋아서 자꾸 밖에 나가고 싶어져요.",
+   "근데 일이 많네요"
+  ]
+ ]
+}
