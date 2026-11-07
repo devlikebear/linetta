@@ -50,7 +50,12 @@ var (
 	ErrFactNoSubject   = errors.New("ledger: a fact with an attribute needs a subject")
 	ErrInvalidStrength = errors.New("ledger: strength must be hard or soft")
 	ErrSupersedePinned = errors.New("ledger: the writer pinned that entry; ask them to change it")
-	ErrNotPinnable     = errors.New("ledger: only an open decision, number, timeline or knowledge entry can be pinned")
+	ErrNotPinnable     = errors.New("ledger: only an open question, decision, number, timeline or knowledge entry can be pinned")
+	// The truth behind a secret and what a person's knowing is about.
+	ErrAnswerQuestionOnly = errors.New("ledger: only a question carries an answer")
+	ErrAboutKnowsOnly     = errors.New("ledger: only a knowledge entry with the attribute 앎 can be about a question")
+	ErrAboutNotQuestion   = errors.New("ledger: about must be the id of a question in this work")
+	ErrAboutNeedsValue    = errors.New("ledger: a knows fact about a question needs value_num 1 (knows) or 0 (does not know)")
 )
 
 // ValidKind reports whether v is one of the kinds above.
@@ -99,7 +104,13 @@ type Entry struct {
 	ValueNum *float64 `json:"value_num,omitempty"`
 	// Reach is how far a promise runs: ReachArc, ReachVolume or ReachWork. The
 	// brief stops showing one past its reach unless it has come due.
-	Reach     string `json:"reach,omitempty"`
+	Reach string `json:"reach,omitempty"`
+	// Answer is the truth behind a question, which only the writer knows until
+	// the scene that pays the question tells the reader.
+	Answer string `json:"answer,omitempty"`
+	// About is the question a knows fact is about. Its ValueNum then says which
+	// way: KnowsYes or KnowsNo.
+	About     string `json:"about,omitempty"`
 	CreatedAt int64  `json:"created_at"`
 	UpdatedAt int64  `json:"updated_at"`
 }
@@ -124,6 +135,12 @@ const AttributeDate = "작중 날짜"
 // the second does not replace the first.
 const AttributeKnows = "앎"
 
+// The two values a knows fact about a question can hold.
+const (
+	KnowsNo  = 0.0
+	KnowsYes = 1.0
+)
+
 // Patch is a partial update. Nil leaves a field as it is; an empty string clears
 // an optional field.
 type Patch struct {
@@ -139,6 +156,8 @@ type Patch struct {
 	ValidToNodeID *string `json:"valid_to_node_id,omitempty"`
 	Strength      *string `json:"strength,omitempty"`
 	Reach         *string `json:"reach,omitempty"`
+	Answer        *string `json:"answer,omitempty"`
+	About         *string `json:"about,omitempty"`
 	// ValueNum nil leaves the number as it is. There is no clearing one: a fact
 	// whose value stops being a number is a new fact.
 	ValueNum *float64 `json:"value_num,omitempty"`

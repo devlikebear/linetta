@@ -877,3 +877,55 @@ func TestMergeProjectRemapsWhatAFactPointsAt(t *testing.T) {
 		t.Fatalf("got %+v", got[0])
 	}
 }
+
+func TestMergeProjectKeepsAnswersAndWhatAKnowsFactIsAbout(t *testing.T) {
+	ctx := context.Background()
+	home := t.TempDir()
+	st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	nodes := node.NewRepo(st)
+	p, err := project.NewRepo(st).Create(ctx, 1, project.NewInput{Title: "Secrets", LengthTarget: "short", DefaultPOV: "first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := ledger.NewRepo(st, nodes)
+	q, err := repo.Add(ctx, 1, ledger.Entry{ProjectID: p.ID, Kind: ledger.KindQuestion, Body: "하람은 누구인가", Answer: "왕자다"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	yes := ledger.KnowsYes
+	if _, err := repo.Add(ctx, 2, ledger.Entry{ProjectID: p.ID, Kind: ledger.KindKnowledge, Subject: "서진", Attribute: ledger.AttributeKnows,
+		Body: "하람의 정체를 앎", About: q.ID, ValueNum: &yes}); err != nil {
+		t.Fatal(err)
+	}
+	backupPath := filepath.Join(home, "backup.db")
+	if _, err := st.DB().ExecContext(ctx, "VACUUM INTO ?", backupPath); err != nil {
+		t.Fatal(err)
+	}
+	live, err := store.Open(ctx, filepath.Join(home, "live.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer live.Close()
+	// A restore into another library and a copy beside the original take the
+	// same path: neither may leave the copy pointing at the original's question.
+	for name, target := range map[string]*store.Store{"restore": live, "duplicate": st} {
+		merged, err := MergeProject(ctx, target, backupPath, home, p.ID, " copy", time.Now())
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		got, err := ledger.NewRepo(target, node.NewRepo(target)).List(ctx, ledger.Filter{ProjectID: merged.ProjectID})
+		if err != nil || len(got) != 2 {
+			t.Fatalf("%s: entries = %+v, err %v", name, got, err)
+		}
+		if got[0].Answer != "왕자다" || got[0].ID == q.ID {
+			t.Fatalf("%s: question = %+v", name, got[0])
+		}
+		if got[1].About != got[0].ID || got[1].ValueNum == nil || *got[1].ValueNum != ledger.KnowsYes {
+			t.Fatalf("%s: knows = %+v, question %s", name, got[1], got[0].ID)
+		}
+	}
+}
