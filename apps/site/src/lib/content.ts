@@ -54,6 +54,7 @@ export type Translation = {
 
   nav: {
     workspace: string;
+    longform: string;
     assist: string;
     illustrations: string;
     publish: string;
@@ -87,6 +88,7 @@ export type Translation = {
   };
 
   assist: FeatureSection;
+  longform: FeatureSection;
   illustrations: FeatureSection;
   publish: FeatureSection;
 
@@ -176,10 +178,11 @@ export const en: Translation = {
   alts: alts('en'),
   pageTitle: 'Linetta — write long-form fiction and publish it on Linetta Works',
   metaDescription:
-    'Plan a novel, keep it consistent, and write it scene by scene in one quiet workspace. Outline, characters, plot threads and research sit beside the manuscript, in a SQLite file on your own disk. When you want more, a built-in agent or your own over MCP can check continuity, a scene can become an illustration, and an episode can go out to readers.',
+    'Plan a novel, keep it consistent, and write it scene by scene in one quiet workspace. Outline, characters, plot threads, research and a ledger of what the story owes sit beside the manuscript. When you want more, a built-in agent or your own over MCP checks continuity across a long serial, a scene becomes an illustration, an episode goes out to readers on Linetta Works, and a work follows you between Mac, PC, iPhone and iPad.',
 
   nav: {
     workspace: 'Workspace',
+    longform: 'Long form',
     assist: 'Assist',
     illustrations: 'Illustrations',
     publish: 'Publish',
@@ -199,14 +202,10 @@ export const en: Translation = {
       { nl: true },
       { text: 'of the sentence you are writing.' }
     ],
-    sub: 'Linetta is a calm writing studio for novels and web fiction. Outline, characters, places, relationships, plot threads and research live beside the manuscript — in a SQLite file on your own disk, with no account and no mandatory cloud. When you want more, an agent can check your continuity, a scene can become an illustration, and an episode can reach readers. All of it is optional.',
+    sub: 'Linetta is a calm writing studio for novels and web fiction. Outline, characters, places, relationships, plot threads, research and a ledger of what the story owes live beside the manuscript. When you want more, an agent — built in, or your own over MCP — keeps a long serial consistent, a scene becomes an illustration, an episode reaches readers on Linetta Works, and the work follows you from the desk to an iPhone. All of it is optional.',
     ctaPrimary: 'Get Linetta',
     ctaSecondary: 'Source on GitHub',
-    pills: [
-      'No account, no subscription',
-      'The manuscript stays on your disk',
-      'Korean, English, Japanese'
-    ],
+    pills: ['Free, no subscription', 'Built-in agent, or your own', 'Korean, English, Japanese'],
     imageAlt:
       'The Linetta workspace: an outline rail, a serif editor holding the opening of a scene, and a right-hand panel with the scene’s character count, targets and synopsis.'
   },
@@ -307,7 +306,7 @@ export const en: Translation = {
   assist: {
     mark: '§ 03 — Assist',
     heading: 'A second reader at the desk.',
-    sub: 'Everything here is optional and needs an agent you connect — § 06 says how. It reads, checks and proposes; the manuscript changes only when you ask.',
+    sub: 'Everything here is optional and needs an agent you connect — § 07 says how. It reads, checks and proposes; the manuscript changes only when you ask.',
     cards: [
       {
         tag: 'Ask the agent',
@@ -338,12 +337,80 @@ export const en: Translation = {
         tag: 'Images in messages',
         title: 'Show it what you mean',
         body: 'Attach up to four images to a message, 5 MB each. They go to the model with that message only, and the agent can keep one as a character’s reference image. The Claude Code provider takes text only.'
+      },
+      {
+        tag: 'Questions in a card',
+        title: 'Several decisions, one answer',
+        body: 'When the built-in agent needs more than one decision, it asks on a single card of up to six questions. Pick an option or write your own for each, then send them together. An open card survives a restart.'
+      },
+      {
+        tag: 'Tidy on request',
+        title: 'Housekeeping, when you say so',
+        body: 'Tell it to, and the agent edits or deletes elements, relationships, fact cards and threads across Story World, clears continuity findings in bulk, and accepts or rejects what waits in the inbox. The last eight changes can be undone until the app restarts.'
+      },
+      {
+        tag: 'Long conversations',
+        title: 'It looks back instead of guessing',
+        body: 'When a conversation outgrows what the built-in agent reads, it searches the part that was cut and reads around a match. Finished decisions in its work notes move to an archive it can still search, and you can start the conversation over without deleting any of it.'
+      }
+    ]
+  },
+
+  longform: {
+    mark: '§ 04 — Long form',
+    heading: 'Episode 100 still remembers episode 3.',
+    sub: 'A long serial goes wrong where it forgets. Linetta keeps a ledger of what the story owes and what is settled, puts it in every brief, and checks new episodes against it. The agent does most of the checking, you see all of it, and none of it rewrites the manuscript.',
+    cards: [
+      {
+        tag: 'Story ledger',
+        title: 'What the story owes',
+        body: 'Promises, running gags, open questions, decisions, numbers, the timeline, who knows what, and planned cuts — each open, paid or dropped. Paying one off asks for the line that does it. The agent records them as it writes and sees what is still open.'
+      },
+      {
+        tag: 'Rules of the work',
+        title: 'Pin what must not move',
+        body: 'Pin a settled entry and it reaches every episode’s brief as a rule the agent cannot change or delete. A fact can name its subject, what is fixed and the episodes it holds for; recording a different value reports the conflict instead of saving over it.'
+      },
+      {
+        tag: 'Arcs and parts',
+        title: 'Promises with a horizon',
+        body: 'A promise can reach an arc, a volume or the whole work, and leaves the brief past its reach unless it is due. Each part has a role, what must be true by its end and a target tension, and the brief shows the arc you are in.'
+      },
+      {
+        tag: 'Scene plans',
+        title: 'A plan beside the summary',
+        body: 'Each scene keeps a plan of its own, apart from the summary of what was written. The brief hands it over as the plan for the scene being drafted.'
+      },
+      {
+        tag: 'Independent review',
+        title: 'A second reader for each episode',
+        body: 'Turn it on and a separate, read-only pass rereads what the agent just wrote, without the context of writing it, and files what it finds as continuity findings. Off by default. The agent panel also offers a review of this episode and a critique of the whole part as one-tap follow-ups.'
+      },
+      {
+        tag: 'After the turn',
+        title: 'Settle, then trace the impact',
+        body: 'Two optional passes: one settles what a finished episode changed into the ledger, the other finds earlier episodes a changed decision no longer agrees with. Both are off by default and send manuscript text to your provider again.'
+      },
+      {
+        tag: 'Sample check',
+        title: 'Two episodes, side by side',
+        body: 'Continuity can compare episodes two at a time with no conversation behind it — the first episode, the last two and a related one — and records only contradictions.'
+      },
+      {
+        tag: 'Style at length',
+        title: 'Habits that only show over many episodes',
+        body: 'Pick a scene as the reference for a work’s style. The style check finds “not this, but that” parallels, sentences that explain instead of show, sentences repeated across episodes, episodes that all end the same way, and the phrases you listed to avoid.'
+      },
+      {
+        tag: 'Counts and copies',
+        title: 'Counted the way your platform counts',
+        body: 'Count characters with or without spaces, per work; the editor, the outline, the publish dialog and the agent’s brief all follow. Presets pair a count basis with an episode target. Duplicate a work to try a large change on the copy.'
       }
     ]
   },
 
   illustrations: {
-    mark: '§ 04 — Illustrations',
+    mark: '§ 05 — Illustrations',
     heading: 'Pictures that stay in character.',
     sub: 'Off until you choose ChatGPT or Gemini under Settings → Image generation, with its own consent. ChatGPT counts against your plan’s usage; Gemini is billed per image by Google AI. Nothing is drawn until you press Generate.',
     cards: [
@@ -381,20 +448,20 @@ export const en: Translation = {
   },
 
   publish: {
-    mark: '§ 05 — Publish',
+    mark: '§ 06 — Publish',
     heading: 'Readers, when you choose.',
-    sub: 'Linetta Works is an optional reading site for fiction written in Linetta, run by Linetta’s developer. Nothing goes to it until you connect an account, and after that only what you choose to publish or sync.',
+    sub: 'Linetta Works is an optional reading site for fiction written in Linetta, run by Linetta’s developer. Nothing goes to it until you connect an account, and after that only what you choose to publish or sync. Every build publishes, the App Store apps included.',
     link: { label: 'Visit Linetta Works', href: WORKS },
     cards: [
       {
         tag: 'Episodes',
         title: 'One episode at a time',
-        body: 'Publish from the outline or the command palette. Each episode gets an address, the outline marks it Edited when the text moves on, and publishing again updates the same address. An agent can publish when you ask, once you have connected.'
+        body: 'Publish from the outline or the command palette. Each episode gets an address, and the outline marks it Edited when the text moves on; readers keep the old text until you publish again. The publish dialog shows any open high-severity continuity findings first. An agent can publish when you ask, once you have connected.'
       },
       {
         tag: 'Sheets and cover',
         title: 'Show the world, if you want',
-        body: 'Character and world sheets are private until you turn each one on, so you can check it for spoilers first. Pick a cover from your gallery. Publishing never sends notes.'
+        body: 'Character and world sheets are private until you turn each one on, so you can check it for spoilers first. Make a gallery picture the cover straight from the gallery, or ask the agent to; the cover’s review state shows there. Publishing never sends notes.'
       },
       {
         tag: 'Share',
@@ -414,13 +481,13 @@ export const en: Translation = {
       {
         tag: 'Sync',
         title: 'Carry a work between devices',
-        body: 'With an account the operator has approved, Linetta Works sync seals a work on your device and picks it up on another computer, iPhone or iPad — scenes, story notes, pictures and the agent conversation. Not in the Mac App Store build. A free beta, never your only copy.'
+        body: 'With an account the operator has approved, Linetta Works sync seals a work on your device and picks it up on another computer, iPhone or iPad — scenes, story notes, pictures, the agent conversation, and your global skills and writer profile. Automatic sync sends changes a few minutes after you stop, you choose which kinds of data go, and when two devices edited the same work a conflict screen keeps both. Not in the Mac App Store build. A free beta, never your only copy.'
       }
     ]
   },
 
   agent: {
-    mark: '§ 06 — Agents',
+    mark: '§ 07 — Agents',
     heading: 'Bring your own agent,\nor your own key.',
     lead: 'Linetta ships no model and no subscription of its own. Connect an agent you already run — Claude Code, Claude Desktop, Codex CLI, Gemini CLI — over MCP, using the subscription you already pay for and no credential to Linetta at all. Or turn on the built-in agent below and give it a provider of your own.',
     paragraphs: [
@@ -436,14 +503,14 @@ export const en: Translation = {
       { name: 'Off', body: 'The default. Nothing listens, and nothing is exposed.' },
       {
         name: 'Read only',
-        body: 'Seventeen read tools. The write tools are never registered, so they do not appear in tools/list and cannot be called.'
+        body: 'Nineteen read tools. The write tools are never registered, so they do not appear in tools/list and cannot be called.'
       },
       {
         name: 'Full',
-        body: 'All forty-five. A scene write is snapshotted first, and an outline restructuring can be undone in one call.'
+        body: 'All forty-six. A scene write is snapshotted first, and an outline restructuring can be undone in one call.'
       }
     ],
-    toolsLabel: 'Forty-five tools, not a hundred RPCs',
+    toolsLabel: 'Forty-six tools, not a hundred RPCs',
     toolsNote:
       'A client’s tool budget is finite and selection accuracy falls as the list grows, so the engine’s RPC surface is not exposed one-to-one. Access can also be pinned to a single work, and Settings → Tool budget shows what each optional group costs and turns it off.',
     readLabel: 'Read',
@@ -458,6 +525,8 @@ export const en: Translation = {
       { name: 'linetta_where_does_appear', note: 'Every scene an entity appears in' },
       { name: 'linetta_list_proposals', note: 'What is waiting in the suggestions inbox' },
       { name: 'linetta_list_continuity', note: 'Recorded continuity findings and their ids' },
+      { name: 'linetta_list_ledger', note: 'The story ledger, newest first: what is owed and what is settled' },
+      { name: 'linetta_find_impact', note: 'Written scenes a ledger entry may touch, in story order' },
       { name: 'linetta_get_plot', note: 'Storylines and beats' },
       { name: 'linetta_get_fact_cards', note: 'Research notes with their sources' },
       { name: 'linetta_get_character_visuals', note: 'Character designs and reference images' },
@@ -471,7 +540,7 @@ export const en: Translation = {
       { name: 'linetta_create_work', note: 'Start a new work with its first scene ready to draft' },
       { name: 'linetta_write_scene', note: 'Requires the expected content version' },
       { name: 'linetta_revise_scene', note: 'Partial revision without resending the scene' },
-      { name: 'linetta_apply_story_ops', note: 'Structured story changes as one batch' },
+      { name: 'linetta_apply_story_ops', note: 'Structured story changes as one batch, including edits and deletions across Story World' },
       { name: 'linetta_write_summary', note: 'Scene, container and synopsis summaries' },
       { name: 'linetta_create_checkpoint', note: 'A labelled restore point before a big rewrite' },
       { name: 'linetta_undo_last_change', note: 'Undo a batch in one call' },
@@ -482,6 +551,8 @@ export const en: Translation = {
       { name: 'linetta_reject_proposals', note: 'Reject inbox items when you tell it to' },
       { name: 'linetta_report_continuity', note: 'Record continuity findings, each with an exact quote' },
       { name: 'linetta_update_continuity', note: 'Dismiss, resolve or delete findings in bulk when you tell it to' },
+      { name: 'linetta_edit_ledger', note: 'Add, change or delete a ledger entry; pinned rules stay put' },
+      { name: 'linetta_set_part_arc', note: 'A part’s role, goal and target tension' },
       { name: 'linetta_save_forecast', note: 'Save possible branches; none of it is canon' },
       { name: 'linetta_propose_style_profile', note: 'Drafts a style profile for you to approve' },
       { name: 'linetta_set_character_visuals', note: 'Save character designs' },
@@ -491,7 +562,8 @@ export const en: Translation = {
       { name: 'linetta_request_illustration', note: 'Ask for a picture; nothing is drawn until you approve' },
       { name: 'linetta_set_representative_illustration', note: 'Set or clear the picture that stands for a scene, episode or part' },
       { name: 'linetta_register_work', note: 'Register a work on Linetta Works with a blurb you approved' },
-      { name: 'linetta_publish_episode', note: 'Publish an episode when you ask' }
+      { name: 'linetta_publish_episode', note: 'Publish an episode when you ask' },
+      { name: 'linetta_publish_cover', note: 'Make a gallery picture the work’s cover, without sending sheets' }
     ],
     safetyLabel: 'What keeps it safe',
     safety: [
@@ -513,7 +585,7 @@ export const en: Translation = {
     ],
     byokPoints: [
       'Consent is per provider, and it gates even the connection test',
-      'An API key goes into your OS’s secure store; Linux has none, so only the ChatGPT sign-in and Claude Code work there',
+      'An API key goes into your OS’s secure store — on iPhone and iPad that is the Keychain, and the API-key providers are the ones that work there. Linux has no store, so only the ChatGPT sign-in and Claude Code work there',
       'Open it with Cmd/Ctrl+J — it reaches Linetta’s tools through the same MCP layer an external client uses',
       'Every call lands in the same activity log, marked with which agent made it',
       'A structural change or a scene the agent wrote gets an Undo button on its line — the last eight, and only while the app stays open. The previous text is also kept indefinitely as a restorable version',
@@ -521,14 +593,15 @@ export const en: Translation = {
       'It also keeps skills — how-to documents about method, as plain SKILL.md files under your data directory, which you can edit in any editor or point your own Claude Code at. A skill can apply to every work or to one. It writes them without asking; you get the author badge, the version history and an off switch, in Settings → Skills',
       'After a turn that ran eight or more tool calls, and once your reply has gone, it asks the same provider and model one more time whether that turn taught it a skill — an extra call your provider meters, on by default, switched off under Settings → Skills. The Claude Code provider never runs it',
       'A turn stops at 48 tool calls by default, then says what it finished and what is left. Change the limit from 8 to 200 under Settings → Tool budget',
+      'Conversation memory is sized to the provider — about 100,000 characters on Claude Code and 40,000 elsewhere — and you can set it from 20,000 to 200,000 under Settings',
       'The daily backup is the database only. It carries every skill’s version history and not the skills folder itself'
     ]
   },
 
   data: {
-    mark: '§ 07 — Your data',
+    mark: '§ 08 — Your data',
     heading: 'The manuscript is a file you own.',
-    sub: 'Linetta has no account and no mandatory cloud. Everything below is on your own disk, in formats you can read without it.',
+    sub: 'Writing needs no account and no server. What you write is kept on this device, in formats you can read without Linetta, and leaves it only through the agent, publishing or sync you turn on.',
     cards: [
       {
         tag: 'library.db',
@@ -560,7 +633,7 @@ export const en: Translation = {
   },
 
   download: {
-    mark: '§ 08 — Get it',
+    mark: '§ 09 — Get it',
     heading: 'Free on the App Store for Mac, iPhone and iPad.\nSigned builds everywhere else.',
     sub: 'The direct macOS build is Developer ID signed and notarised by Apple. Windows and Linux installers are published on every GitHub release.',
     versionLabel: 'Current release',
@@ -596,12 +669,12 @@ export const en: Translation = {
   },
 
   faq: {
-    mark: '§ 09 — Questions',
+    mark: '§ 10 — Questions',
     heading: 'Before you download.',
     items: [
       {
         q: 'Does Linetta need an account or a subscription?',
-        a: 'No. Writing, organisation, import and export, snapshots and backups all work without one. There is no Linetta account to create.'
+        a: 'There is no subscription. Writing, organisation, import and export, snapshots and backups all work without an account. You need a Linetta Works account only to publish or to sync between devices.'
       },
       {
         q: 'Is there AI inside the app?',
@@ -613,7 +686,7 @@ export const en: Translation = {
       },
       {
         q: 'Is my writing uploaded anywhere?',
-        a: 'Not by default, and Linetta needs no cloud. It leaves this device only once you turn something on: the built-in agent sends what it works on to the provider you connected, an MCP client you run reads it, the image provider you chose receives a prompt and any reference images when you press Generate, an episode you publish goes to Linetta Works for anyone to read, a work you upload through Linetta Works sync goes to the same operator’s server sealed so nobody there can read it, and GitHub Sync or Folder Sync, once configured, export your whole library on a daily tick and at every launch, along with a sealed copy if you choose them as a sync target.'
+        a: 'Not by default. It leaves this device only once you turn something on: the built-in agent sends what it works on to the provider you connected, an MCP client you run reads it, the image provider you chose receives a prompt and any reference images when you press Generate, an episode you publish goes to Linetta Works for anyone to read, a work you upload through Linetta Works sync goes to the same operator’s server sealed so nobody there can read it, and GitHub Sync or Folder Sync, once configured, export your whole library on a daily tick and at every launch, along with a sealed copy if you choose them as a sync target.'
       },
       {
         q: 'What about iPhone, iPad and Android?',
@@ -662,10 +735,11 @@ export const ko: Translation = {
   alts: alts('ko'),
   pageTitle: 'Linetta — 장편 소설을 쓰고 Linetta Works에 연재하는 집필 스튜디오',
   metaDescription:
-    '아웃라인, 등장인물, 플롯 스레드, 자료를 원고 옆에 두고 씬 단위로 씁니다. 모든 데이터는 내 디스크의 SQLite 파일에 남고, 계정도 필수 클라우드도 없습니다. 원할 때는 내장 에이전트나 MCP로 연결한 내 에이전트가 연속성을 점검하고, 장면을 삽화로 그리고, 회차를 독자에게 내놓을 수 있습니다.',
+    '아웃라인, 등장인물, 플롯 스레드, 자료, 그리고 이야기가 갚아야 할 것을 적은 원장을 원고 옆에 두고 씬 단위로 씁니다. 원할 때는 내장 에이전트나 MCP로 연결한 내 에이전트가 긴 연재의 연속성을 점검하고, 장면은 삽화가 되고, 회차는 Linetta Works에서 독자를 만나고, 작품은 Mac·PC·iPhone·iPad 사이를 따라옵니다.',
 
   nav: {
     workspace: '작업 공간',
+    longform: '장편',
     assist: '집필 보조',
     illustrations: '삽화',
     publish: '게시',
@@ -685,10 +759,10 @@ export const ko: Translation = {
       { text: '작품 전체를 ' },
       { text: '펼쳐 둡니다.', accent: true }
     ],
-    sub: 'Linetta는 소설과 웹소설을 위한 조용한 집필 스튜디오입니다. 아웃라인, 등장인물, 장소, 관계, 플롯 스레드, 조사 자료가 원고 옆에 놓입니다. 전부 내 디스크의 SQLite 파일 안에 있고, 계정도 필수 클라우드도 없습니다. 원할 때는 에이전트에게 연속성 점검을 맡기고, 장면을 삽화로 그리고, 회차를 독자에게 내놓을 수 있습니다. 전부 선택입니다.',
+    sub: 'Linetta는 소설과 웹소설을 위한 조용한 집필 스튜디오입니다. 아웃라인, 등장인물, 장소, 관계, 플롯 스레드, 조사 자료, 그리고 이야기가 아직 갚지 않은 약속을 적은 원장이 원고 옆에 놓입니다. 원할 때는 에이전트 — 내장 에이전트든, MCP로 연결한 내 에이전트든 — 가 긴 연재의 앞뒤를 맞추고, 장면은 삽화가 되고, 회차는 Linetta Works에서 독자를 만나고, 작품은 책상에서 iPhone까지 따라옵니다. 전부 선택입니다.',
     ctaPrimary: 'Linetta 받기',
     ctaSecondary: 'GitHub에서 소스 보기',
-    pills: ['계정도 구독도 없음', '원고는 내 디스크에', '한국어 · English · 日本語'],
+    pills: ['무료, 구독 없음', '내장 에이전트 또는 내 에이전트', '한국어 · English · 日本語'],
     imageAlt:
       'Linetta 작업 공간. 왼쪽에 아웃라인 레일, 가운데에 씬 도입부가 놓인 본문 편집기, 오른쪽에 이 씬의 글자 수·목표·시놉시스 패널.'
   },
@@ -789,7 +863,7 @@ export const ko: Translation = {
   assist: {
     mark: '§ 03 — 집필 보조',
     heading: '책상 옆의 두 번째 독자.',
-    sub: '여기 있는 것은 전부 선택이고, 연결한 에이전트가 있어야 합니다. 연결 방법은 § 06에 있습니다. 에이전트는 읽고, 점검하고, 제안합니다. 원고는 요청할 때만 바뀝니다.',
+    sub: '여기 있는 것은 전부 선택이고, 연결한 에이전트가 있어야 합니다. 연결 방법은 § 07에 있습니다. 에이전트는 읽고, 점검하고, 제안합니다. 원고는 요청할 때만 바뀝니다.',
     cards: [
       {
         tag: '에이전트에게 묻기',
@@ -820,12 +894,80 @@ export const ko: Translation = {
         tag: '메시지에 이미지',
         title: '보여 주며 말하기',
         body: '메시지 하나에 이미지를 4장까지, 장당 5MB까지 첨부합니다. 이미지는 그 메시지와 함께만 모델로 가고, 에이전트는 그중 하나를 인물의 참조 이미지로 저장할 수 있습니다. Claude Code 프로바이더는 텍스트만 받습니다.'
+      },
+      {
+        tag: '질문 카드',
+        title: '여러 결정을 한 번에',
+        body: '내장 에이전트가 정할 것이 여러 개면 질문을 최대 여섯 개까지 카드 한 장에 묻습니다. 질문마다 보기를 고르거나 직접 적고 한 번에 보냅니다. 열린 카드는 앱을 다시 켜도 남습니다.'
+      },
+      {
+        tag: '시키면 정리',
+        title: '정리도, 말할 때만',
+        body: '시키면 에이전트가 세계관 전체의 요소, 관계, 팩트 카드, 스레드를 고치거나 지우고, 연속성 점검 결과를 한꺼번에 정리하고, 제안함에 쌓인 것을 수락하거나 거절합니다. 최근 변경 8건은 앱을 다시 켜기 전까지 되돌릴 수 있습니다.'
+      },
+      {
+        tag: '긴 대화',
+        title: '추측하지 않고 다시 찾아봅니다',
+        body: '대화가 내장 에이전트가 읽는 분량을 넘으면, 잘린 부분을 검색해 찾은 곳의 앞뒤를 읽습니다. 작업 노트의 끝난 결정은 지우지 않고 보관해 계속 찾을 수 있고, 대화는 지우지 않은 채 새로 시작할 수 있습니다.'
+      }
+    ]
+  },
+
+  longform: {
+    mark: '§ 04 — 장편',
+    heading: '100화가 되어도 3화를 기억합니다.',
+    sub: '긴 연재는 잊은 곳에서 무너집니다. Linetta는 이야기가 갚아야 할 것과 정해진 것을 원장에 적고, 모든 브리프에 넣고, 새 회차를 그것과 맞대어 봅니다. 점검은 대부분 에이전트가 하고, 작가는 그 전부를 보며, 원고를 스스로 고치는 것은 없습니다.',
+    cards: [
+      {
+        tag: '작품 원장',
+        title: '이야기가 갚아야 할 것',
+        body: '약속, 반복 개그, 열린 질문, 결정, 숫자, 타임라인, 누가 무엇을 아는지, 지울 계획까지 — 각각 열림, 회수, 버림으로 표시됩니다. 회수하려면 그 약속을 갚는 문장을 적어야 합니다. 에이전트는 쓰면서 기록하고, 아직 열린 것을 보며 씁니다.'
+      },
+      {
+        tag: '작품의 규칙',
+        title: '움직이면 안 되는 것은 고정',
+        body: '정해진 사실을 고정하면 모든 회차의 브리프에 규칙으로 들어가고, 에이전트는 바꾸거나 지울 수 없습니다. 사실에는 대상, 고정된 내용, 유효한 회차를 적을 수 있고, 다른 값을 기록하려 하면 덮어쓰지 않고 충돌을 알립니다.'
+      },
+      {
+        tag: '아크와 부',
+        title: '범위가 있는 약속',
+        body: '약속은 아크, 권, 작품 전체 중 어디까지 유효한지 정할 수 있고, 그 범위를 지나면 기한이 된 것이 아닌 한 브리프에서 빠집니다. 부마다 역할, 끝날 때까지 이뤄야 할 것, 목표 긴장도를 두고, 브리프는 지금 어느 아크인지 보여 줍니다.'
+      },
+      {
+        tag: '씬 계획',
+        title: '요약 옆의 계획',
+        body: '씬마다 이미 쓴 내용의 요약과 따로 계획을 둡니다. 브리프는 그것을 지금 쓰는 씬의 계획으로 넘깁니다.'
+      },
+      {
+        tag: '독립 검수',
+        title: '회차마다 두 번째 독자',
+        body: '켜 두면 에이전트가 방금 쓴 것을, 쓴 맥락이 없는 별도의 읽기 전용 호출이 다시 읽고 찾은 것을 연속성 점검에 남깁니다. 기본은 꺼짐입니다. 에이전트 패널은 이 회차 검토와 부 전체 비평도 한 번에 누르는 후속 요청으로 내놓습니다.'
+      },
+      {
+        tag: '턴이 끝난 뒤',
+        title: '정리하고, 영향을 찾고',
+        body: '고를 수 있는 두 단계입니다. 하나는 끝난 회차가 바꾼 것을 원장에 정리하고, 다른 하나는 바뀐 결정과 더는 맞지 않는 앞 회차를 찾습니다. 둘 다 기본은 꺼짐이고, 원고를 프로바이더에 다시 보냅니다.'
+      },
+      {
+        tag: '표본 대조',
+        title: '두 회차를 나란히',
+        body: '연속성 점검이 대화 없이 회차를 두 개씩 맞대어 봅니다. 첫 회차, 직전 두 회차, 관련 회차를 고르고, 어긋남만 기록합니다.'
+      },
+      {
+        tag: '장편의 문체',
+        title: '여러 회차에 걸쳐야 보이는 버릇',
+        body: '씬 하나를 작품 문체의 기준으로 고릅니다. 문체 검사는 “A가 아니라 B” 식의 대구, 보여 주지 않고 설명하는 문장, 회차를 넘나들며 반복되는 문장, 늘 같은 방식으로 끝나는 회차, 그리고 피하겠다고 적어 둔 표현을 찾습니다.'
+      },
+      {
+        tag: '분량과 복제',
+        title: '연재처의 기준대로 세기',
+        body: '글자 수를 공백 포함으로 셀지 제외로 셀지 작품마다 고르면 편집기, 아웃라인, 게시 창, 에이전트 브리프가 모두 따릅니다. 프리셋은 그 기준과 회차 목표를 한 번에 정합니다. 큰 변경은 작품을 복제해 사본에서 시험할 수 있습니다.'
       }
     ]
   },
 
   illustrations: {
-    mark: '§ 04 — 삽화',
+    mark: '§ 05 — 삽화',
     heading: '인물이 흔들리지 않는 그림.',
     sub: '설정 → 이미지 생성에서 ChatGPT나 Gemini를 고르기 전까지 꺼져 있고, 동의도 따로 받습니다. ChatGPT는 요금제 사용량에서 차감되고 Gemini는 Google AI가 장당 과금합니다. 생성을 누르기 전에는 아무것도 그리지 않습니다.',
     cards: [
@@ -863,20 +1005,20 @@ export const ko: Translation = {
   },
 
   publish: {
-    mark: '§ 05 — 게시',
+    mark: '§ 06 — 게시',
     heading: '독자는, 원할 때.',
-    sub: 'Linetta Works는 Linetta로 쓴 소설을 읽는 선택형 사이트이고, Linetta 개발자가 운영합니다. 계정을 연결하기 전에는 아무것도 가지 않고, 연결한 뒤에도 게시하거나 동기화하기로 고른 것만 갑니다.',
+    sub: 'Linetta Works는 Linetta로 쓴 소설을 읽는 선택형 사이트이고, Linetta 개발자가 운영합니다. 계정을 연결하기 전에는 아무것도 가지 않고, 연결한 뒤에도 게시하거나 동기화하기로 고른 것만 갑니다. App Store의 Mac·iPhone·iPad 앱을 포함해 모든 빌드에서 게시할 수 있습니다.',
     link: { label: 'Linetta Works 둘러보기', href: WORKS },
     cards: [
       {
         tag: '회차',
         title: '한 회차씩',
-        body: '아웃라인이나 명령 팔레트에서 게시합니다. 회차마다 주소가 생기고, 본문이 바뀌면 아웃라인에 수정됨으로 표시되며, 다시 게시하면 같은 주소가 갱신됩니다. 계정을 연결한 뒤에는 요청하면 에이전트도 게시할 수 있습니다.'
+        body: '아웃라인이나 명령 팔레트에서 게시합니다. 회차마다 주소가 생기고, 본문이 바뀌면 아웃라인에 수정됨으로 표시되며, 독자는 다시 게시할 때까지 이전 본문을 봅니다. 게시 창은 열려 있는 심각한 연속성 지적을 먼저 보여 줍니다. 계정을 연결한 뒤에는 요청하면 에이전트도 게시할 수 있습니다.'
       },
       {
         tag: '시트와 표지',
         title: '세계관도, 원한다면',
-        body: '인물·세계관 시트는 하나씩 켜기 전까지 비공개이므로 스포일러를 먼저 확인할 수 있습니다. 표지는 갤러리에서 고릅니다. 메모는 게시로 보내지 않습니다.'
+        body: '인물·세계관 시트는 하나씩 켜기 전까지 비공개이므로 스포일러를 먼저 확인할 수 있습니다. 갤러리에서 그림을 골라 바로 표지로 올리거나 에이전트에게 맡길 수 있고, 표지의 심사 상태도 거기서 보입니다. 메모는 게시로 보내지 않습니다.'
       },
       {
         tag: '공유',
@@ -896,13 +1038,13 @@ export const ko: Translation = {
       {
         tag: '동기화',
         title: '기기 사이로 작품 옮기기',
-        body: '운영자가 허가한 계정이면 Linetta Works 동기화가 작품을 기기에서 암호화해 맡기고, 다른 컴퓨터나 iPhone·iPad에서 이어 받습니다. 원고, 설정, 그림, 에이전트와 나눈 대화까지 갑니다. Mac App Store 빌드에는 없습니다. 무료 베타이며 유일한 사본으로 삼지 마십시오.'
+        body: '운영자가 허가한 계정이면 Linetta Works 동기화가 작품을 기기에서 암호화해 맡기고, 다른 컴퓨터나 iPhone·iPad에서 이어 받습니다. 원고, 설정, 그림, 에이전트와 나눈 대화, 전역 스킬과 작가 프로필까지 갑니다. 자동 동기화를 켜면 편집을 멈추고 몇 분 뒤 올라가고, 옮길 데이터 종류를 고를 수 있으며, 두 기기에서 같은 작품을 고쳤다면 충돌 화면이 두 원고를 모두 남깁니다. Mac App Store 빌드에는 없습니다. 무료 베타이며 유일한 사본으로 삼지 마십시오.'
       }
     ]
   },
 
   agent: {
-    mark: '§ 06 — 에이전트',
+    mark: '§ 07 — 에이전트',
     heading: '내 에이전트를 데려오거나,\n내 키를 연결하세요.',
     lead: 'Linetta 자체에는 모델도 구독도 없습니다. 이미 쓰고 있는 에이전트 — Claude Code, Claude Desktop, Codex CLI, Gemini CLI — 를 MCP로 연결하면 이미 있는 구독으로 동작하고, Linetta에는 어떤 자격 증명도 넘기지 않습니다. 아니면 아래의 내장 에이전트를 켜고 직접 연결한 프로바이더를 쓸 수도 있습니다.',
     paragraphs: [
@@ -918,14 +1060,14 @@ export const ko: Translation = {
       { name: '꺼짐', body: '기본값입니다. 아무것도 열리지 않고, 아무것도 노출되지 않습니다.' },
       {
         name: '읽기 전용',
-        body: '읽기 툴 17개. 쓰기 툴은 아예 등록되지 않아 tools/list에 나타나지도, 호출되지도 않습니다.'
+        body: '읽기 툴 19개. 쓰기 툴은 아예 등록되지 않아 tools/list에 나타나지도, 호출되지도 않습니다.'
       },
       {
         name: '전체',
-        body: '45개 전부. 씬 쓰기는 먼저 스냅샷되고, 아웃라인 구조 변경은 한 번의 호출로 되돌릴 수 있습니다.'
+        body: '46개 전부. 씬 쓰기는 먼저 스냅샷되고, 아웃라인 구조 변경은 한 번의 호출로 되돌릴 수 있습니다.'
       }
     ],
-    toolsLabel: 'RPC 100개가 아니라, 툴 45개',
+    toolsLabel: 'RPC 100개가 아니라, 툴 46개',
     toolsNote:
       '클라이언트의 툴 예산은 유한하고 목록이 길어질수록 선택 정확도가 떨어집니다. 그래서 엔진 RPC를 1:1로 노출하지 않습니다. 접근을 한 작품으로 제한할 수도 있고, 설정 → 툴 예산에서 선택 그룹별 비용을 보고 끌 수 있습니다.',
     readLabel: '읽기',
@@ -940,6 +1082,8 @@ export const ko: Translation = {
       { name: 'linetta_where_does_appear', note: '특정 엔티티가 등장하는 모든 씬' },
       { name: 'linetta_list_proposals', note: '제안함에서 대기 중인 항목' },
       { name: 'linetta_list_continuity', note: '기록된 연속성 점검 결과와 id' },
+      { name: 'linetta_list_ledger', note: '작품 원장 — 갚아야 할 것과 정해진 것, 최신순' },
+      { name: 'linetta_find_impact', note: '원장 항목이 건드릴 수 있는 쓴 씬들, 이야기 순서로' },
       { name: 'linetta_get_plot', note: '스토리라인과 비트' },
       { name: 'linetta_get_fact_cards', note: '출처가 붙은 조사 노트' },
       { name: 'linetta_get_character_visuals', note: '인물 디자인과 참조 이미지' },
@@ -953,7 +1097,7 @@ export const ko: Translation = {
       { name: 'linetta_create_work', note: '첫 씬이 준비된 새 작품 만들기' },
       { name: 'linetta_write_scene', note: '읽은 시점의 content_version 필수' },
       { name: 'linetta_revise_scene', note: '씬 전체를 다시 보내지 않는 부분 수정' },
-      { name: 'linetta_apply_story_ops', note: '구조화된 스토리 변경을 한 배치로' },
+      { name: 'linetta_apply_story_ops', note: '구조화된 스토리 변경을 한 배치로 — 세계관 전체의 수정과 삭제 포함' },
       { name: 'linetta_write_summary', note: '씬·컨테이너 요약과 작품 시놉시스' },
       { name: 'linetta_create_checkpoint', note: '큰 개작 전 라벨 붙은 복원 지점' },
       { name: 'linetta_undo_last_change', note: '배치 단위로 한 번에 되돌리기' },
@@ -964,6 +1108,8 @@ export const ko: Translation = {
       { name: 'linetta_reject_proposals', note: '작가가 시킬 때 제안함 항목을 거절' },
       { name: 'linetta_report_continuity', note: '연속성 점검 결과를 정확한 인용과 함께 기록' },
       { name: 'linetta_update_continuity', note: '작가가 시킬 때 점검 결과를 한꺼번에 무시·해결·삭제' },
+      { name: 'linetta_edit_ledger', note: '원장 항목 추가·수정·삭제 — 고정된 규칙은 건드리지 못함' },
+      { name: 'linetta_set_part_arc', note: '부의 역할, 목표, 목표 긴장도' },
       { name: 'linetta_save_forecast', note: '가능한 갈래를 저장 — 어느 것도 정사가 아닙니다' },
       { name: 'linetta_propose_style_profile', note: '작가가 승인할 문체 프로필 초안 제안' },
       { name: 'linetta_set_character_visuals', note: '인물 디자인 저장' },
@@ -973,7 +1119,8 @@ export const ko: Translation = {
       { name: 'linetta_request_illustration', note: '삽화 요청 — 승인 전에는 그리지 않습니다' },
       { name: 'linetta_set_representative_illustration', note: '씬·회차·부를 대표하는 그림 지정 또는 해제' },
       { name: 'linetta_register_work', note: '작가가 승인한 소개글로 작품을 Linetta Works에 등록' },
-      { name: 'linetta_publish_episode', note: '요청받은 회차 게시' }
+      { name: 'linetta_publish_episode', note: '요청받은 회차 게시' },
+      { name: 'linetta_publish_cover', note: '갤러리 그림을 작품 표지로 — 시트는 보내지 않음' }
     ],
     safetyLabel: '무엇이 이것을 안전하게 하는가',
     safety: [
@@ -995,7 +1142,7 @@ export const ko: Translation = {
     ],
     byokPoints: [
       '동의는 프로바이더별이고, 연결 테스트 자체도 이 동의가 있어야 통과합니다',
-      'API 키는 OS의 시크릿 저장소로 들어갑니다. Linux는 저장소가 없어서 ChatGPT 로그인과 Claude Code만 됩니다',
+      'API 키는 OS의 시크릿 저장소로 들어갑니다. iPhone·iPad에서는 키체인이고, 거기서는 API 키 프로바이더를 씁니다. Linux는 저장소가 없어서 ChatGPT 로그인과 Claude Code만 됩니다',
       'Cmd/Ctrl+J로 엽니다 — 외부 클라이언트가 쓰는 것과 같은 MCP 계층으로 Linetta의 툴에 접속합니다',
       '모든 호출은 같은 활동 로그에 남고, 어느 에이전트가 호출했는지 표시됩니다',
       '구조 변경과 에이전트가 쓴 씬은 해당 줄의 되돌리기 버튼으로 한 번에 되돌립니다(앱이 켜져 있는 동안, 최근 8건까지). 이전 본문은 기한 없이 버전으로도 남아 복원할 수 있습니다',
@@ -1003,14 +1150,15 @@ export const ko: Translation = {
       '스킬도 함께 쌓습니다. 방법을 적어 두는 문서이고, 데이터 폴더 아래 평범한 SKILL.md 파일이라 아무 편집기로나 열 수 있고 자기 Claude Code를 그 폴더에 붙일 수도 있습니다. 모든 작품에 적용할 수도, 한 작품에만 묶을 수도 있습니다. 에이전트는 묻지 않고 씁니다. 작가는 대신 작성자 표시와 버전 기록과 끄는 스위치를 설정 → 스킬에서 받습니다',
       '툴을 8번 이상 호출한 턴이 끝나고 답장이 나간 뒤, 같은 프로바이더와 같은 모델에 한 번 더 묻습니다 — 적어 둘 기법이 있었는지. 프로바이더에 그만큼 과금되는 추가 호출이며, 기본은 켜짐이고 설정 → 스킬에서 끕니다. Claude Code 프로바이더에서는 실행되지 않습니다',
       '한 턴은 기본 48번의 툴 호출에서 멈추고, 끝낸 일과 남은 일을 말합니다. 한도는 설정 → 툴 예산에서 8~200으로 바꿉니다',
+      '대화 기억은 프로바이더에 맞춰 정해집니다 — Claude Code는 약 10만 자, 나머지는 4만 자 — 설정에서 2만~20만 자 사이로 바꿀 수 있습니다',
       '매일 도는 백업은 데이터베이스만 담습니다. 스킬의 버전 기록은 담기고, 스킬 폴더 자체는 담기지 않습니다'
     ]
   },
 
   data: {
-    mark: '§ 07 — 내 데이터',
+    mark: '§ 08 — 내 데이터',
     heading: '원고는 내가 가진 파일입니다.',
-    sub: 'Linetta에는 계정도 필수 클라우드도 없습니다. 아래는 전부 내 디스크에, 이 앱 없이도 읽을 수 있는 형식으로 남습니다.',
+    sub: '집필에는 계정도 서버도 필요 없습니다. 쓴 것은 이 기기에, 이 앱 없이도 읽을 수 있는 형식으로 남고, 직접 켠 에이전트·게시·동기화를 통해서만 밖으로 나갑니다.',
     cards: [
       {
         tag: 'library.db',
@@ -1042,7 +1190,7 @@ export const ko: Translation = {
   },
 
   download: {
-    mark: '§ 08 — 받기',
+    mark: '§ 09 — 받기',
     heading: 'App Store에서 무료 — Mac, iPhone, iPad.\n나머지 플랫폼은 서명된 빌드로.',
     sub: 'macOS 직접 배포 빌드는 Apple Developer ID로 서명되고 공증되었습니다. Windows와 Linux 설치 파일은 모든 GitHub 릴리스에 함께 올라갑니다.',
     versionLabel: '현재 릴리스',
@@ -1078,12 +1226,12 @@ export const ko: Translation = {
   },
 
   faq: {
-    mark: '§ 09 — 질문',
+    mark: '§ 10 — 질문',
     heading: '내려받기 전에.',
     items: [
       {
         q: '계정이나 구독이 필요한가요?',
-        a: '아니요. 집필, 정리, 가져오기·내보내기, 스냅샷, 백업 모두 계정 없이 동작합니다. 만들어야 할 Linetta 계정 자체가 없습니다.'
+        a: '구독은 없습니다. 집필, 정리, 가져오기·내보내기, 스냅샷, 백업은 모두 계정 없이 동작합니다. Linetta Works 계정은 게시하거나 기기 사이에 동기화할 때만 필요합니다.'
       },
       {
         q: '앱 안에 AI가 들어 있나요?',
@@ -1095,7 +1243,7 @@ export const ko: Translation = {
       },
       {
         q: '제 글이 어딘가로 업로드되나요?',
-        a: '기본값으로는 아니고, Linetta는 클라우드가 없어도 씁니다. 무언가를 켰을 때만 이 기기를 벗어납니다 — 내장 에이전트는 작업 중인 내용을 연결한 프로바이더로 보내고, 직접 실행한 MCP 클라이언트는 그것을 읽으며, 고른 이미지 프로바이더는 생성을 누를 때 프롬프트와 참조 이미지를 받고, 게시한 회차는 누구나 읽도록 Linetta Works로 가고, Linetta Works 동기화로 올린 작품은 같은 운영자의 서버로 가되 아무도 읽을 수 없게 암호화되어 가며, GitHub 동기화나 폴더 동기화를 설정하면 하루 한 번과 실행할 때마다 전체 서재를 내보내고, 동기화 대상으로 고르면 암호화된 사본도 함께 둡니다.'
+        a: '기본값으로는 아닙니다. 무언가를 켰을 때만 이 기기를 벗어납니다 — 내장 에이전트는 작업 중인 내용을 연결한 프로바이더로 보내고, 직접 실행한 MCP 클라이언트는 그것을 읽으며, 고른 이미지 프로바이더는 생성을 누를 때 프롬프트와 참조 이미지를 받고, 게시한 회차는 누구나 읽도록 Linetta Works로 가고, Linetta Works 동기화로 올린 작품은 같은 운영자의 서버로 가되 아무도 읽을 수 없게 암호화되어 가며, GitHub 동기화나 폴더 동기화를 설정하면 하루 한 번과 실행할 때마다 전체 서재를 내보내고, 동기화 대상으로 고르면 암호화된 사본도 함께 둡니다.'
       },
       {
         q: 'iPhone, iPad, Android는요?',
@@ -1143,10 +1291,11 @@ export const ja: Translation = {
   alts: alts('ja'),
   pageTitle: 'Linetta — 長編小説を書き、Linetta Works で連載する執筆スタジオ',
   metaDescription:
-    'アウトライン、登場人物、プロットの糸、資料を原稿のとなりに置き、シーン単位で書きます。データは自分のディスクの SQLite ファイルに残り、アカウントも必須のクラウドもありません。ほしいときには内蔵エージェントや MCP でつないだ自分のエージェントが連続性を点検し、場面を挿絵にし、話を読者に届けられます。',
+    'アウトライン、登場人物、プロットの糸、資料、そして物語がまだ返していない約束を記す台帳を原稿のとなりに置き、シーン単位で書きます。ほしいときには内蔵エージェントや MCP でつないだ自分のエージェントが長い連載の連続性を点検し、場面は挿絵になり、話は Linetta Works で読者に届き、作品は Mac・PC・iPhone・iPad の間をついてきます。',
 
   nav: {
     workspace: 'ワークスペース',
+    longform: '長編',
     assist: '執筆支援',
     illustrations: '挿絵',
     publish: '公開',
@@ -1165,10 +1314,10 @@ export const ja: Translation = {
       { nl: true },
       { text: '物語の全部を。', accent: true }
     ],
-    sub: 'Linetta は小説とウェブ小説のための静かな執筆スタジオです。アウトライン、登場人物、場所、関係、プロットの糸、調べ物が原稿のとなりに並びます。すべては自分のディスクの SQLite ファイルの中にあり、アカウントも必須のクラウドもありません。ほしいときにはエージェントに連続性の点検を任せ、場面を挿絵にし、話を読者に届けられます。どれも任意です。',
+    sub: 'Linetta は小説とウェブ小説のための静かな執筆スタジオです。アウトライン、登場人物、場所、関係、プロットの糸、調べ物、そして物語がまだ返していない約束を記す台帳が原稿のとなりに並びます。ほしいときにはエージェント — 内蔵のものでも、MCP でつないだ自分のものでも — が長い連載のつじつまを保ち、場面は挿絵になり、話は Linetta Works で読者に届き、作品は机から iPhone までついてきます。どれも任意です。',
     ctaPrimary: 'Linetta を入手',
     ctaSecondary: 'GitHub でソースを見る',
-    pills: ['アカウントも購読も不要', '原稿は自分のディスクに', '한국어 · English · 日本語'],
+    pills: ['無料、購読なし', '内蔵エージェントか、自分のエージェント', '한국어 · English · 日本語'],
     imageAlt:
       'Linetta のワークスペース。左にアウトラインのレール、中央にシーン冒頭を表示した本文エディタ、右にこのシーンの文字数・目標・あらすじのパネル。'
   },
@@ -1269,7 +1418,7 @@ export const ja: Translation = {
   assist: {
     mark: '§ 03 — 執筆支援',
     heading: '机のそばの、二人目の読者。',
-    sub: 'ここにあるものはすべて任意で、つないだエージェントが必要です。つなぎ方は § 06 にあります。エージェントは読み、点検し、提案します。原稿は頼んだときだけ変わります。',
+    sub: 'ここにあるものはすべて任意で、つないだエージェントが必要です。つなぎ方は § 07 にあります。エージェントは読み、点検し、提案します。原稿は頼んだときだけ変わります。',
     cards: [
       {
         tag: 'エージェントに聞く',
@@ -1300,12 +1449,80 @@ export const ja: Translation = {
         tag: 'メッセージに画像',
         title: '見せて伝える',
         body: '一つのメッセージに画像を4枚まで、1枚5MBまで添付できます。画像はそのメッセージとともにだけモデルへ送られ、エージェントはそのうちの一枚を人物の参照画像として保存できます。Claude Code プロバイダーはテキストのみです。'
+      },
+      {
+        tag: '質問カード',
+        title: 'いくつもの決定を一度に',
+        body: '内蔵エージェントが決めてほしいことが複数あるときは、最大六つの質問を一枚のカードで尋ねます。質問ごとに選択肢を選ぶか自分で書き、まとめて送ります。開いたカードはアプリを再起動しても残ります。'
+      },
+      {
+        tag: '頼めば整理',
+        title: '片づけも、言ったときだけ',
+        body: '頼めばエージェントが世界観全体の要素、関係、ファクトカード、糸を直したり消したりし、連続性の指摘をまとめて整理し、提案箱にたまったものを承認・却下します。直近 8 件の変更はアプリを再起動するまで取り消せます。'
+      },
+      {
+        tag: '長い会話',
+        title: '推測せず、探して読み返す',
+        body: '会話が内蔵エージェントの読める量を超えると、切れた部分を検索し、見つけた箇所の前後を読みます。作業ノートの終わった決定は消さずに保管されて検索でき、会話は消さないまま新しく始められます。'
+      }
+    ]
+  },
+
+  longform: {
+    mark: '§ 04 — 長編',
+    heading: '第100話でも、第3話を覚えている。',
+    sub: '長い連載は、忘れたところから崩れます。Linetta は物語が返すべきものと決まったことを台帳に記し、すべてのブリーフに入れ、新しい話をそれと突き合わせます。点検の多くはエージェントが行い、作家はそのすべてを見られ、原稿を勝手に書き換えるものはありません。',
+    cards: [
+      {
+        tag: '作品台帳',
+        title: '物語が返すべきもの',
+        body: '約束、繰り返しのギャグ、開いた問い、決定、数字、時系列、誰が何を知っているか、削る予定まで — それぞれ未回収、回収、破棄で示されます。回収にはそれを果たす一文が要ります。エージェントは書きながら記録し、まだ開いているものを見て書きます。'
+      },
+      {
+        tag: '作品のルール',
+        title: '動かしてはいけないものは固定',
+        body: '決まった事実を固定すると、すべての話のブリーフにルールとして入り、エージェントは変更も削除もできません。事実には対象、固定された内容、有効な話を書けて、違う値を記録しようとすると上書きせず衝突を知らせます。'
+      },
+      {
+        tag: 'アークと部',
+        title: '範囲のある約束',
+        body: '約束はアーク、巻、作品全体のどこまで有効かを決められ、その範囲を過ぎると期限が来ていない限りブリーフから外れます。部ごとに役割、終わりまでに成り立つべきこと、目標の緊張度を置き、ブリーフはいまどのアークにいるかを示します。'
+      },
+      {
+        tag: 'シーンの計画',
+        title: '要約のとなりに計画',
+        body: 'シーンごとに、書いた内容の要約とは別に計画を持ちます。ブリーフはそれをいま書くシーンの計画として渡します。'
+      },
+      {
+        tag: '独立検収',
+        title: '一話ごとに二人目の読者',
+        body: 'オンにすると、エージェントがいま書いたものを、書いた文脈を持たない別の読み取り専用の呼び出しが読み直し、見つけたことを連続性の指摘に残します。既定はオフです。エージェントパネルは、この話の検収と部全体の講評もワンタップの続きとして出します。'
+      },
+      {
+        tag: 'ターンのあとで',
+        title: '整理して、影響を探す',
+        body: '選べる二つの工程です。一つは書き終えた話が変えたことを台帳に整理し、もう一つは変わった決定ともう合わない前の話を探します。どちらも既定はオフで、原稿をプロバイダーに再送します。'
+      },
+      {
+        tag: 'サンプル照合',
+        title: '二つの話を並べて',
+        body: '連続性の点検が、会話なしで話を二つずつ突き合わせます。最初の話、直前の二話、関連する話を選び、食い違いだけを記録します。'
+      },
+      {
+        tag: '長編の文体',
+        title: '何話も重ねて見える癖',
+        body: 'シーンを一つ選んで作品の文体の基準にします。文体チェックは「AではなくB」型の対句、見せずに説明する文、話をまたいで繰り返される文、いつも同じ終わり方をする話、そして避けると決めた表現を探します。'
+      },
+      {
+        tag: '分量と複製',
+        title: '連載先の数え方で',
+        body: '文字数を空白込みで数えるか除いて数えるかを作品ごとに選ぶと、エディタ、アウトライン、公開ダイアログ、エージェントのブリーフがすべて従います。プリセットはその基準と話の目標をまとめて決めます。大きな変更は作品を複製してコピーで試せます。'
       }
     ]
   },
 
   illustrations: {
-    mark: '§ 04 — 挿絵',
+    mark: '§ 05 — 挿絵',
     heading: '人物がぶれない絵を。',
     sub: '設定 → 画像生成で ChatGPT か Gemini を選ぶまでオフで、同意も別に求めます。ChatGPT はプランの利用量から差し引かれ、Gemini は Google AI が枚数で課金します。生成を押すまで何も描かれません。',
     cards: [
@@ -1343,20 +1560,20 @@ export const ja: Translation = {
   },
 
   publish: {
-    mark: '§ 05 — 公開',
+    mark: '§ 06 — 公開',
     heading: '読者には、望むときに。',
-    sub: 'Linetta Works は Linetta で書かれた小説を読む任意のサイトで、Linetta の開発者が運営しています。アカウントをつなぐまで何も送られず、つないだあとも公開や同期を選んだものだけが送られます。',
+    sub: 'Linetta Works は Linetta で書かれた小説を読む任意のサイトで、Linetta の開発者が運営しています。アカウントをつなぐまで何も送られず、つないだあとも公開や同期を選んだものだけが送られます。App Store の Mac・iPhone・iPad アプリを含め、すべてのビルドで公開できます。',
     link: { label: 'Linetta Works を見る', href: WORKS },
     cards: [
       {
         tag: '話',
         title: '一話ずつ',
-        body: 'アウトラインやコマンドパレットから公開します。話ごとにアドレスが付き、本文が変わるとアウトラインに編集済みと表示され、もう一度公開すると同じアドレスが更新されます。つないだあとは、頼めばエージェントも公開できます。'
+        body: 'アウトラインやコマンドパレットから公開します。話ごとにアドレスが付き、本文が変わるとアウトラインに編集済みと表示され、読者はもう一度公開するまで前の本文を読みます。公開ダイアログは未解決の重大な連続性の指摘を先に示します。つないだあとは、頼めばエージェントも公開できます。'
       },
       {
         tag: 'シートと表紙',
         title: '世界観も、望むなら',
-        body: '人物・世界観のシートは一つずつオンにするまで非公開なので、先にネタバレを確かめられます。表紙はギャラリーから選びます。メモは公開では送られません。'
+        body: '人物・世界観のシートは一つずつオンにするまで非公開なので、先にネタバレを確かめられます。ギャラリーから絵を選んでそのまま表紙にするか、エージェントに任せられ、表紙の審査状況もそこに表示されます。メモは公開では送られません。'
       },
       {
         tag: '共有',
@@ -1376,13 +1593,13 @@ export const ja: Translation = {
       {
         tag: '同期',
         title: 'デバイスの間で作品を運ぶ',
-        body: '運営者が許可したアカウントなら、Linetta Works 同期が作品をこの端末で暗号化して預け、別のコンピュータや iPhone・iPad で続きを受け取ります。原稿、設定、画像、エージェントとの会話まで運びます。Mac App Store ビルドにはありません。無料ベータなので、唯一のコピーにはしないでください。'
+        body: '運営者が許可したアカウントなら、Linetta Works 同期が作品をこの端末で暗号化して預け、別のコンピュータや iPhone・iPad で続きを受け取ります。原稿、設定、画像、エージェントとの会話、グローバルなスキルと作家プロフィールまで運びます。自動同期をオンにすると編集を止めて数分後に送られ、運ぶデータの種類を選べ、二つの端末で同じ作品を直したときは衝突画面が両方の原稿を残します。Mac App Store ビルドにはありません。無料ベータなので、唯一のコピーにはしないでください。'
       }
     ]
   },
 
   agent: {
-    mark: '§ 06 — エージェント',
+    mark: '§ 07 — エージェント',
     heading: '自分のエージェントを連れてくるか、\n自分の鍵をつなぐか。',
     lead: 'Linetta 自体にはモデルも購読もありません。すでに使っているエージェント — Claude Code、Claude Desktop、Codex CLI、Gemini CLI — を MCP でつなげば、すでにある購読で動き、Linetta には資格情報を一切渡しません。あるいは下の内蔵エージェントをオンにして、自分でつないだプロバイダーを使うこともできます。',
     paragraphs: [
@@ -1398,14 +1615,14 @@ export const ja: Translation = {
       { name: 'オフ', body: '既定値です。何も待ち受けず、何も公開されません。' },
       {
         name: '読み取り専用',
-        body: '読み取りツール17個。書き込みツールは登録すらされないので、tools/list に現れず、呼び出せません。'
+        body: '読み取りツール19個。書き込みツールは登録すらされないので、tools/list に現れず、呼び出せません。'
       },
       {
         name: 'フル',
-        body: '45個すべて。シーンの書き込みは先にスナップショットされ、アウトラインの構造変更は一度の呼び出しで取り消せます。'
+        body: '46個すべて。シーンの書き込みは先にスナップショットされ、アウトラインの構造変更は一度の呼び出しで取り消せます。'
       }
     ],
-    toolsLabel: 'RPC 百個ではなく、ツール45個',
+    toolsLabel: 'RPC 百個ではなく、ツール46個',
     toolsNote:
       'クライアントのツール予算は有限で、一覧が伸びるほど選択の精度は落ちます。だからエンジンの RPC を1対1では公開しません。アクセスを一つの作品に限定することもでき、設定 → ツール予算で任意グループごとのコストを見てオフにできます。',
     readLabel: '読み取り',
@@ -1420,6 +1637,8 @@ export const ja: Translation = {
       { name: 'linetta_where_does_appear', note: '特定のエンティティが登場する全シーン' },
       { name: 'linetta_list_proposals', note: '提案箱で待機中の項目' },
       { name: 'linetta_list_continuity', note: '記録された連続性の指摘とそのID' },
+      { name: 'linetta_list_ledger', note: '作品台帳 — 返すべきものと決まったこと、新しい順' },
+      { name: 'linetta_find_impact', note: '台帳の項目が触れうる書かれたシーン、物語の順に' },
       { name: 'linetta_get_plot', note: 'ストーリーラインとビート' },
       { name: 'linetta_get_fact_cards', note: '出典付きの調査ノート' },
       { name: 'linetta_get_character_visuals', note: 'キャラクターデザインと参照画像' },
@@ -1433,7 +1652,7 @@ export const ja: Translation = {
       { name: 'linetta_create_work', note: '最初のシーンを備えた新しい作品を作成' },
       { name: 'linetta_write_scene', note: '読んだ時点の content_version が必須' },
       { name: 'linetta_revise_scene', note: 'シーン全体を送り直さない部分修正' },
-      { name: 'linetta_apply_story_ops', note: '構造化された物語の変更を一括で' },
+      { name: 'linetta_apply_story_ops', note: '構造化された物語の変更を一括で — 世界観全体の修正と削除を含む' },
       { name: 'linetta_write_summary', note: 'シーン・コンテナの要約と作品のあらすじ' },
       { name: 'linetta_create_checkpoint', note: '大きな改稿の前のラベル付き復元点' },
       { name: 'linetta_undo_last_change', note: 'バッチ単位で一度に取り消し' },
@@ -1444,6 +1663,8 @@ export const ja: Translation = {
       { name: 'linetta_reject_proposals', note: '作家の指示で提案箱の項目を却下' },
       { name: 'linetta_report_continuity', note: '連続性の指摘を正確な引用とともに記録' },
       { name: 'linetta_update_continuity', note: '作家の指示で指摘をまとめて無視・解決・削除' },
+      { name: 'linetta_edit_ledger', note: '台帳の項目を追加・変更・削除 — 固定したルールには触れない' },
+      { name: 'linetta_set_part_arc', note: '部の役割、目標、目標の緊張度' },
       { name: 'linetta_save_forecast', note: 'ありうる分岐を保存 — どれも正史ではありません' },
       { name: 'linetta_propose_style_profile', note: '作者が承認する文体プロフィールの下書きを提案' },
       { name: 'linetta_set_character_visuals', note: 'キャラクターデザインを保存' },
@@ -1453,7 +1674,8 @@ export const ja: Translation = {
       { name: 'linetta_request_illustration', note: '挿絵を依頼 — 承認まで描かれません' },
       { name: 'linetta_set_representative_illustration', note: 'シーン・話・部を代表する絵を設定または解除' },
       { name: 'linetta_register_work', note: '作者が承認した紹介文で作品を Linetta Works に登録' },
-      { name: 'linetta_publish_episode', note: '頼まれた話を公開' }
+      { name: 'linetta_publish_episode', note: '頼まれた話を公開' },
+      { name: 'linetta_publish_cover', note: 'ギャラリーの絵を作品の表紙に — シートは送らない' }
     ],
     safetyLabel: '安全を保つもの',
     safety: [
@@ -1475,7 +1697,7 @@ export const ja: Translation = {
     ],
     byokPoints: [
       '同意はプロバイダーごとで、接続テスト自体もこの同意がないと通りません',
-      'API キーは OS のシークレットストアに入ります。Linux にはストアがないので、ChatGPT サインインと Claude Code だけが使えます',
+      'API キーは OS のシークレットストアに入ります。iPhone・iPad ではキーチェーンで、そこでは API キーのプロバイダーを使います。Linux にはストアがないので、ChatGPT サインインと Claude Code だけが使えます',
       'Cmd/Ctrl+J で開きます — 外部クライアントと同じ MCP レイヤーで Linetta のツールに接続します',
       'すべての呼び出しは同じ活動ログに残り、どのエージェントが呼んだか表示されます',
       '構造的な変更とエージェントが書いたシーンは、その行の取り消しボタンで一手で戻せます（アプリを起動している間、直近 8 件まで）。直前の本文は期限なくバージョンとしても残り、復元できます',
@@ -1483,14 +1705,15 @@ export const ja: Translation = {
       'スキルも貯めます。方法を書き留める文書で、データフォルダの下の普通の SKILL.md ファイルなので、どの編集ソフトでも開けますし、自分の Claude Code をそのフォルダに向けることもできます。すべての作品に適用することも、一つの作品に紐づけることもできます。エージェントは尋ねずに書きます。作家は代わりに、作成者の表示とバージョン履歴とオフのスイッチを設定 → スキルで受け取ります',
       'ツールを8回以上呼んだターンが終わり、返信が送られたあとに、同じプロバイダーと同じモデルへもう一度だけ尋ねます — 書き留める価値のある手法があったか。プロバイダーに課金される追加の呼び出しで、既定はオン、設定 → スキルでオフにできます。Claude Code プロバイダーでは実行されません',
       '1ターンは既定で48回のツール呼び出しで止まり、終えたことと残りを伝えます。上限は設定 → ツール予算で8〜200に変更できます',
+      '会話の記憶量はプロバイダーに合わせて決まります — Claude Code は約 10 万字、それ以外は 4 万字 — 設定で 2 万〜20 万字の間に変えられます',
       '毎日のバックアップはデータベースだけを含みます。スキルのバージョン履歴は含まれ、スキルのフォルダそのものは含まれません'
     ]
   },
 
   data: {
-    mark: '§ 07 — 自分のデータ',
+    mark: '§ 08 — 自分のデータ',
     heading: '原稿は自分が持つファイルです。',
-    sub: 'Linetta にアカウントも必須のクラウドもありません。以下はすべて自分のディスクに、このアプリなしでも読める形式で残ります。',
+    sub: '執筆にアカウントもサーバーも要りません。書いたものはこの端末に、このアプリなしでも読める形式で残り、自分でオンにしたエージェント・公開・同期を通してだけ外へ出ます。',
     cards: [
       {
         tag: 'library.db',
@@ -1522,7 +1745,7 @@ export const ja: Translation = {
   },
 
   download: {
-    mark: '§ 08 — 入手する',
+    mark: '§ 09 — 入手する',
     heading: 'App Store では無料 — Mac、iPhone、iPad。\n他のプラットフォームは署名済みビルドで。',
     sub: 'macOS の直接配布ビルドは Apple Developer ID で署名され、公証済みです。Windows と Linux のインストーラーは毎回の GitHub リリースに含まれます。',
     versionLabel: '現在のリリース',
@@ -1558,12 +1781,12 @@ export const ja: Translation = {
   },
 
   faq: {
-    mark: '§ 09 — 質問',
+    mark: '§ 10 — 質問',
     heading: 'ダウンロードの前に。',
     items: [
       {
         q: 'アカウントや購読は必要ですか。',
-        a: 'いいえ。執筆、整理、取り込みと書き出し、スナップショット、バックアップはすべてアカウントなしで動きます。作るべき Linetta アカウント自体がありません。'
+        a: '購読はありません。執筆、整理、取り込みと書き出し、スナップショット、バックアップはすべてアカウントなしで動きます。Linetta Works のアカウントは、公開するときと端末の間で同期するときだけ必要です。'
       },
       {
         q: 'アプリの中に AI は入っていますか。',
@@ -1575,7 +1798,7 @@ export const ja: Translation = {
       },
       {
         q: '書いたものはどこかにアップロードされますか。',
-        a: '既定ではされず、Linetta はクラウドがなくても使えます。何かをオンにしたときだけこの端末を離れます — 内蔵エージェントは作業中の内容をつないだプロバイダーへ送り、自分で動かす MCP クライアントはそれを読み、選んだ画像プロバイダーは生成を押したときにプロンプトと参照画像を受け取り、公開した話は誰でも読めるよう Linetta Works へ送られ、Linetta Works 同期でアップロードした作品は同じ運営者のサーバーへ送られますが誰にも読めないよう暗号化されており、GitHub 同期やフォルダ同期を設定すると毎日一回と起動のたびに書庫全体を書き出し、同期先に選ぶと暗号化したコピーも一緒に置きます。'
+        a: '既定ではされません。何かをオンにしたときだけこの端末を離れます — 内蔵エージェントは作業中の内容をつないだプロバイダーへ送り、自分で動かす MCP クライアントはそれを読み、選んだ画像プロバイダーは生成を押したときにプロンプトと参照画像を受け取り、公開した話は誰でも読めるよう Linetta Works へ送られ、Linetta Works 同期でアップロードした作品は同じ運営者のサーバーへ送られますが誰にも読めないよう暗号化されており、GitHub 同期やフォルダ同期を設定すると毎日一回と起動のたびに書庫全体を書き出し、同期先に選ぶと暗号化したコピーも一緒に置きます。'
       },
       {
         q: 'iPhone、iPad、Android はどうですか。',

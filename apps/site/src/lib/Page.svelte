@@ -22,7 +22,7 @@
       '@type': 'SoftwareApplication',
       name: 'Linetta',
       applicationCategory: 'WritingApplication',
-      operatingSystem: 'macOS, Windows, Linux',
+      operatingSystem: 'macOS, iOS, iPadOS, Windows, Linux',
       url: canonical,
       description: t.metaDescription,
       inLanguage: t.htmlLang,
@@ -66,6 +66,7 @@
   <Intro {t} />
   <Workspace {t} />
   <Feature id="assist" s={t.assist} layout="wide" />
+  <Feature id="longform" s={t.longform} layout="wide" />
   <Feature id="illustrations" s={t.illustrations} />
   <Feature id="publish" s={t.publish} flip />
   <Agent {t} />
