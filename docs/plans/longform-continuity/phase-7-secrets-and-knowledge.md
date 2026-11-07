@@ -53,7 +53,7 @@ _상태: 계획 (작가 검토 대기)_
 
 ### 작업 그룹 A: 원장 확장
 
-- [ ] **T7.A.1** — 마이그레이션
+- [x] **T7.A.1** — 마이그레이션
   - 파일: `engine/internal/store/migrations/0047_ledger_secrets.sql`
   - 내용:
     - `story_ledger`에 `answer TEXT NOT NULL DEFAULT ''`와 `about TEXT REFERENCES story_ledger(id) ON DELETE SET NULL`을 더한다.
@@ -61,7 +61,7 @@ _상태: 계획 (작가 검토 대기)_
     - `copyRows`가 `SELECT *`라 새 열이 그대로 옮겨지는지 vault 왕복, 복원, 복제 테스트로 확인한다.
   - 검증: `CGO_ENABLED=0 go test ./internal/store/...`
 
-- [ ] **T7.A.2** — 저장소 규칙
+- [x] **T7.A.2** — 저장소 규칙
   - 파일: `engine/internal/ledger/ledger.go`, `repo.go`, `ledger_test.go`
   - 내용:
     - `answer`는 `question`에만 허용한다. `about`은 `knowledge` 종류의 `앎` 속성에만 허용하고, 같은 작품의 `question`만 가리킬 수 있다.
@@ -70,7 +70,7 @@ _상태: 계획 (작가 검토 대기)_
     - 새 오류: `ErrAnswerQuestionOnly`, `ErrAboutKnowsOnly`, `ErrAboutNotQuestion`, `ErrAboutNeedsValue`
   - 검증: `CGO_ENABLED=0 go test ./internal/ledger/...`
 
-- [ ] **T7.A.3** — 도구 입력과 출력
+- [x] **T7.A.3** — 도구 입력과 출력
   - 파일: `engine/internal/mcphost/tools_ledger.go`, `budget_test.go`, 테스트
   - 내용:
     - `editLedgerInput`에 `answer`, `about`을 더한다. 설명은 짧게 쓴다. `answer`는 "작가만 아는 답이며 서술자가 밝히기 전에는 본문에 쓰지 않는다", `about`은 "이 앎이 어떤 질문의 답에 대한 것인지"다.
@@ -80,7 +80,7 @@ _상태: 계획 (작가 검토 대기)_
 
 ### 작업 그룹 B: 시점 조회와 충돌
 
-- [ ] **T7.B.1** — `KnowsAt`
+- [x] **T7.B.1** — `KnowsAt`
   - 파일: `engine/internal/ledger/knows.go` (신규), `knows_test.go`
   - 내용:
     - `KnowsAt(ctx, projectID, nodeID, subjects []string) (Knowledge, error)`를 만든다. 회차 순서는 `newTree`를 쓴다.
@@ -89,7 +89,7 @@ _상태: 계획 (작가 검토 대기)_
   - 테스트: 지불 전후로 독자 앎이 달라진다. 미래의 앎이 안 보인다. 다른 인물의 앎이 섞이지 않는다
   - 검증: `CGO_ENABLED=0 go test ./internal/ledger/...`
 
-- [ ] **T7.B.2** — 앎 충돌
+- [x] **T7.B.2** — 앎 충돌
   - 파일: `engine/internal/ledger/conflict.go`, `conflict_test.go`
   - 내용:
     - `Conflicts`의 `AttributeKnows` 건너뛰기를 좁힌다. `about`이 없는 앎은 지금처럼 건너뛴다. `about`이 있으면 같은 주어·같은 `about`의 앞선 행과 비교한다.
@@ -98,7 +98,7 @@ _상태: 계획 (작가 검토 대기)_
     - Phase 3과 같이 저장은 막지 않는다. 비교는 코드로만 한다.
   - 검증: 두 규칙과 대체 예외 테스트
 
-- [ ] **T7.B.3** — 평가 갱신
+- [x] **T7.B.3** — 평가 갱신
   - 파일: `engine/internal/ledger/eval_test.go`, `testdata/eval/consistency.json`, `scripts/gen-eval-cases.py`
   - 내용:
     - 앎 사례에 대상 질문을 하나 만들고 두 행이 같은 `about`을 가리키게 기록한다. 방향(1 또는 0)은 `scripts/gen-eval-cases.py`가 사례를 만들 때 `fact`에 필드로 넣는다. 테스트가 문장을 해석하지 않는다. 기존 사례의 문장은 바꾸지 않는다.
