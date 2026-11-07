@@ -22,7 +22,12 @@ func (capacityLedger) ContextLedger(context.Context, string, string) (storyconte
 	for i := range 12 {
 		lines = append(lines, fmt.Sprintf("[결정] 사실 %d: %s", i, strings.Repeat("정해진 내용 ", 20)))
 	}
-	return storycontext.LedgerBrief{Due: lines[:6], Settled: lines[6:]}, nil
+	// The secrets section at its budget: 1,500 runes of answers and who knows them.
+	secrets := make([]string, 0, 10)
+	for i := range 10 {
+		secrets = append(secrets, fmt.Sprintf("질문 %d — %s (작가만 앎)", i, strings.Repeat("작가만 아는 답 ", 16)))
+	}
+	return storycontext.LedgerBrief{Due: lines[:6], Settled: lines[6:], Secrets: secrets[:6], Knows: secrets[6:]}, nil
 }
 
 type capacityFacts struct{}

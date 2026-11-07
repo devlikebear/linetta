@@ -174,6 +174,13 @@ type LedgerBrief struct {
 	// State is what is true at this scene, one line a subject, worked out from
 	// the facts in the ledger rather than written by anyone.
 	State []string `json:"state,omitempty"`
+	// Secrets are answers to the reader's questions that the story has not
+	// told yet, one line a question. Only the writer, and now the agent, knows
+	// them; the narrator must not say them before the writer does.
+	Secrets []string `json:"secrets,omitempty"`
+	// Knows is, for the people in this scene, which of those answers each one
+	// knows and which they are told not to.
+	Knows []string `json:"knows,omitempty"`
 	// Due is what the story owes about now.
 	Due []string `json:"due,omitempty"`
 	// Open is what else the story owes.
@@ -187,7 +194,7 @@ type LedgerBrief struct {
 
 // Empty reports whether there is nothing to render.
 func (l LedgerBrief) Empty() bool {
-	return l.Part == nil && l.Arc == nil && len(l.Pinned) == 0 && len(l.State) == 0 && len(l.Due) == 0 && len(l.Open) == 0 && len(l.Settled) == 0 && l.Omitted == 0
+	return l.Part == nil && l.Arc == nil && len(l.Pinned) == 0 && len(l.State) == 0 && len(l.Secrets) == 0 && len(l.Knows) == 0 && len(l.Due) == 0 && len(l.Open) == 0 && len(l.Settled) == 0 && l.Omitted == 0
 }
 
 // PartArcBrief is the current part's job in the whole work.
