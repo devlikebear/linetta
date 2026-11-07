@@ -22,7 +22,7 @@ func episodeLedgerTools(writes *atomic.Int32) RegisterTools {
 		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "ok"}}}, struct{}{}, nil
 	}
 	return func(s *mcp.Server, _ mcphost.ToolGroups) {
-		for _, name := range []string{storyContextTool, "linetta_read_scene", "linetta_list_ledger", "linetta_edit_ledger", "linetta_report_continuity"} {
+		for _, name := range []string{storyContextTool, "linetta_read_scene", "linetta_list_ledger", "linetta_edit_ledger", "linetta_report_continuity", "linetta_revise_scene"} {
 			mcp.AddTool(s, &mcp.Tool{Name: name, Description: name}, ok)
 		}
 		mcp.AddTool(s, &mcp.Tool{Name: "linetta_write_scene", Description: "write"},
@@ -256,6 +256,34 @@ func (c *settleClient) opening() string {
 	return c.firstMsg
 }
 
+// A revise that sweeps the whole work names no scene, so it runs no catch-up
+// and does not use up the turn's one: the write after it does.
+func TestCatchUp_aSweepingReviseLeavesTheCatchUpToTheNextWrite(t *testing.T) {
+	turn := []llm.ChatResponse{
+		toolReply(storyContextTool, `{}`),
+		toolReply("linetta_revise_scene", `{"find":"a","replace":"b"}`),
+		toolReply("linetta_write_scene", `{"node_id":"n5"}`),
+		toolReply("linetta_write_scene", `{"node_id":"n6"}`),
+		textReply("썼어요"),
+	}
+	c, ledger, _ := catchUpTurn(t, true, passFailed, turn, []string{"n2"})
+	got := c.settlementRequests()
+	if len(got) < 1 || !strings.Contains(got[0], "n2") {
+		t.Fatalf("passes = %q, want the catch-up over n2 first", got)
+	}
+	if want := (settlementRecord{"n2", 2, passFailed}); ledger.recorded()[0] != want {
+		t.Errorf("records = %+v", ledger.recorded())
+	}
+	if ledger.asked[0] != "n5" {
+		t.Errorf("Pending asked before %v, want the write after the sweep", ledger.asked)
+	}
+	results := c.turnResults()
+	if len(results) != 4 || strings.Contains(results[1], "Settlement") ||
+		!strings.Contains(results[2], "Settlement pending: 2화.") || strings.Contains(results[3], "Settlement") {
+		t.Errorf("tool results = %q, want the notice on the first write_scene only", results)
+	}
+}
+
 // Past three scenes, the rest are named on the write's own result.
 func TestCatchUp_settlesThreeAndNamesTheRestOnTheWrite(t *testing.T) {
 	c, _, _ := catchUpTurn(t, true, passDone, writingTurn("n6"), []string{"n1", "n2", "n3", "n4", "n5"})
@@ -390,5 +418,35 @@ func TestRunCLI_catchUpRunsOnceBeforeTheFirstWrite(t *testing.T) {
 	}
 	if want := []settlementRecord{{"n1", 1, passDone}, {"n2", 2, passDone}, {"n3", 3, passDone}}; !slices.Equal(ledger.recorded()[:3], want) {
 		t.Errorf("records = %+v", ledger.recorded())
+	}
+}
+
+// The same over the CLI bridge: a sweeping revise first, then the write that
+// runs the catch-up.
+func TestRunCLI_aSweepingReviseLeavesTheCatchUpToTheNextWrite(t *testing.T) {
+	rec := &recorder{}
+	plans := &fakePlans{scenes: map[string]*fakeScene{}}
+	var writes atomic.Int32
+	cc := &settlingClaudeCode{claudeCodeCalls: claudeCodeCalls{calls: [][2]string{
+		{storyContextTool, `{}`},
+		{"linetta_revise_scene", `{}`},
+		{"linetta_write_scene", `{"node_id":"n5"}`},
+	}}}
+	ledger := &fakeSettlements{versions: map[string]int{"n2": 2}, pending: []string{"n2"}}
+	svc := newSettleServiceWith(t, cliProviders{client: cc}, settlePlanTools(plans, &writes), plans, rec, true, ledger, &gateLog{})
+	runID, err := svc.Run(context.Background(), RunRequest{ProjectID: "p1", Prompt: "써 줘"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the run to end", func() bool { return rec.hasTerminalFor(runID) })
+	waitFor(t, "the passes", func() bool { cc.mu.Lock(); defer cc.mu.Unlock(); return cc.passes >= 2 })
+	if len(cc.seen) != 3 {
+		t.Fatalf("calls answered = %d", len(cc.seen))
+	}
+	if len(ledger.asked) == 0 || ledger.asked[0] != "n5" {
+		t.Errorf("Pending asked before %v, want the write after the sweep", ledger.asked)
+	}
+	if got := ledger.recorded(); len(got) == 0 || got[0] != (settlementRecord{"n2", 2, passDone}) {
+		t.Errorf("records = %+v, want the catch-up over n2 first", got)
 	}
 }

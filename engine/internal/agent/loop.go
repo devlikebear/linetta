@@ -674,9 +674,11 @@ func (s *Service) runTool(ctx context.Context, st loopState, call llm.ToolCall) 
 	} else {
 		// Past both gates, the turn's first prose write settles the earlier
 		// scenes the ledger has not caught up with, and names what is left.
+		// The target comes first: a write with none (a revise sweeping the
+		// whole work) must not use up the turn's one catch-up.
 		notice := ""
-		if proseWriteTools[call.Name] && st.caughtUp.first() {
-			if targets := proseTargets(call.Name, call.Arguments); len(targets) > 0 {
+		if proseWriteTools[call.Name] {
+			if targets := proseTargets(call.Name, call.Arguments); len(targets) > 0 && st.caughtUp.first() {
 				notice = s.catchUp(ctx, st, targets[0])
 			}
 		}
