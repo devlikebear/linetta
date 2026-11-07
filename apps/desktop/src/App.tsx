@@ -17,6 +17,9 @@ const Workspace = lazy(() =>
 const ThreadView = lazy(() =>
   import("./routes/ThreadView").then((m) => ({ default: m.ThreadView })),
 );
+const WorksGallery = lazy(() =>
+  import("./routes/WorksGallery").then((m) => ({ default: m.WorksGallery })),
+);
 const Settings = lazy(() =>
   import("./routes/Settings").then((m) => ({ default: m.Settings })),
 );
@@ -48,6 +51,7 @@ function AppRoutes() {
           <Route path="/workspace/:projectId" element={<Workspace />} />
           <Route path="/workspace/:projectId/threads" element={<ThreadView />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/works" element={<WorksGallery />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>

@@ -2115,3 +2115,34 @@ export interface VaultResolveResult {
   push?: VaultPushResult;
   pull?: VaultPullResult;
 }
+
+/** One work readers can see on Linetta Works (works.gallery). */
+export interface WorksGalleryWork {
+  id: string;
+  slug: string;
+  title: string;
+  blurb: string;
+  genres: string[];
+  /** The site's genre key, e.g. "fantasy"; "" before it is classified. */
+  category: string;
+  serial_status: "ongoing" | "completed" | string;
+  author: { handle: string; pen_name: string };
+  episode_count: number;
+  latest_number: number;
+  latest_at: string;
+  /** The cover's hash; "" when the work shows no cover. */
+  cover: string;
+  /** The work's page on the site. */
+  url: string;
+}
+
+export interface WorksGalleryPage {
+  q: string;
+  genre: string;
+  page: number;
+  total_pages: number;
+  total: number;
+  items: WorksGalleryWork[];
+  /** The site's address. */
+  site: string;
+}
