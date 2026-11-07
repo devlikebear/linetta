@@ -16,6 +16,29 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="https://linetta.marvin-42.com/og-image.png" />
     <meta name="twitter:image:alt" content="Linetta — a writing studio for long-form fiction, connected to Linetta Works" />
+    <!-- The English root follows the reader's browser to /ko or /ja on a first
+         visit. A language picked with the switcher (src/lib/locale.ts) wins
+         from then on. Only the root moves: /ko and /ja are always themselves,
+         and a crawler reading in English stays on English. -->
+    <script>
+      (function () {
+        if (location.pathname !== '/') return;
+        var pick = null;
+        try {
+          pick = localStorage.getItem('linetta-site-locale');
+        } catch (e) {}
+        if (!pick) {
+          var langs = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || ''];
+          for (var i = 0; i < langs.length && !pick; i++) {
+            var lang = String(langs[i]).toLowerCase();
+            if (lang.indexOf('ko') === 0) pick = 'ko';
+            else if (lang.indexOf('ja') === 0) pick = 'ja';
+            else if (lang.indexOf('en') === 0) pick = 'en';
+          }
+        }
+        if (pick === 'ko' || pick === 'ja') location.replace('/' + pick + location.search + location.hash);
+      })();
+    </script>
     %sveltekit.head%
   </head>
   <body data-sveltekit-preload-data="hover">

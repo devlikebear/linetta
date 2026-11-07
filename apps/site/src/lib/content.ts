@@ -192,7 +192,7 @@ export const en: Translation = {
   },
 
   hero: {
-    mark: 'macOS · Windows · Linux — with Linetta Works',
+    mark: 'macOS · iPhone · iPad · Windows · Linux — with Linetta Works',
     headline: [
       { text: 'The whole story, ' },
       { text: 'within reach', accent: true },
@@ -271,7 +271,7 @@ export const en: Translation = {
         kicker: 'The shelf',
         title: 'From one line to a full book.',
         body: 'Works sit on a shelf built for more than one of them, with word counts and status. Start a project, or bring an existing manuscript in from Markdown.',
-        alt: 'The Linetta library screen with a project card, buttons for a new project, Markdown import and search.',
+        alt: 'The Linetta library screen with a project card and buttons for a new project, Markdown import, search and browsing Linetta Works.',
         points: [
           'New project, Markdown import, and search across everything',
           'Active and archived shelves',
@@ -383,7 +383,7 @@ export const en: Translation = {
   publish: {
     mark: '§ 05 — Publish',
     heading: 'Readers, when you choose.',
-    sub: 'Linetta Works is an optional reading site for fiction written in Linetta, run by Linetta’s developer. Nothing goes to it until you connect an account, and after that only what you choose to publish.',
+    sub: 'Linetta Works is an optional reading site for fiction written in Linetta, run by Linetta’s developer. Nothing goes to it until you connect an account, and after that only what you choose to publish or sync.',
     link: { label: 'Visit Linetta Works', href: WORKS },
     cards: [
       {
@@ -405,6 +405,16 @@ export const en: Translation = {
         tag: 'What goes',
         title: 'Public, and reviewed',
         body: 'Published text, its illustrations and the sheets you chose are public, and the site sends them to the Anthropic API for content review. Publishing sends no unpublished episodes, notes, fact cards or agent memories.'
+      },
+      {
+        tag: 'In the app',
+        title: 'See what readers read',
+        body: 'The library opens Linetta Works inside the app: search the works readers can see, filter by genre, and open one on the site. Browsing needs no account and sends nothing of yours.'
+      },
+      {
+        tag: 'Sync',
+        title: 'Carry a work between devices',
+        body: 'With an account the operator has approved, Linetta Works sync seals a work on your device and picks it up on another computer, iPhone or iPad — scenes, story notes, pictures and the agent conversation. Not in the Mac App Store build. A free beta, never your only copy.'
       }
     ]
   },
@@ -551,15 +561,15 @@ export const en: Translation = {
 
   download: {
     mark: '§ 08 — Get it',
-    heading: 'Free on the Mac App Store.\nSigned builds everywhere else.',
+    heading: 'Free on the App Store for Mac, iPhone and iPad.\nSigned builds everywhere else.',
     sub: 'The direct macOS build is Developer ID signed and notarised by Apple. Windows and Linux installers are published on every GitHub release.',
     versionLabel: 'Current release',
     version: `v${VERSION}`,
     channels: [
       {
         id: 'mas',
-        label: 'Mac App Store',
-        note: 'Free. The simplest way onto an Apple Silicon Mac.',
+        label: 'App Store — Mac, iPhone, iPad',
+        note: 'Free. The simplest way onto an Apple Silicon Mac, and the way onto iPhone and iPad.',
         cta: { label: 'Open the App Store', href: MAS }
       },
       {
@@ -606,8 +616,8 @@ export const en: Translation = {
         a: 'Not by default, and Linetta needs no cloud. It leaves this device only once you turn something on: the built-in agent sends what it works on to the provider you connected, an MCP client you run reads it, the image provider you chose receives a prompt and any reference images when you press Generate, an episode you publish goes to Linetta Works for anyone to read, a work you upload through Linetta Works sync goes to the same operator’s server sealed so nobody there can read it, and GitHub Sync or Folder Sync, once configured, export your whole library on a daily tick and at every launch, along with a sealed copy if you choose them as a sync target.'
       },
       {
-        q: 'What about iPad and Android?',
-        a: 'The engine is built for mobile targets and the iPad layout is in progress, but mobile does not host the MCP server. The desktop app is the supported product today.'
+        q: 'What about iPhone, iPad and Android?',
+        a: 'Linetta is on the App Store for iPhone and iPad. There you plan and write the same works, use the built-in agent with an API key (Anthropic, Google Gemini or an OpenAI-compatible endpoint), publish to Linetta Works and sync through it. The iOS app hosts no MCP server and has no Git or folder sync. There is no Android app.'
       },
       {
         q: 'What licence is it under?',
@@ -635,7 +645,7 @@ export const en: Translation = {
         { label: 'Licence notice', href: `${REPO}/blob/main/LICENSE-NOTICE.md` }
       ],
       get: [
-        { label: 'Mac App Store', href: MAS },
+        { label: 'App Store', href: MAS },
         { label: 'Homebrew tap', href: 'https://github.com/devlikebear/homebrew-tap' },
         { label: 'Windows & Linux', href: RELEASES }
       ]
@@ -668,7 +678,7 @@ export const ko: Translation = {
   },
 
   hero: {
-    mark: 'macOS · Windows · Linux — Linetta Works와 함께',
+    mark: 'macOS · iPhone · iPad · Windows · Linux — Linetta Works와 함께',
     headline: [
       { text: '쓰고 있는 문장 옆에,' },
       { nl: true },
@@ -743,7 +753,7 @@ export const ko: Translation = {
         kicker: '서가',
         title: '한 줄에서 한 권까지.',
         body: '작품이 여러 권을 전제로 만든 서가에 놓입니다. 분량과 상태가 함께 보이고, 새 작품을 시작하거나 쓰던 원고를 마크다운으로 가져올 수 있습니다.',
-        alt: 'Linetta 서재 화면. 작품 카드 하나와 새 작품·마크다운 가져오기·검색 버튼.',
+        alt: 'Linetta 서재 화면. 작품 카드 하나와 새 작품·마크다운 가져오기·검색·Linetta Works 둘러보기 버튼.',
         points: [
           '새 작품, 마크다운 가져오기, 전체 검색',
           '진행 중과 아카이브',
@@ -855,7 +865,7 @@ export const ko: Translation = {
   publish: {
     mark: '§ 05 — 게시',
     heading: '독자는, 원할 때.',
-    sub: 'Linetta Works는 Linetta로 쓴 소설을 읽는 선택형 사이트이고, Linetta 개발자가 운영합니다. 계정을 연결하기 전에는 아무것도 가지 않고, 연결한 뒤에도 게시하기로 고른 것만 갑니다.',
+    sub: 'Linetta Works는 Linetta로 쓴 소설을 읽는 선택형 사이트이고, Linetta 개발자가 운영합니다. 계정을 연결하기 전에는 아무것도 가지 않고, 연결한 뒤에도 게시하거나 동기화하기로 고른 것만 갑니다.',
     link: { label: 'Linetta Works 둘러보기', href: WORKS },
     cards: [
       {
@@ -877,6 +887,16 @@ export const ko: Translation = {
         tag: '가는 것',
         title: '공개되고, 심사됩니다',
         body: '게시한 본문과 삽화, 고른 시트는 공개되고, 사이트가 내용 심사를 위해 Anthropic API로 보냅니다. 게시하지 않은 회차, 메모, 팩트 카드, 에이전트 기억은 게시로 보내지 않습니다.'
+      },
+      {
+        tag: '앱 안에서',
+        title: '독자가 읽는 작품 둘러보기',
+        body: '서재에서 앱 안으로 Linetta Works를 엽니다. 독자에게 보이는 작품을 찾고 장르로 거르고, 하나를 골라 사이트에서 엽니다. 둘러보기에는 계정이 필요 없고, 내 것은 아무것도 보내지 않습니다.'
+      },
+      {
+        tag: '동기화',
+        title: '기기 사이로 작품 옮기기',
+        body: '운영자가 허가한 계정이면 Linetta Works 동기화가 작품을 기기에서 암호화해 맡기고, 다른 컴퓨터나 iPhone·iPad에서 이어 받습니다. 원고, 설정, 그림, 에이전트와 나눈 대화까지 갑니다. Mac App Store 빌드에는 없습니다. 무료 베타이며 유일한 사본으로 삼지 마십시오.'
       }
     ]
   },
@@ -1023,15 +1043,15 @@ export const ko: Translation = {
 
   download: {
     mark: '§ 08 — 받기',
-    heading: 'Mac App Store에서 무료.\n나머지 플랫폼은 서명된 빌드로.',
+    heading: 'App Store에서 무료 — Mac, iPhone, iPad.\n나머지 플랫폼은 서명된 빌드로.',
     sub: 'macOS 직접 배포 빌드는 Apple Developer ID로 서명되고 공증되었습니다. Windows와 Linux 설치 파일은 모든 GitHub 릴리스에 함께 올라갑니다.',
     versionLabel: '현재 릴리스',
     version: `v${VERSION}`,
     channels: [
       {
         id: 'mas',
-        label: 'Mac App Store',
-        note: '무료. Apple Silicon Mac에 가장 간단히 설치하는 방법입니다.',
+        label: 'App Store — Mac, iPhone, iPad',
+        note: '무료. Apple Silicon Mac에 가장 간단히 설치하는 방법이고, iPhone과 iPad는 여기서 받습니다.',
         cta: { label: 'App Store 열기', href: MAS }
       },
       {
@@ -1078,8 +1098,8 @@ export const ko: Translation = {
         a: '기본값으로는 아니고, Linetta는 클라우드가 없어도 씁니다. 무언가를 켰을 때만 이 기기를 벗어납니다 — 내장 에이전트는 작업 중인 내용을 연결한 프로바이더로 보내고, 직접 실행한 MCP 클라이언트는 그것을 읽으며, 고른 이미지 프로바이더는 생성을 누를 때 프롬프트와 참조 이미지를 받고, 게시한 회차는 누구나 읽도록 Linetta Works로 가고, Linetta Works 동기화로 올린 작품은 같은 운영자의 서버로 가되 아무도 읽을 수 없게 암호화되어 가며, GitHub 동기화나 폴더 동기화를 설정하면 하루 한 번과 실행할 때마다 전체 서재를 내보내고, 동기화 대상으로 고르면 암호화된 사본도 함께 둡니다.'
       },
       {
-        q: 'iPad나 Android는요?',
-        a: '엔진은 모바일 타깃으로도 빌드되고 iPad 레이아웃은 작업 중이지만, 모바일은 MCP 서버를 호스팅하지 않습니다. 오늘 지원되는 제품은 데스크톱 앱입니다.'
+        q: 'iPhone, iPad, Android는요?',
+        a: 'iPhone과 iPad용 Linetta가 App Store에 있습니다. 같은 작품을 기획하고 쓰며, 내장 에이전트를 API 키(Anthropic, Google Gemini, OpenAI 호환 엔드포인트)로 쓰고, Linetta Works에 게시하고 동기화합니다. iOS 앱은 MCP 서버를 열지 않고, Git·폴더 동기화가 없습니다. Android 앱은 없습니다.'
       },
       {
         q: '라이선스는 무엇인가요?',
@@ -1106,7 +1126,7 @@ export const ko: Translation = {
         { label: '라이선스 고지', href: `${REPO}/blob/main/LICENSE-NOTICE.md` }
       ],
       get: [
-        { label: 'Mac App Store', href: MAS },
+        { label: 'App Store', href: MAS },
         { label: 'Homebrew 탭', href: 'https://github.com/devlikebear/homebrew-tap' },
         { label: 'Windows · Linux', href: RELEASES }
       ]
@@ -1139,7 +1159,7 @@ export const ja: Translation = {
   },
 
   hero: {
-    mark: 'macOS · Windows · Linux — Linetta Works とともに',
+    mark: 'macOS · iPhone · iPad · Windows · Linux — Linetta Works とともに',
     headline: [
       { text: 'いま書いている一文のとなりに、' },
       { nl: true },
@@ -1213,7 +1233,7 @@ export const ja: Translation = {
         kicker: '書架',
         title: '一行から一冊まで。',
         body: '作品が複数あることを前提にした書架に並びます。分量と状態が見え、新しい作品を始めることも、書きかけの原稿を Markdown から取り込むこともできます。',
-        alt: 'Linetta のライブラリ画面。作品カードが一つ、新規作成・Markdown 取り込み・検索のボタン。',
+        alt: 'Linetta のライブラリ画面。作品カードが一つ、新規作成・Markdown 取り込み・検索・Linetta Works を見るボタン。',
         points: [
           '新規作成、Markdown 取り込み、全体検索',
           '進行中とアーカイブ',
@@ -1325,7 +1345,7 @@ export const ja: Translation = {
   publish: {
     mark: '§ 05 — 公開',
     heading: '読者には、望むときに。',
-    sub: 'Linetta Works は Linetta で書かれた小説を読む任意のサイトで、Linetta の開発者が運営しています。アカウントをつなぐまで何も送られず、つないだあとも公開すると選んだものだけが送られます。',
+    sub: 'Linetta Works は Linetta で書かれた小説を読む任意のサイトで、Linetta の開発者が運営しています。アカウントをつなぐまで何も送られず、つないだあとも公開や同期を選んだものだけが送られます。',
     link: { label: 'Linetta Works を見る', href: WORKS },
     cards: [
       {
@@ -1347,6 +1367,16 @@ export const ja: Translation = {
         tag: '送られるもの',
         title: '公開され、審査されます',
         body: '公開した本文と挿絵、選んだシートは公開され、サイトが内容審査のため Anthropic API へ送ります。公開していない話、メモ、ファクトカード、エージェントの記憶は公開では送られません。'
+      },
+      {
+        tag: 'アプリの中で',
+        title: '読者が読んでいる作品を見る',
+        body: '書庫からアプリの中で Linetta Works を開きます。読者に見える作品を探し、ジャンルで絞り込み、選んだ作品をサイトで開きます。見て回るのにアカウントは要らず、あなたのものは何も送りません。'
+      },
+      {
+        tag: '同期',
+        title: 'デバイスの間で作品を運ぶ',
+        body: '運営者が許可したアカウントなら、Linetta Works 同期が作品をこの端末で暗号化して預け、別のコンピュータや iPhone・iPad で続きを受け取ります。原稿、設定、画像、エージェントとの会話まで運びます。Mac App Store ビルドにはありません。無料ベータなので、唯一のコピーにはしないでください。'
       }
     ]
   },
@@ -1493,15 +1523,15 @@ export const ja: Translation = {
 
   download: {
     mark: '§ 08 — 入手する',
-    heading: 'Mac App Store では無料。\n他のプラットフォームは署名済みビルドで。',
+    heading: 'App Store では無料 — Mac、iPhone、iPad。\n他のプラットフォームは署名済みビルドで。',
     sub: 'macOS の直接配布ビルドは Apple Developer ID で署名され、公証済みです。Windows と Linux のインストーラーは毎回の GitHub リリースに含まれます。',
     versionLabel: '現在のリリース',
     version: `v${VERSION}`,
     channels: [
       {
         id: 'mas',
-        label: 'Mac App Store',
-        note: '無料。Apple Silicon Mac に入れる一番簡単な方法です。',
+        label: 'App Store — Mac、iPhone、iPad',
+        note: '無料。Apple Silicon Mac に入れる一番簡単な方法で、iPhone と iPad はここから入手します。',
         cta: { label: 'App Store を開く', href: MAS }
       },
       {
@@ -1548,8 +1578,8 @@ export const ja: Translation = {
         a: '既定ではされず、Linetta はクラウドがなくても使えます。何かをオンにしたときだけこの端末を離れます — 内蔵エージェントは作業中の内容をつないだプロバイダーへ送り、自分で動かす MCP クライアントはそれを読み、選んだ画像プロバイダーは生成を押したときにプロンプトと参照画像を受け取り、公開した話は誰でも読めるよう Linetta Works へ送られ、Linetta Works 同期でアップロードした作品は同じ運営者のサーバーへ送られますが誰にも読めないよう暗号化されており、GitHub 同期やフォルダ同期を設定すると毎日一回と起動のたびに書庫全体を書き出し、同期先に選ぶと暗号化したコピーも一緒に置きます。'
       },
       {
-        q: 'iPad や Android はどうですか。',
-        a: 'エンジンはモバイル向けにもビルドされ、iPad のレイアウトも進行中ですが、モバイルは MCP サーバーをホストしません。今日サポートされている製品はデスクトップアプリです。'
+        q: 'iPhone、iPad、Android はどうですか。',
+        a: 'iPhone と iPad 向けの Linetta が App Store にあります。同じ作品を構想して書き、内蔵エージェントを API キー（Anthropic、Google Gemini、OpenAI 互換エンドポイント）で使い、Linetta Works に公開して同期できます。iOS アプリは MCP サーバーを開かず、Git・フォルダ同期はありません。Android アプリはありません。'
       },
       {
         q: 'ライセンスは何ですか。',
@@ -1577,7 +1607,7 @@ export const ja: Translation = {
         { label: 'ライセンス告知', href: `${REPO}/blob/main/LICENSE-NOTICE.md` }
       ],
       get: [
-        { label: 'Mac App Store', href: MAS },
+        { label: 'App Store', href: MAS },
         { label: 'Homebrew tap', href: 'https://github.com/devlikebear/homebrew-tap' },
         { label: 'Windows · Linux', href: RELEASES }
       ]

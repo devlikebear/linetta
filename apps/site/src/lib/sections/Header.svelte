@@ -1,6 +1,7 @@
 <script lang="ts">
   import Wordmark from '$lib/Wordmark.svelte';
   import type { Translation } from '$lib/content';
+  import { rememberLocale } from '$lib/locale';
 
   let { t }: { t: Translation } = $props();
 
@@ -38,8 +39,12 @@
     <div class="flex items-center gap-3">
       <div class="hidden items-center gap-2 whitespace-nowrap font-mono text-[0.7rem] text-muted-2 sm:flex">
         {#each t.alts as alt}
-          <a href={alt.path} hreflang={alt.locale} class="transition-colors hover:text-ink"
-            >{alt.label}</a
+          <a
+            href={alt.path}
+            hreflang={alt.locale}
+            data-sveltekit-reload
+            class="transition-colors hover:text-ink"
+            onclick={() => rememberLocale(alt.locale)}>{alt.label}</a
           >
         {/each}
       </div>

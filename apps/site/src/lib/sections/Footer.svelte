@@ -1,6 +1,7 @@
 <script lang="ts">
   import Wordmark from '$lib/Wordmark.svelte';
   import type { Translation } from '$lib/content';
+  import { rememberLocale } from '$lib/locale';
 
   let { t }: { t: Translation } = $props();
   const year = new Date().getFullYear();
@@ -22,8 +23,12 @@
       <p class="mt-4 max-w-[24rem] text-[0.9rem] leading-[1.75] text-muted">{t.footer.tagline}</p>
       <div class="mt-5 flex gap-3 font-mono text-[0.7rem] text-muted-2">
         {#each t.alts as alt}
-          <a href={alt.path} hreflang={alt.locale} class="transition-colors hover:text-ink"
-            >{alt.label}</a
+          <a
+            href={alt.path}
+            hreflang={alt.locale}
+            data-sveltekit-reload
+            class="transition-colors hover:text-ink"
+            onclick={() => rememberLocale(alt.locale)}>{alt.label}</a
           >
         {/each}
       </div>
