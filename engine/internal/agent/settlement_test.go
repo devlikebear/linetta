@@ -87,6 +87,7 @@ type settleClient struct {
 	mode     string // done | timeout | failed
 	passes   []string
 	firstMsg string
+	lastTurn []llm.ChatMessage
 	calls    atomic.Int32
 }
 
@@ -114,6 +115,7 @@ func (c *settleClient) Chat(_ context.Context, msgs []llm.ChatMessage, _ llm.Cha
 	if c.turns == 0 {
 		c.firstMsg = msgs[len(msgs)-1].Content
 	}
+	c.lastTurn = slices.Clone(msgs)
 	c.turns++
 	return c.turn[pick(c.turns, len(c.turn))], nil
 }
@@ -126,13 +128,19 @@ func (c *settleClient) settlementRequests() []string {
 
 func newSettleService(t *testing.T, c llm.Client, rec *recorder, on bool, ledger *fakeSettlements, log *gateLog) *Service {
 	t.Helper()
-	st := openStoreForAgentTests(t)
 	var writes atomic.Int32
+	return newSettleServiceWith(t, fakeProviders{client: c}, episodeLedgerTools(&writes), nil, rec, on, ledger, log)
+}
+
+func newSettleServiceWith(t *testing.T, providers ProviderSource, register RegisterTools, plans PlanLookup, rec *recorder, on bool, ledger *fakeSettlements, log *gateLog) *Service {
+	t.Helper()
+	st := openStoreForAgentTests(t)
 	svc := New(Deps{
-		Providers:         fakeProviders{client: c},
+		Providers:         providers,
+		Plans:             plans,
 		History:           companion.NewHistoryRepo(st.DB()),
 		Scope:             fakeScope{titles: map[string]string{"p1": "제목"}, labels: map[string]string{"n1": "1화", "n2": "2화", "n3": "3화", "n4": "4화", "n5": "5화", "n6": "6화"}},
-		Register:          episodeLedgerTools(&writes),
+		Register:          register,
 		Notify:            rec.notify,
 		Language:          func() string { return "ko" },
 		SettlementEnabled: func() bool { return on },
@@ -165,98 +173,222 @@ func TestSettlement_recordsHowThePassEnded(t *testing.T) {
 	}
 }
 
-func (c *settleClient) opening() string {
+func (c *settleClient) turnResults() []string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.firstMsg
+	return toolMessages(c.lastTurn)
 }
 
-func catchUpTurn(t *testing.T, on bool, mode, nodeID string, pending []string) (*settleClient, *fakeSettlements, *gateLog) {
+func catchUpTurn(t *testing.T, on bool, mode string, turn []llm.ChatResponse, pending []string) (*settleClient, *fakeSettlements, *gateLog) {
 	t.Helper()
 	rec := &recorder{}
-	c := &settleClient{turn: []llm.ChatResponse{textReply("네")}, mode: mode}
-	ledger := &fakeSettlements{versions: map[string]int{"n2": 2, "n3": 3, "n4": 4, "n5": 5, "n6": 6}, pending: pending}
+	c := &settleClient{turn: turn, mode: mode}
+	ledger := &fakeSettlements{versions: map[string]int{"n1": 1, "n2": 2, "n3": 3, "n4": 4, "n5": 5, "n6": 6}, pending: pending}
 	log := &gateLog{}
 	svc := newSettleService(t, c, rec, on, ledger, log)
-	if _, err := svc.Run(context.Background(), RunRequest{ProjectID: "p1", NodeID: nodeID, Prompt: "다음 화 써 줘"}); err != nil {
+	if _, err := svc.Run(context.Background(), RunRequest{ProjectID: "p1", NodeID: "n1", Prompt: "다음 화 써 줘"}); err != nil {
 		t.Fatal(err)
 	}
 	waitFor(t, "agent.done", func() bool { return rec.has("agent.done") })
+	if err := svc.Close(); err != nil {
+		t.Fatal(err)
+	}
 	return c, ledger, log
 }
 
-// Settlement off: the turn makes no call before or after itself.
+// A turn that writes no prose never waits on a settlement, whether the writer
+// has it on or off — even with a scene open and episodes waiting.
+func TestCatchUp_aTurnWithNoProseWriteCatchesNothingUp(t *testing.T) {
+	for _, on := range []bool{false, true} {
+		c, ledger, log := catchUpTurn(t, on, passDone, []llm.ChatResponse{textReply("네")}, []string{"n2"})
+		if got := c.settlementRequests(); len(got) != 0 {
+			t.Fatalf("on=%v: passes = %q, want none", on, got)
+		}
+		if len(ledger.asked) != 0 || len(log.all()) != 0 {
+			t.Errorf("on=%v: Pending asked %v, activity %+v", on, ledger.asked, log.all())
+		}
+	}
+}
+
+// Settlement off: a writing turn makes no call before its write either.
 func TestCatchUp_nothingRunsWhenSettlementIsOff(t *testing.T) {
-	c, ledger, _ := catchUpTurn(t, false, passDone, "n1", []string{"n2"})
+	c, ledger, _ := catchUpTurn(t, false, passDone, writingTurn("n5"), []string{"n2"})
 	if got := c.settlementRequests(); len(got) != 0 {
 		t.Fatalf("passes = %q, want none", got)
 	}
 	if len(ledger.asked) != 0 {
 		t.Errorf("Pending was asked %v with settlement off", ledger.asked)
 	}
-	if strings.Contains(c.opening(), "Settlement pending") {
-		t.Errorf("opening = %q", c.opening())
-	}
 }
 
-// A turn with no scene catches nothing up.
-func TestCatchUp_aTurnWithNoSceneCatchesNothingUp(t *testing.T) {
-	c, _, _ := catchUpTurn(t, true, passDone, "", []string{"n2"})
-	if got := c.settlementRequests(); len(got) != 0 {
-		t.Fatalf("passes = %q, want none", got)
-	}
-}
-
-// Only the waiting scenes are settled, before the turn, and once they are, the
-// turn is told nothing.
-func TestCatchUp_settlesTheWaitingScenesBeforeTheTurn(t *testing.T) {
-	c, ledger, log := catchUpTurn(t, true, passDone, "n1", []string{"n3", "n5"})
+// The turn's first prose write settles what waits before its scene, once;
+// the second write in the same turn does not run it again.
+func TestCatchUp_runsOnceBeforeTheFirstWrite(t *testing.T) {
+	c, ledger, log := catchUpTurn(t, true, passDone, writingTurn("n5", "n6"), []string{"n2", "n3"})
+	// The pass after the turn settles what it wrote; the first is the catch-up.
 	got := c.settlementRequests()
-	if len(got) != 1 || !strings.Contains(got[0], "n3") || !strings.Contains(got[0], "n5") || strings.Contains(got[0], "n4") {
-		t.Fatalf("passes = %q, want one over n3 and n5", got)
+	if len(got) != 2 || !strings.Contains(got[0], "n2") || !strings.Contains(got[0], "n3") || strings.Contains(got[1], "n2") {
+		t.Fatalf("passes = %q, want the catch-up over n2 and n3, then the turn's own", got)
 	}
-	if ledger.asked[0] != "n1" {
-		t.Errorf("Pending asked before %q, want the turn's scene", ledger.asked[0])
+	if len(ledger.asked) != 2 || ledger.asked[0] != "n5" || ledger.asked[1] != "n5" {
+		t.Errorf("Pending asked before %v, want the first write's scene, before and after the pass", ledger.asked)
 	}
-	if want := []settlementRecord{{"n3", 3, passDone}, {"n5", 5, passDone}}; !slices.Equal(ledger.recorded(), want) {
+	if want := []settlementRecord{{"n2", 2, passDone}, {"n3", 3, passDone}}; !slices.Equal(ledger.recorded()[:2], want) {
 		t.Errorf("records = %+v", ledger.recorded())
 	}
+	results := c.turnResults()
+	if len(results) != 3 || results[1] != "written" || results[2] != "written" {
+		t.Errorf("tool results = %q, want both writes run with no notice once nothing waits", results)
+	}
 	if strings.Contains(c.opening(), "Settlement pending") {
-		t.Errorf("opening = %q, want no notice once nothing is waiting", c.opening())
+		t.Errorf("opening = %q, want nothing before the writer's message", c.opening())
 	}
 	rows := log.all()
-	if len(rows) != 1 || rows[0].Kind != SettlementCatchUp || !rows[0].OK || rows[0].NodeID != "n3" ||
+	if len(rows) != 1 || rows[0].Kind != SettlementCatchUp || !rows[0].OK || rows[0].NodeID != "n2" ||
 		!strings.Contains(rows[0].Detail, "scenes=2 left=0") {
 		t.Errorf("activity rows = %+v", rows)
 	}
 }
 
-// Past three scenes, the rest go to the notice.
-func TestCatchUp_settlesThreeAndNamesTheRest(t *testing.T) {
-	c, _, _ := catchUpTurn(t, true, passDone, "n1", []string{"n2", "n3", "n4", "n5", "n6"})
+func (c *settleClient) opening() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.firstMsg
+}
+
+// Past three scenes, the rest are named on the write's own result.
+func TestCatchUp_settlesThreeAndNamesTheRestOnTheWrite(t *testing.T) {
+	c, _, _ := catchUpTurn(t, true, passDone, writingTurn("n6"), []string{"n1", "n2", "n3", "n4", "n5"})
 	got := c.settlementRequests()
-	if len(got) != 1 || !strings.Contains(got[0], "n4") || strings.Contains(got[0], "n5") {
-		t.Fatalf("passes = %q, want one over n2..n4", got)
+	if len(got) != 2 || !strings.Contains(got[0], "n3") || strings.Contains(got[0], "n4") {
+		t.Fatalf("passes = %q, want the catch-up over n1..n3, then the turn's own", got)
 	}
-	opening := c.opening()
-	if !strings.Contains(opening, "Settlement pending: 5화, 6화.") {
-		t.Errorf("opening = %q, want 5화 and 6화 named", opening)
-	}
-	if !strings.HasSuffix(opening, "다음 화 써 줘") {
-		t.Errorf("opening = %q, want the writer's message after the notice", opening)
+	results := c.turnResults()
+	if len(results) != 2 || !strings.HasPrefix(results[1], "written\n") || !strings.Contains(results[1], "Settlement pending: 4화, 5화.") {
+		t.Errorf("write result = %q, want the write's own result and then 4화, 5화", results)
 	}
 }
 
-// A failed catch-up does not stop the turn: it goes ahead, told what waits.
-func TestCatchUp_aFailedPassDoesNotStopTheTurn(t *testing.T) {
-	c, ledger, log := catchUpTurn(t, true, passFailed, "n1", []string{"n2"})
-	if want := []settlementRecord{{"n2", 2, passFailed}}; !slices.Equal(ledger.recorded(), want) {
+// A failed catch-up does not stop the write.
+func TestCatchUp_aFailedPassDoesNotStopTheWrite(t *testing.T) {
+	c, ledger, log := catchUpTurn(t, true, passFailed, writingTurn("n5"), []string{"n2"})
+	if want := []settlementRecord{{"n2", 2, passFailed}}; !slices.Equal(ledger.recorded()[:1], want) {
 		t.Errorf("records = %+v", ledger.recorded())
 	}
-	if !strings.Contains(c.opening(), "Settlement pending: 2화.") {
-		t.Errorf("opening = %q", c.opening())
+	results := c.turnResults()
+	if len(results) != 2 || !strings.HasPrefix(results[1], "written") || !strings.Contains(results[1], "Settlement pending: 2화.") {
+		t.Errorf("write result = %q", results)
 	}
 	if rows := log.all(); len(rows) != 1 || rows[0].OK {
 		t.Errorf("activity rows = %+v, want one catch-up that did not finish", rows)
+	}
+}
+
+// A write the plan gate turns back runs no catch-up; the write after the plan
+// does.
+func TestCatchUp_waitsForTheWriteThePlanGateLetsThrough(t *testing.T) {
+	rec := &recorder{}
+	plans := &fakePlans{scenes: map[string]*fakeScene{"n5": {empty: true}}}
+	// The pass fails, so the waiting scene is named on whichever write ran the
+	// catch-up: it must be the one after the plan.
+	c := &settleClient{mode: passFailed, turn: []llm.ChatResponse{
+		toolReply(storyContextTool, `{}`),
+		toolReply("linetta_write_scene", `{"node_id":"n5"}`),
+		toolReply(planTool, `{"node_id":"n5","as_plan":true}`),
+		toolReply("linetta_write_scene", `{"node_id":"n5"}`),
+		textReply("썼어요"),
+	}}
+	ledger := &fakeSettlements{versions: map[string]int{"n2": 2}, pending: []string{"n2"}}
+	var writes atomic.Int32
+	svc := newSettleServiceWith(t, fakeProviders{client: c}, settlePlanTools(plans, &writes), plans, rec, true, ledger, &gateLog{})
+	if _, err := svc.Run(context.Background(), RunRequest{ProjectID: "p1", NodeID: "n1", Prompt: "써 줘"}); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "agent.done", func() bool { return rec.has("agent.done") })
+	if err := svc.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if got := c.settlementRequests(); len(got) != 2 || !strings.Contains(got[0], "n2") {
+		t.Fatalf("passes = %q, want one catch-up (before the write after the plan), then the turn's own", got)
+	}
+	results := c.turnResults()
+	if len(results) != 4 || !strings.HasPrefix(results[1], "Not written.") || strings.Contains(results[1], "Settlement") {
+		t.Fatalf("tool results = %q, want the refusal without a catch-up", results)
+	}
+	if !strings.HasPrefix(results[3], "written") || !strings.Contains(results[3], "Settlement pending: 2화.") || writes.Load() != 1 {
+		t.Errorf("write after the plan = %q (writes %d)", results[3], writes.Load())
+	}
+}
+
+// settlePlanTools is planTools plus what a settlement pass needs.
+func settlePlanTools(plans *fakePlans, writes *atomic.Int32) RegisterTools {
+	base := planTools(plans, true, writes)
+	ok := func(context.Context, *mcp.CallToolRequest, map[string]any) (*mcp.CallToolResult, struct{}, error) {
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "ok"}}}, struct{}{}, nil
+	}
+	return func(s *mcp.Server, g mcphost.ToolGroups) {
+		base(s, g)
+		for _, name := range []string{"linetta_read_scene", "linetta_list_ledger", "linetta_edit_ledger", "linetta_report_continuity"} {
+			mcp.AddTool(s, &mcp.Tool{Name: name, Description: name}, ok)
+		}
+	}
+}
+
+// settlingClaudeCode is claudeCodeCalls that also answers a settlement pass:
+// it stops at once, done.
+type settlingClaudeCode struct {
+	claudeCodeCalls
+	mu     sync.Mutex
+	passes int
+}
+
+func (f *settlingClaudeCode) Chat(ctx context.Context, msgs []llm.ChatMessage, opts llm.ChatOptions) (llm.ChatResponse, error) {
+	if strings.HasPrefix(msgs[0].Content, "You are settling") {
+		f.mu.Lock()
+		f.passes++
+		f.mu.Unlock()
+		return llm.ChatResponse{Message: llm.ChatMessage{Role: "assistant", Content: "끝"}}, nil
+	}
+	return f.claudeCodeCalls.Chat(ctx, msgs, opts)
+}
+
+// Over the CLI bridge the same: once, before the first write, and the rest on
+// that write's result.
+func TestRunCLI_catchUpRunsOnceBeforeTheFirstWrite(t *testing.T) {
+	rec := &recorder{}
+	plans := &fakePlans{scenes: map[string]*fakeScene{}}
+	var writes atomic.Int32
+	cc := &settlingClaudeCode{claudeCodeCalls: claudeCodeCalls{calls: [][2]string{
+		{storyContextTool, `{}`},
+		{"linetta_write_scene", `{"node_id":"n5"}`},
+		{"linetta_write_scene", `{"node_id":"n6"}`},
+	}}}
+	ledger := &fakeSettlements{versions: map[string]int{"n1": 1, "n2": 2, "n3": 3, "n4": 4}, pending: []string{"n1", "n2", "n3", "n4"}}
+	svc := newSettleServiceWith(t, cliProviders{client: cc}, settlePlanTools(plans, &writes), plans, rec, true, ledger, &gateLog{})
+	runID, err := svc.Run(context.Background(), RunRequest{ProjectID: "p1", Prompt: "써 줘"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the run to end", func() bool { return rec.hasTerminalFor(runID) })
+	cc.mu.Lock()
+	passes := cc.passes
+	cc.mu.Unlock()
+	// The settlement after the turn (settlement switched on, two scenes
+	// written) is a second pass; wait for it so Close does not race it.
+	waitFor(t, "the passes", func() bool { cc.mu.Lock(); defer cc.mu.Unlock(); return cc.passes >= 2 })
+	if passes < 1 {
+		t.Fatalf("no catch-up ran before the first write")
+	}
+	if len(cc.seen) != 3 || writes.Load() != 2 {
+		t.Fatalf("calls answered = %d, writes %d", len(cc.seen), writes.Load())
+	}
+	if first := textOf(cc.seen[1]); !strings.Contains(first, "Settlement pending: 4화.") {
+		t.Errorf("first write over the bridge = %q, want 4화 named", first)
+	}
+	if second := textOf(cc.seen[2]); strings.Contains(second, "Settlement") {
+		t.Errorf("second write = %q, want no second catch-up", second)
+	}
+	if want := []settlementRecord{{"n1", 1, passDone}, {"n2", 2, passDone}, {"n3", 3, passDone}}; !slices.Equal(ledger.recorded()[:3], want) {
+		t.Errorf("records = %+v", ledger.recorded())
 	}
 }

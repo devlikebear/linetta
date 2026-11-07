@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/devlikebear/tars/pkg/llm"
@@ -59,10 +60,12 @@ func (s *Service) settle(ctx context.Context, st loopState, name string, scenes 
 }
 
 // A turn that writes after scenes the ledger has not caught up with settles
-// them first. Refusing the turn instead would be a refusal the agent cannot
-// act on: settlement is a pass, not a tool it can call. So the turn catches up,
-// oldest first and within a short budget, and goes ahead whatever happens; the
-// scenes still waiting are named in a line before the writer's message.
+// them first. Refusing the write instead would be a refusal the agent cannot
+// act on: settlement is a pass, not a tool it can call. So the turn's first
+// prose write — once both gates let it through — catches up, oldest first and
+// within a short budget, and goes ahead whatever happens; the scenes still
+// waiting are named in a line on that write's result. A turn that writes no
+// prose — a question, a world edit — never waits on a settlement.
 const (
 	catchUpMaxScenes = 3
 	catchUpTimeout   = 2 * time.Minute
@@ -70,12 +73,32 @@ const (
 	catchUpNoticeMax = 10
 )
 
-// catchUp settles what is waiting before the scene this turn is about, and
-// returns the notice for what is still waiting, or "". A turn with no scene —
-// a question, a world edit — catches nothing up, and neither does a writer who
-// has settlement off: they pay for no call they did not switch on.
-func (s *Service) catchUp(ctx context.Context, st loopState) string {
-	target := strings.TrimSpace(st.req.NodeID)
+// catchUpOnce lets one prose write per turn run the catch-up. The mutex is
+// for the CLI bridge, whose calls arrive on HTTP handlers.
+type catchUpOnce struct {
+	mu   sync.Mutex
+	done bool
+}
+
+// first reports whether this is the turn's first call to ask, and marks it.
+func (c *catchUpOnce) first() bool {
+	if c == nil {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.done {
+		return false
+	}
+	c.done = true
+	return true
+}
+
+// catchUp settles what is waiting before target, the scene the write is
+// about, and returns the notice for what is still waiting, or "". A writer
+// who has settlement off pays for no call they did not switch on.
+func (s *Service) catchUp(ctx context.Context, st loopState, target string) string {
+	target = strings.TrimSpace(target)
 	if target == "" || s.deps.Settlements == nil || s.deps.SettlementEnabled == nil || !s.deps.SettlementEnabled() ||
 		!offers(st.schemas, "linetta_edit_ledger") {
 		return ""

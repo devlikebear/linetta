@@ -189,6 +189,7 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 		historyBudget: s.replayBudget(resolved.ID),
 		brief:         newBriefGate(schemas),
 		plan:          newPlanGate(s.deps.Plans, schemas),
+		caughtUp:      &catchUpOnce{},
 	}
 
 	handedOff = true
@@ -211,9 +212,6 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 					fmt.Sprintf("internal error: %v", r), companion.HistoryStatusFailed)
 			}
 		}()
-		// Earlier scenes the ledger has not caught up with are settled first,
-		// within a short budget; what is left is named to the model.
-		st.notice = s.catchUp(runCtx, st)
 		if provider.IsSelfExecuting(st.provider) {
 			s.loopCLI(runCtx, st)
 			return
@@ -276,9 +274,10 @@ type loopState struct {
 	// plan holds the first prose of an empty scene back until something says
 	// what the scene is for (plangate.go).
 	plan *planGate
-	// notice is a line put before the writer's message, naming the earlier
-	// scenes still waiting for settlement after the catch-up (settlement.go).
-	notice string
+	// caughtUp marks that this turn's first prose write already ran the
+	// settlement catch-up (settlement.go). A pointer for the same reason as
+	// brief: the loop and the CLI bridge pass copies of the state around.
+	caughtUp *catchUpOnce
 }
 
 // releaseSession drops one reference and logs a close that failed. A helper
@@ -643,11 +642,7 @@ func (s *Service) openingMessages(ctx context.Context, st loopState) []llm.ChatM
 	msgs = append(msgs, replay...)
 
 	scope := scopeLine(ctx, s.deps.Scope, st.req.ProjectID, st.req.NodeID)
-	head := scope
-	if st.notice != "" {
-		head += "\n" + st.notice
-	}
-	msg := llm.ChatMessage{Role: "user", Content: head + "\n\n" + st.req.Prompt}
+	msg := llm.ChatMessage{Role: "user", Content: scope + "\n\n" + st.req.Prompt}
 	if len(st.req.Images) > 0 {
 		msg.ContentBlocks = append(msg.ContentBlocks, llm.ContentBlock{Type: "text", Text: msg.Content})
 		for _, img := range st.req.Images {
@@ -677,8 +672,19 @@ func (s *Service) runTool(ctx context.Context, st loopState, call llm.ToolCall) 
 		result = toolResult{IsError: true, Text: refusal}
 		s.recordGate(ctx, GateEvent{Kind: GatePlan, ProjectID: st.projectID, NodeID: nodeID, RunID: st.runID, Detail: "refused: no plan"})
 	} else {
+		// Past both gates, the turn's first prose write settles the earlier
+		// scenes the ledger has not caught up with, and names what is left.
+		notice := ""
+		if proseWriteTools[call.Name] && st.caughtUp.first() {
+			if targets := proseTargets(call.Name, call.Arguments); len(targets) > 0 {
+				notice = s.catchUp(ctx, st, targets[0])
+			}
+		}
 		result = st.session.call(ctx, st.runID, call.Name, call.Arguments)
 		st.brief.ran(call.Name, !result.IsError)
+		if notice != "" {
+			result.Text += "\n" + notice
+		}
 	}
 
 	state := "done"
