@@ -28,7 +28,7 @@ Linetta is made for novelists and web-fiction writers who want their manuscript,
 - **See your story.** Optionally draw illustrations with ChatGPT or Gemini from your scenes and character sheets. Earlier pictures go along so faces stay the same, and nothing is drawn until you press Generate.
 - **Keep your work local.** Projects live in a local SQLite database with version snapshots and daily backups. No Linetta account or mandatory cloud is required.
 - **Publish when you choose.** Optionally connect an account on [Linetta Works](https://works.marvin-42.com) and put an episode up for readers straight from the app. Only the episodes you publish — and the Story World sheets and cover you choose to make public — leave your device. Share a published episode to X, Threads, Naver Blog, KakaoTalk, or Instagram from the publish dialog.
-- **Carry a work between devices.** If the site's operator has approved your account, Linetta Works sync keeps a work sealed under a recovery key only you hold, so you can pick it up on another computer. It is a free beta and never your only copy.
+- **Carry a work between devices.** If the site's operator has approved your account, Linetta Works sync keeps a work sealed under a recovery key only you hold, so you can pick it up on another computer or on iOS. It is a free beta and never your only copy.
 - **Move your manuscript freely.** Import and export Markdown, and optionally sync exported work through Git.
 
 ## See Linetta in action
@@ -715,8 +715,10 @@ you make them private or delete them.
 
 Linetta Works sync carries a work between your devices through Linetta Works
 without the site being able to read it. It is a free beta for accounts the
-operator has approved, and the desktop app is the only place to use it. The Mac
-App Store build does not include it.
+operator has approved. The desktop apps (outside the Mac App Store) and the iOS
+app include it; on iOS, Linetta Works is the only sync target, and automatic sync
+pauses while the app is in the background. The Mac App Store build does not
+include it.
 
 **Turn it on.** Connect your account under **Settings → Publishing**, then open
 **Settings → Sync**. It takes you to the site to read the agreement

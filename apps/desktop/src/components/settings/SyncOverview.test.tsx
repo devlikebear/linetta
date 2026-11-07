@@ -41,6 +41,14 @@ describe("SyncOverview", () => {
     rpc.setup.mockResolvedValue({ key_stored: true });
   });
 
+  it("leaves out the targets when Linetta Works is the only one (iOS), but keeps automatic sync and the items", async () => {
+    rpc.targets.mockResolvedValue({ ...VIEW, targets: [target("works")] });
+    render(<SyncOverview />);
+    expect(await screen.findByTestId("sync-auto-stub")).toBeInTheDocument();
+    expect(screen.getByTestId("vault-items-stub")).toBeInTheDocument();
+    expect(screen.queryByTestId("sync-overview")).toBeNull();
+  });
+
   it("shows the two-way target, and it cannot also be a mirror", async () => {
     render(<SyncOverview />);
     expect(await screen.findByTestId("sync-primary-works")).toBeChecked();

@@ -110,8 +110,13 @@ export function SyncOverview() {
     return target.bytes > 0 ? formatVaultBytes(target.bytes) : "";
   };
 
+  // With Linetta Works the only place (iOS) there is no target to choose, and
+  // its own section says everything.
+  const choosable = view.targets.length > 1;
+
   return (
     <>
+    {choosable && (
     <section className="settings-section" data-testid="sync-overview">
       <h3>{t("settings.sync.targetsTitle")}</h3>
       <p className="sd">{t("settings.sync.targetsNote")}</p>
@@ -231,6 +236,7 @@ export function SyncOverview() {
       {restored && <p className="sd" role="status" data-testid="sync-restored">{t("settings.sync.restored")}</p>}
       {error ? <p className="sd" role="alert" data-testid="sync-targets-error">{rpcErrorMessage(error, t)}</p> : null}
     </section>
+    )}
     <SyncAutoPanel editable />
     <VaultItemList editable />
     </>

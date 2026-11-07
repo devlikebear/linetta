@@ -5,10 +5,10 @@ import { readSource } from "../test/readSource";
 // The provider-restriction note went with the provider chooser: a build that
 // cannot reach some providers no longer has a list to filter.
 describe("Settings iOS feature-reduction UX", () => {
-  it("shows a disabled git-sync note when gitSyncAvailable is false", async () => {
+  it("shows a disabled git-sync note only where folders exist (the store build, not iOS)", async () => {
     const settings = await readSource("routes/Settings.tsx");
 
-    expect(settings).toContain("!gitSyncAvailable && (");
+    expect(settings).toContain("!gitSyncAvailable && foldersAvailable && (");
     expect(settings).toContain('t("settings.git.unavailableNote")');
   });
 

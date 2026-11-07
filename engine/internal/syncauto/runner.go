@@ -1,5 +1,3 @@
-//go:build !mobile
-
 // Package syncauto keeps a library in step with the vault on its own. It decides
 // when; internal/vault decides what. The engine runs it, so it keeps going with
 // the window closed as long as the app stays in the background.

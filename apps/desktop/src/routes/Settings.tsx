@@ -152,8 +152,8 @@ export function Settings() {
   // Hidden on builds that cannot publish to Linetta Works (iOS).
   const [publishAvailable, setPublishAvailable] = useState(false);
   const [vaultAvailable, setVaultAvailable] = useState(false);
-  // Off on iOS, where the folder picker has nothing to pick. With git and the
-  // vault also off there, the whole sync tab goes.
+  // Off on iOS, where the folder picker has nothing to pick. Git is off there
+  // too, so the sync tab holds Linetta Works alone.
   const [foldersAvailable, setFoldersAvailable] = useState(false);
   const [current, setCurrent] = useState<SettingsRow | null>(null);
   const [tab, setTabState] = useState<SettingsTab>(initialTab);
@@ -900,7 +900,8 @@ export function Settings() {
               </>
             )}
 
-            {tab === "sync" && !gitSyncAvailable && (
+            {/* iOS has no folder for git to work in, so it says nothing about it. */}
+            {tab === "sync" && !gitSyncAvailable && foldersAvailable && (
             <section className="settings-section">
               <h3>{t("settings.git.title")}</h3>
               <p className="sd">{t("settings.git.unavailableNote")}</p>
