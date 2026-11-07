@@ -62,7 +62,8 @@ func Open(ctx context.Context, opts Options) (*App, error) {
 	posts := post.NewRepo(st)
 	a.server.Handle("ping", handlers.Ping)
 	a.server.Handle("posts.import_preview", handlers.ImportPreview())
-	a.server.Handle("posts.import", handlers.Import(posts))
+	voiceCache := handlers.NewVoiceCache(posts)
+	a.server.Handle("posts.import", voiceCache.InvalidateAfter(handlers.Import(posts)))
 	a.server.Handle("posts.list", handlers.ListPosts(posts))
 	a.server.Handle("posts.counts", handlers.CountPosts(posts))
 	a.server.Handle("voice.profile", handlers.VoiceProfile(posts))
@@ -72,6 +73,7 @@ func Open(ctx context.Context, opts Options) (*App, error) {
 	a.server.Handle("drafts.list", handlers.ListDrafts(drafts))
 	a.server.Handle("drafts.update", handlers.UpdateDraft(drafts))
 	a.server.Handle("drafts.delete", handlers.DeleteDraft(drafts))
+	a.server.Handle("check.run", handlers.RunCheck(voiceCache))
 	return a, nil
 }
 

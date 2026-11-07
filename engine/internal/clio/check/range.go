@@ -54,18 +54,22 @@ func ranges(body string, ctx voice.ContextProfile, corpus Corpus) []Finding {
 			})
 			continue
 		}
-		var dir string
+		var msg string
 		switch {
+		case v > st.P90 && rf.name == "length":
+			msg = "글이 평소보다 길어요"
 		case v > st.P90:
-			dir = "많아요"
-		case v < st.P10:
-			dir = "적어요"
+			msg = fmt.Sprintf("%s가 평소보다 많아요", rf.noun)
+		// A short draft is not off-voice, and every draft is short while it
+		// is being typed, so length has no lower bound.
+		case v < st.P10 && rf.name != "length":
+			msg = fmt.Sprintf("%s가 평소보다 적어요", rf.noun)
 		default:
 			continue
 		}
 		out = append(out, Finding{
 			Rule: RuleOutOfRange, Severity: Weak,
-			Message:  fmt.Sprintf("%s가 평소보다 %s", rf.noun, dir),
+			Message:  msg,
 			Evidence: fmt.Sprintf("내 %s 중 대부분(10~90%%)은 %g~%g, 이번 글은 %g%s", label, st.P10, st.P90, v, note),
 		})
 	}
