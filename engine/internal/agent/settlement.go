@@ -1,9 +1,70 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"time"
+
+	"github.com/devlikebear/tars/pkg/llm"
 )
+
+// SettlementLedger is what the agent needs of the settlement record. An
+// interface so this package reads no store; ledger.Settlements satisfies it.
+type SettlementLedger interface {
+	// Version is a scene's content version now.
+	Version(ctx context.Context, nodeID string) (int, error)
+	// Record keeps how the pass over one scene at version ended.
+	Record(ctx context.Context, projectID, nodeID string, version int, outcome string, now int64) error
+	// Pending lists, in story order, the scenes before beforeNodeID still
+	// waiting for a settlement. Empty while settlement is off.
+	Pending(ctx context.Context, projectID, beforeNodeID string) ([]string, error)
+}
+
+// settle runs the settlement pass over scenes and records, scene by scene, how
+// it ended against the version each scene had when the pass began: prose the
+// writer changes while the pass runs is a new version, still waiting.
+func (s *Service) settle(ctx context.Context, st loopState, name string, scenes []string) string {
+	versions := map[string]int{}
+	if s.deps.Settlements != nil {
+		for _, id := range scenes {
+			v, err := s.deps.Settlements.Version(ctx, id)
+			if err != nil {
+				logf("%s after turn %s: version of %s: %v", name, st.runID, id, err)
+				continue
+			}
+			versions[id] = v
+		}
+	}
+	outcome := s.runPass(ctx, st, name, []llm.ChatMessage{
+		{Role: "system", Content: settlementSystemPrompt},
+		{Role: "user", Content: settlementRequest(st.req.ProjectID, scenes)},
+	}, settlementTools, settlementCallsPerScene*len(scenes))
+	if s.deps.Settlements == nil {
+		return outcome
+	}
+	now := s.now()
+	for _, id := range scenes {
+		v, ok := versions[id]
+		if !ok {
+			continue
+		}
+		// Recorded even when the pass was cut off: the record is what says it
+		// was, and a cancelled context must not lose it.
+		if err := s.deps.Settlements.Record(context.WithoutCancel(ctx), st.req.ProjectID, id, v, outcome, now); err != nil {
+			logf("%s after turn %s: recording %s: %v", name, st.runID, id, err)
+		}
+	}
+	return outcome
+}
+
+// now is the app's clock, or the wall clock when none is wired.
+func (s *Service) now() int64 {
+	if s.deps.Clock != nil {
+		return s.deps.Clock()
+	}
+	return time.Now().UnixMilli()
+}
 
 // A settlement may read each scene and the ledger, and write what changed. Each
 // fact is one call, so it gets a larger budget than the review.

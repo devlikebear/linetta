@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/devlikebear/linetta/engine/internal/paths"
 )
@@ -167,6 +168,11 @@ type Config struct {
 	// changed in the ledger. Off by default for the same reason as the review:
 	// it sends the scene to the provider again.
 	AgentSettlementEnabled bool `json:"agent_settlement_enabled"`
+	// AgentSettlementSince is when settlement was last switched on (unix ms).
+	// Scenes last written before it are not counted as waiting for one:
+	// switching it on must not turn every episode already written into a
+	// queue. Set by the engine, never by a patch.
+	AgentSettlementSince int64 `json:"agent_settlement_since,omitempty"`
 	// AgentImpactReviewEnabled governs the look for prose a changed decision or
 	// fact no longer agrees with. Off by default: it reads scenes the writer did
 	// not ask about.
@@ -573,6 +579,14 @@ func (s *Store) load() error {
 	// default. Switch one to default-on and it needs the presence guard above.
 	s.cfg.AgentEpisodeReviewEnabled = disk.AgentEpisodeReviewEnabled
 	s.cfg.AgentSettlementEnabled = disk.AgentSettlementEnabled
+	s.cfg.AgentSettlementSince = disk.AgentSettlementSince
+	// A writer who switched settlement on before the moment was recorded gets
+	// this start as the moment: nothing written earlier becomes a queue.
+	settlementSinceBackfilled := false
+	if s.cfg.AgentSettlementEnabled && s.cfg.AgentSettlementSince == 0 {
+		s.cfg.AgentSettlementSince = time.Now().UnixMilli()
+		settlementSinceBackfilled = true
+	}
 	s.cfg.AgentImpactReviewEnabled = disk.AgentImpactReviewEnabled
 	s.cfg.StyleAvoidPhrases = disk.StyleAvoidPhrases
 	// Out of range — including the zero a file from a build that predates
@@ -615,7 +629,7 @@ func (s *Store) load() error {
 	next := s.cfg
 	legacy := s.legacyPlaintext.clone()
 	s.mu.Unlock()
-	if migratedWebKey || migratedProviderKeys {
+	if migratedWebKey || migratedProviderKeys || settlementSinceBackfilled {
 		// persistWith, not persist: the rewrite that drops the keys that *did*
 		// move must put back the ones that did not, or a partly-failed
 		// migration would delete the keys it could not save.
@@ -724,6 +738,14 @@ func (s *Store) AgentSettlementEnabled() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.cfg.AgentSettlementEnabled
+}
+
+// AgentSettlementSince reports whether settlement is on, and since when (unix
+// ms): what ledger.Settlements counts waiting scenes from.
+func (s *Store) AgentSettlementSince() (int64, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg.AgentSettlementSince, s.cfg.AgentSettlementEnabled
 }
 
 // AgentEpisodeReviewEnabled reports whether a finished episode gets an
@@ -988,6 +1010,9 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 		next.AgentEpisodeReviewEnabled = *p.AgentEpisodeReviewEnabled
 	}
 	if p.AgentSettlementEnabled != nil {
+		if *p.AgentSettlementEnabled && !next.AgentSettlementEnabled {
+			next.AgentSettlementSince = time.Now().UnixMilli()
+		}
 		next.AgentSettlementEnabled = *p.AgentSettlementEnabled
 	}
 	if p.AgentImpactReviewEnabled != nil {
@@ -1174,6 +1199,7 @@ func (s *Store) persistWith(next Config, legacy legacyPlaintextKeys) error {
 		AgentSelfReviewEnabled:    next.AgentSelfReviewEnabled,
 		AgentEpisodeReviewEnabled: next.AgentEpisodeReviewEnabled,
 		AgentSettlementEnabled:    next.AgentSettlementEnabled,
+		AgentSettlementSince:      next.AgentSettlementSince,
 		AgentImpactReviewEnabled:  next.AgentImpactReviewEnabled,
 		StyleAvoidPhrases:         next.StyleAvoidPhrases,
 		AgentMaxToolCalls:         next.AgentMaxToolCalls,

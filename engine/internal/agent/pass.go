@@ -19,13 +19,23 @@ const passTurnsOver = 4
 // provider the turn used. boundedPass runs the tool calls a model hands back,
 // which Claude Code never does: it runs its own loop, so on that provider the
 // same narrowed tools have to come to it over a bridge of their own.
-func (s *Service) runPass(ctx context.Context, st loopState, name string, msgs []llm.ChatMessage, allowed map[string]bool, maxCalls int) {
+//
+// It reports how the pass ended: passDone when the model stopped of its own
+// accord, passTimeout when the pass ran out of time, round trips or tool calls,
+// passFailed when the provider failed it.
+func (s *Service) runPass(ctx context.Context, st loopState, name string, msgs []llm.ChatMessage, allowed map[string]bool, maxCalls int) string {
 	if provider.IsSelfExecuting(st.provider) {
-		s.cliPass(ctx, st, name, msgs, allowed, maxCalls)
-		return
+		return s.cliPass(ctx, st, name, msgs, allowed, maxCalls)
 	}
-	s.boundedPass(ctx, st, name, msgs, allowed, maxCalls)
+	return s.boundedPass(ctx, st, name, msgs, allowed, maxCalls)
 }
+
+// How a pass ended. The strings are the ones scene_settlements keeps.
+const (
+	passDone    = "done"
+	passTimeout = "timeout"
+	passFailed  = "failed"
+)
 
 // passTurn answers a pass's tool calls up to its budget. It goes to the session
 // directly rather than through runTool: nothing here belongs to the turn the
@@ -37,12 +47,15 @@ type passTurn struct {
 
 	mu    sync.Mutex
 	calls int
+	// capped says a call was turned away because the budget was spent.
+	capped bool
 }
 
 func (t *passTurn) call(name string, arguments json.RawMessage) *mcp.CallToolResult {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.calls >= t.maxCalls {
+		t.capped = true
 		return toolText(true, "not run: this pass has used all its tool calls. Stop here.")
 	}
 	t.calls++
@@ -52,12 +65,12 @@ func (t *passTurn) call(name string, arguments json.RawMessage) *mcp.CallToolRes
 
 // cliPass is boundedPass for a self-executing provider. The bridge offers the
 // allowed tools and nothing else, so the model cannot name its way past them.
-func (s *Service) cliPass(ctx context.Context, st loopState, name string, msgs []llm.ChatMessage, allowed map[string]bool, maxCalls int) {
+func (s *Service) cliPass(ctx context.Context, st loopState, name string, msgs []llm.ChatMessage, allowed map[string]bool, maxCalls int) string {
 	turn := &passTurn{ctx: ctx, st: st, maxCalls: maxCalls}
 	bridge, err := startCLIBridge(turn, onlyTools(st.schemas, allowed))
 	if err != nil {
 		logf("%s after turn %s: %v", name, st.runID, err)
-		return
+		return passFailed
 	}
 	defer bridge.close()
 	_, err = st.client.Chat(ctx, msgs, llm.ChatOptions{
@@ -70,6 +83,16 @@ func (s *Service) cliPass(ctx context.Context, st loopState, name string, msgs [
 		// line, never an agent.error under a turn they have moved on from.
 		logf("%s after turn %s: %v", name, st.runID, err)
 	}
+	turn.mu.Lock()
+	capped := turn.capped
+	turn.mu.Unlock()
+	switch {
+	case ctx.Err() != nil || capped:
+		return passTimeout
+	case err != nil:
+		return passFailed
+	}
+	return passDone
 }
 
 // StartSampleCheck compares scenes in the background, with no conversation and

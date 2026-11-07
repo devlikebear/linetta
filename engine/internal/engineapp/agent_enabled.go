@@ -13,6 +13,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/companion"
+	"github.com/devlikebear/linetta/engine/internal/ledger"
 	"github.com/devlikebear/linetta/engine/internal/mcphost"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
@@ -258,10 +259,13 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 		},
 		// The same lookup the write tools warn with: the agent's gate refuses
 		// on the answer an external client is only warned about.
-		Plans:      tools.Plans,
-		RecordGate: gateRecorder(tools.Activity),
-		Clock:      deps.clock,
-		LogPath:    deps.logPath,
+		Plans: tools.Plans,
+		// The settlement record: a pass writes how it ended, a turn catches up
+		// on what is waiting before it starts.
+		Settlements: agentSettlements(tools.Settlements),
+		RecordGate:  gateRecorder(tools.Activity),
+		Clock:       deps.clock,
+		LogPath:     deps.logPath,
 	}
 	svc = agent.New(built)
 	return &agentController{svc: svc, tools: tools, deps: built, notify: deps.notify}, svc.Close
@@ -397,4 +401,13 @@ func gateRecorder(activity *mcphost.ActivityRepo) func(context.Context, agent.Ga
 			log.Printf("agent: activity log: %v", err)
 		}
 	}
+}
+
+// agentSettlements keeps a nil record nil in the interface, so the agent sees
+// "no record" rather than a record that panics.
+func agentSettlements(s *ledger.Settlements) agent.SettlementLedger {
+	if s == nil {
+		return nil
+	}
+	return s
 }

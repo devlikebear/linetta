@@ -192,13 +192,13 @@ func (s *Service) selfReview(ctx context.Context, st loopState, used []string) {
 // boundedPass runs an unattended exchange after a turn: the given tools only, a
 // cap on tool calls and on round trips, and no output anywhere the writer's panel
 // can see it.
-func (s *Service) boundedPass(ctx context.Context, st loopState, name string, msgs []llm.ChatMessage, allowed map[string]bool, maxCalls int) {
+func (s *Service) boundedPass(ctx context.Context, st loopState, name string, msgs []llm.ChatMessage, allowed map[string]bool, maxCalls int) string {
 	tools := onlyTools(st.schemas, allowed)
 
 	calls, rounds := 0, 0
 	for {
 		if ctx.Err() != nil {
-			return
+			return passTimeout
 		}
 		// A second wall, on ROUND TRIPS rather than tool calls. The tool cap
 		// below cannot bound this loop on its own: a model that keeps asking
@@ -209,7 +209,7 @@ func (s *Service) boundedPass(ctx context.Context, st loopState, name string, ms
 		// after them is four round trips plus one either way.
 		if rounds >= maxCalls+1 {
 			logf("%s after turn %s: stopped after %d round trips", name, st.runID, rounds)
-			return
+			return passTimeout
 		}
 		rounds++
 		resp, err := st.client.Chat(ctx, msgs, llm.ChatOptions{Tools: tools})
@@ -218,13 +218,16 @@ func (s *Service) boundedPass(ctx context.Context, st loopState, name string, ms
 			// failed review is a log line, never an agent.error under a turn
 			// they have already read and moved on from.
 			logf("%s after turn %s: %v", name, st.runID, err)
-			return
+			if ctx.Err() != nil {
+				return passTimeout
+			}
+			return passFailed
 		}
 		if len(resp.Message.ToolCalls) == 0 {
 			// The ordinary ending: "nothing to record" is the right answer for
 			// most turns, and this is what it looks like. Whatever text came
 			// back is dropped on purpose — there is nowhere for it to go.
-			return
+			return passDone
 		}
 		// The cap is checked here rather than only inside the inner loop, so a
 		// review that has spent its whole budget gets exactly ONE more
@@ -232,12 +235,12 @@ func (s *Service) boundedPass(ctx context.Context, st loopState, name string, ms
 		// helping of tool calls.
 		if calls >= maxCalls {
 			logf("%s after turn %s: stopped at %d tool calls", name, st.runID, calls)
-			return
+			return passTimeout
 		}
 		msgs = append(msgs, resp.Message)
 		for _, call := range resp.Message.ToolCalls {
 			if ctx.Err() != nil {
-				return
+				return passTimeout
 			}
 			if calls >= maxCalls {
 				break

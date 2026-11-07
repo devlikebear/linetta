@@ -91,6 +91,10 @@ type Deps struct {
 	// Plans answers whether an empty scene has anything saying what it is for
 	// (plangate.go). Nil leaves the plan gate off.
 	Plans PlanLookup
+	// Settlements records how each settlement pass went and lists the scenes
+	// still waiting for one (ledger.Settlements). Nil records nothing and
+	// catches nothing up.
+	Settlements SettlementLedger
 	// RecordGate puts a gate's refusal or a catch-up on the activity log. Nil
 	// records nothing.
 	RecordGate func(ctx context.Context, e GateEvent)

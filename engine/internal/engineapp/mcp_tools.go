@@ -71,13 +71,15 @@ type mcpToolRepos struct {
 	// ForecastID check) — one Service, one fingerprint.
 	forecasts *forecast.Service
 	// plans answers the plan gate's question for both servers.
-	plans      mcphost.PlanLookup
-	plot       *plot.Builder
-	manuscript *manuscript.Searcher
-	context    *storycontext.ContextBuilder
-	snapshots  *snapshot.Repo
-	story      *storyops.Service
-	msEdit     *manuscriptedit.Service
+	plans mcphost.PlanLookup
+	// settlements lists the scenes still waiting for a settlement pass.
+	settlements *ledger.Settlements
+	plot        *plot.Builder
+	manuscript  *manuscript.Searcher
+	context     *storycontext.ContextBuilder
+	snapshots   *snapshot.Repo
+	story       *storyops.Service
+	msEdit      *manuscriptedit.Service
 	// memory is the two curated documents linetta_edit_memory writes. The
 	// same *agentmemory.Repo the companion reads them back through and the
 	// settings pane edits: one row per document, one writer per row at a
@@ -128,6 +130,7 @@ func buildToolDeps(deps mcpDeps, activity *mcphost.ActivityRepo) mcphost.ToolDep
 		Proposals:            deps.repos.proposals,
 		Forecasts:            deps.repos.forecasts,
 		Plans:                deps.repos.plans,
+		Settlements:          deps.repos.settlements,
 		Plot:                 deps.repos.plot,
 		Manuscript:           deps.repos.manuscript,
 		Context:              deps.repos.context,

@@ -98,6 +98,9 @@ type ToolDeps struct {
 	// for. A write into one that has nothing comes back with a warning. Nil
 	// warns of nothing.
 	Plans PlanLookup
+	// Settlements lists the scenes still waiting for a settlement pass. A
+	// write after them comes back with a warning. Nil warns of nothing.
+	Settlements *ledger.Settlements
 
 	// Memory is the two curated documents every agent reads. Nil in a build
 	// with no database open; the tool refuses rather than panicking.
