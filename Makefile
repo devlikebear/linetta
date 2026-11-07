@@ -1,4 +1,4 @@
-.PHONY: help dev clio-dev test-clio site-dev site-build site-check test validate-mcp-bridge-targets test-go test-desktop test-tauri test-mobile-engine test-mas-engine audit audit-go audit-desktop audit-rust validate-actions-runtime validate-distribution build-engine build-mcp-bridge build-mobile-engine-ios build-mobile-engine-android mobile-ios-init mobile-android-init build-mobile-ios-sim smoke-mobile-ios-sim dev-mobile-ios build-mobile-android-debug build-mobile-android-release-smoke patch-mobile-android-signing build-desktop release-macos-local build-mas-local release-mas-local bump-version ci
+.PHONY: help dev clio-dev test-clio site-dev site-build site-check test validate-mcp-bridge-targets test-go test-desktop test-tauri test-mobile-engine test-mas-engine test-cryptokit audit audit-go audit-desktop audit-rust validate-actions-runtime validate-distribution build-engine build-mcp-bridge build-mobile-engine-ios build-mobile-engine-android mobile-ios-init mobile-android-init build-mobile-ios-sim smoke-mobile-ios-sim dev-mobile-ios build-mobile-android-debug build-mobile-android-release-smoke patch-mobile-android-signing build-desktop release-macos-local build-mas-local release-mas-local bump-version ci
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9_-]+:.*##/ {printf "%-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -73,6 +73,9 @@ test-mobile-engine: ## Run the Go engine suite under the mobile build tag
 
 test-mas-engine: ## Run the Go engine suite under the Mac App Store build tag
 	cd engine && go test -tags mas ./...
+
+test-cryptokit: ## Check that iOS (CryptoKit) and Go seal Linetta Works sync blobs alike (macOS)
+	bash scripts/test-cryptokit-aead.sh
 
 validate-actions-runtime: ## Validate GitHub Actions use non-deprecated runtimes
 	bash scripts/validate-actions-runtime.sh
