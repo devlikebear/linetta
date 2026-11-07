@@ -3,7 +3,7 @@
 _이 문서는 전체 계획의 총괄본이다. 구현 전에 이 로드맵을 먼저 읽고, 해당 페이즈 작업지시서로 이동한다. 페이즈 전환은 작가의 명시적 승인 뒤에만 한다._
 
 _작성일: 2026-11-02_
-_상태: 구현 완료, 작가 검토와 병합 대기. 실제 Claude Code 호출과 실제 원고 평가는 작가의 데이터 공유 동의를 기다린다_
+_상태: Phase 1~5 구현 완료. 실제 Claude Code 호출과 실제 원고 평가는 작가의 데이터 공유 동의를 기다린다. Phase 6~7은 계획 단계다(2026-11-07 추가)_
 _예상 전체 소요: 약 10일_
 _페이즈 수: 5개_
 _관련 이슈: #137, #141_
@@ -140,6 +140,45 @@ _관련 이슈: #137, #141_
 - **작업지시서**: [`phase-5-scale-eval.md`](./phase-5-scale-eval.md)
 - **Checkpoint 요약**: #141에 재현 가능한 수치가 남고, 목표 미달 항목이 후속 과제로 나뉜다.
 
+### Phase 6: 집필 문턱 — 갖춰야 쓴다
+
+- **목표**: 내장 에이전트는 계획 없는 회차의 본문을 쓰지 못하고, 앞 회차의 밀린 정산을 먼저 따라잡는다.
+- **포함 기능**: 계획 문턱, 정산 기록, 밀린 정산 따라잡기, 외부 클라이언트 경고
+- **예상 소요**: 1.5일
+- **작업지시서**: [`phase-6-writing-gates.md`](./phase-6-writing-gates.md)
+- **Checkpoint 요약**: 계획 없는 빈 회차를 쓰라고 하면 계획부터 쓰고, 직접 고친 앞 회차가 다음 회차 전에 정산된다.
+
+### Phase 7: 비밀과 앎 — 누가 무엇을 아는가
+
+- **목표**: 작가 진실, 독자 앎, 인물 앎을 나눠 알고, 앎이 거꾸로 가면 코드가 충돌로 알리고, 누설은 정산이 보고한다.
+- **포함 기능**: 질문의 답, 앎의 대상, 시점별 앎, 앎 충돌, 브리프 섹션, 누설·앎 위반 보고, 패널
+- **예상 소요**: 3일
+- **작업지시서**: [`phase-7-secrets-and-knowledge.md`](./phase-7-secrets-and-knowledge.md)
+- **Checkpoint 요약**: 앎 유형 값 비교 재현율이 0에서 0.8 이상으로 오르고, 지불 회차 앞뒤로 브리프의 비밀이 달라진다.
+
+## 2차 계획: Phase 6~7 (2026-11-07)
+
+Phase 5의 측정에서 두 가지가 남았다. 하나는 쓰기 전에 갖춰야 할 것을 여전히 프롬프트로만 말한다는 점이다. 다른 하나는 앎 유형의 재현율이 0이고 모델 대조의 인물별 지식이 7/12라는 점이다. [Oh Story](https://github.com/zenstory-ai/oh-story-claudecode)를 비교하다가 두 가지 해법을 봤다. 집필 전 문턱, 그리고 작가 진실과 독자 앎의 분리다. 이 계획은 둘을 리네타의 기존 구조로 옮긴다.
+
+- **새 집필 계약을 만들지 않는다.** 계획은 `nodes.plan`, 작가 지시는 씬 의도와 고른 갈래다. 문턱은 "있는가"만 본다.
+- **문턱은 내장 에이전트만 거절한다.** `briefgate.go`의 원칙을 따르고, 외부 클라이언트에는 경고를 준다.
+- **독자 앎은 기록하지 않고 계산한다.** 독자가 기다리는 비밀은 `question`이고, 밝혀진 회차는 `paid_node_id`다.
+- **누설은 코드로 찾지 않는다.** 앎의 방향은 코드가 비교하고, 서술자의 누설은 정산 패스가 읽어서 보고한다.
+
+Oh Story에서 보고 **가져오지 않은 것**:
+
+- 베스트셀러 해체와 순위 훑기: 남의 작품 원문을 다루고 리네타의 방향과 멀다.
+- 파생 문서의 손 편집 거부: 리네타의 현재 상태는 이미 조회 결과다. 모델이 쓴 문서가 아니다. 대체된 사실도 지우지 않고 남긴다.
+- 세부 개요 표 양식: 위의 "새 집필 계약을 만들지 않는다"와 같은 이유다.
+
+| 기존 작업 | 2차 계획의 처리 |
+|---|---|
+| `briefgate.go` 브리프 문턱 | 유지한다. 계획 문턱은 그 뒤에 같은 모양으로 둔다. |
+| `nodes.plan`, 씬 의도, 고른 갈래 | 그대로 계획으로 읽는다. 쓰는 경로를 바꾸지 않는다. |
+| Phase 3 정산 패스, 기본 꺼짐 | 유지한다. 따라잡기는 켜진 경우에만 돈다. |
+| `ledger.Conflicts`의 앎 건너뛰기 | `about`이 없는 앎은 계속 건너뛴다. 있는 앎만 비교한다. |
+| 표본 대조, 브리프 없이 읽기 | 바꾸지 않는다. 답을 넣지 않는다. |
+
 ## 페이즈 간 의존성
 
 ```
@@ -148,7 +187,11 @@ Phase 1 (브리프 용량)
   └─→ Phase 3 (시점 사실과 정산)
         └─→ Phase 4 (아크 결산과 영향 검사)
               └─→ Phase 5 (규모 평가)
+                    └─→ Phase 6 (집필 문턱)
+                          └─→ Phase 7 (비밀과 앎)
 ```
+
+**Phase 6과 7의 순서**: 둘 다 `settlement.go`와 `prompt.go`를 고친다. Phase 7의 정산 호출 예산은 Phase 6의 측정 기록으로 정한다. 그래서 차례로 한다.
 
 **병렬 가능성**: Phase 2와 Phase 3은 Phase 1 뒤에 나눌 수 있지만 둘 다 `story_ledger`와 `ledger/brief.go`를 고친다. 마이그레이션 번호가 겹치지 않게 순서대로 한다.
 
@@ -203,6 +246,7 @@ Checkpoint가 실패하면 원인을 보고하고, 함께 파악해 수정한 �
 - InkOS 분석: `git show '9029391^:docs/plans/story-assist/inkos-analysis.md'`. 보호층과 압축층, Settler의 변경분, 호스트의 병합을 참고했다.
 - 이전 계획: [`../memory-search/roadmap.md`](../memory-search/roadmap.md)
 - [InkOS](https://github.com/Narcooo/inkos), [webnovel-writer](https://github.com/lingfengQAQ/webnovel-writer), [Novel OS](https://github.com/mrigankad/Novel-OS)
+- [Oh Story](https://github.com/zenstory-ai/oh-story-claudecode) (MIT): 집필 전 문턱, 작가 진실과 독자 앎의 분리. Phase 6~7에서 참고했다
 - [SillyTavern World Info](https://docs.sillytavern.app/usage/worldinfo), [Graphiti의 사실 유효 기간](https://help.getzep.com/v4/facts.md)
 - [FlawedFictions](https://arxiv.org/abs/2504.11900), [SCORE](https://arxiv.org/abs/2503.23512)
 
