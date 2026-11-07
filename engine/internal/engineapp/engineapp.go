@@ -548,6 +548,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("ledger.list", handlers.ListLedger(ledgerRepo, nodes))
 	s.Handle("ledger.save", handlers.SaveLedgerEntry(ledgerRepo, clock))
 	s.Handle("ledger.set_pinned", handlers.SetLedgerPinned(ledgerRepo, clock))
+	s.Handle("ledger.knows_at", handlers.KnowsAt(ledgerRepo, nodes, mentions))
 	s.Handle("ledger.delete", handlers.DeleteLedgerEntry(ledgerRepo))
 	s.Handle("ledger.set_arc", handlers.SetPartArc(ledgerRepo, clock))
 	s.Handle("ledger.pending_settlement", handlers.PendingSettlement(settlements, nodes))

@@ -3,7 +3,7 @@ import type { ArchivedNote } from "./types";
 import type { WorksGalleryPage } from "./types";
 import type { FocusState, SceneIntent, SceneIntentState } from "./types";
 import type { ContinuityCheck, ContinuityObservation, ContinuityOpenCounts, ContinuityStatus } from "./types";
-import type { LedgerEntry, LedgerKind, LedgerState, LedgerStatus, PartArc, PendingSettlement } from "./types";
+import type { KnowsAt, LedgerEntry, LedgerKind, LedgerState, LedgerStatus, PartArc, PendingSettlement } from "./types";
 import type {
   AcceptSuggestionsResult,
   ExtractionEstimate,
@@ -788,11 +788,14 @@ export const ledger = {
   /** Scenes whose current prose the settlement pass has not recorded yet. */
   pendingSettlement: (projectId: string) =>
     rpcCall<PendingSettlement>("ledger.pending_settlement", { project_id: projectId }),
-  save: (entry: { id?: string; project_id?: string; kind?: LedgerKind; reach?: LedgerEntry["reach"]; subject?: string; body?: string; status?: LedgerStatus }) =>
+  save: (entry: { id?: string; project_id?: string; kind?: LedgerKind; reach?: LedgerEntry["reach"]; subject?: string; body?: string; status?: LedgerStatus; answer?: string }) =>
     rpcCall<LedgerEntry>("ledger.save", entry),
   remove: (id: string) => rpcCall<{ ok: boolean }>("ledger.delete", { id }),
   setPinned: (id: string, pinned: boolean) =>
     rpcCall<LedgerEntry>("ledger.set_pinned", { id, pinned }),
+  /** The work's scenes, and at the chosen one who knows which open secret. */
+  knowsAt: (projectId: string, nodeId?: string) =>
+    rpcCall<KnowsAt>("ledger.knows_at", { project_id: projectId, node_id: nodeId ?? "" }),
   setArc: (arc: PartArc) => rpcCall<PartArc>("ledger.set_arc", {
     node_id: arc.node_id, role: arc.role, goal: arc.goal, tension: arc.tension,
   }),

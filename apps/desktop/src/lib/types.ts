@@ -1599,8 +1599,41 @@ export interface LedgerEntry {
   value_num?: number;
   /** How far a promise runs; the brief drops one past its reach unless it is due. */
   reach?: "arc" | "volume" | "work";
+  /** A question's truth, which only the writer knows until the story tells it. */
+  answer?: string;
+  /** The question a knows fact (attribute 앎) is about; value_num 1 knows, 0 does not. */
+  about?: string;
   created_at: number;
   updated_at: number;
+}
+/** A scene the "who knows what" table can be read at, in story order. */
+export interface KnowsScene {
+  node_id: string;
+  label: string;
+  parent_label?: string;
+}
+/** A question still open at the scene with an answer written down. The answer
+ *  itself is not sent: the table is about who knows it. */
+export interface KnowsSecret {
+  id: string;
+  subject?: string;
+  body: string;
+  /** Where the reader learns it, when that comes later in the story. */
+  paid_node_id?: string;
+}
+/** One character the scene mentions; cells are keyed by question id and a
+ *  missing cell means nothing is recorded. */
+export interface KnowsRow {
+  subject: string;
+  entity_id: string;
+  cells: Record<string, { knows: boolean; node_id?: string }>;
+}
+export interface KnowsAt {
+  scenes: KnowsScene[];
+  /** Empty when no scene on the story was asked for. */
+  node_id: string;
+  secrets: KnowsSecret[];
+  rows: KnowsRow[];
 }
 export interface PartArc {
   node_id: string;

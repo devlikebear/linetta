@@ -111,6 +111,28 @@ describe("ContinuitySection", () => {
     expect(await screen.findByText("본문이 바뀜 · 다시 점검")).toBeInTheDocument();
   });
 
+  // longform Phase 7: the settlement pass reports a leaked secret or a
+  // character acting on what they cannot know as ordinary observations, told
+  // apart only by the opening words. They need no flow of their own.
+  it("lists secret-leak and knowledge reports like any other and resolves them the same way", async () => {
+    mocks.list.mockResolvedValue({
+      checks: [check({
+        observations: [
+          observation({ id: "obs-leak", summary: "비밀 누설: 서술자가 하람의 정체를 단정했다" }),
+          observation({ id: "obs-knows", summary: "앎 위반: 서린이 모르는 암호로 문을 열었다" }),
+        ],
+      })],
+    });
+    mocks.setStatus.mockResolvedValue({ ...observation({ id: "obs-leak" }), status: "resolved" });
+    const user = userEvent.setup();
+    renderSection();
+
+    expect(await screen.findByText("비밀 누설: 서술자가 하람의 정체를 단정했다")).toBeInTheDocument();
+    expect(screen.getByText("앎 위반: 서린이 모르는 암호로 문을 열었다")).toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: "해결됨" })[0]);
+    await waitFor(() => expect(mocks.setStatus).toHaveBeenCalledWith("obs-leak", "resolved"));
+  });
+
   it("moves an observation to resolved and reflects it without a refetch", async () => {
     mocks.list.mockResolvedValue({ checks: [check({ observations: [observation()] })] });
     mocks.setStatus.mockResolvedValue({ ...observation(), status: "resolved" });

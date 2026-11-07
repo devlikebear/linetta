@@ -138,13 +138,14 @@ _상태: 계획 (작가 검토 대기)_
 
 ### 작업 그룹 E: 화면
 
-- [ ] **T7.E.1** — 패널
+- [x] **T7.E.1** — 패널
   - 파일: `apps/desktop/src/components/CanonPanel.tsx`, `apps/desktop/src/lib/i18n.tsx`, 테스트
   - 내용:
     - 질문 항목에 `답 (작가만 앎)` 칸을 보인다. 기본은 접혀 있다. 작가가 화면을 공유하거나 방송할 때 답이 바로 보이지 않게 하기 위해서다.
     - 회차를 고르면 `누가 무엇을 아는가` 표를 보인다. 행은 등장인물이고 열은 그 회차에 열린 비밀이다. 칸은 앎, 모름, 기록 없음이다. 맨 위 행은 독자다.
     - 연속성 목록의 `비밀 누설:`, `앎 위반:` 보고는 기존 보고와 같은 흐름으로 보이고 처리된다.
   - 검증: vitest, `tsc --noEmit`
+  - 구현 메모: 원장 섹션(`LedgerSection.tsx`)에 답 칸과 열린 질문의 고정 단추를 두고, 표는 `KnowsTable.tsx`로 나눴다. 표의 데이터는 새 RPC `ledger.knows_at`이 준다. 행은 그 회차의 등장 색인(`mentions`)에 있는 `character` 요소이고, 브리프가 회차의 등장 요소를 읽는 것과 같은 자료다. 표에는 답을 싣지 않는다.
 
 - [ ] **T7.E.2** — 문서
   - 파일: `docs/longform-support.md`, `docs/privacy-policy.md`, `README.md`
