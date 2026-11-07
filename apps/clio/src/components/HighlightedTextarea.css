@@ -1,0 +1,40 @@
+.hl-wrap { position: relative; height: 340px; }
+.hl-field {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--c-line);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.75;
+  letter-spacing: normal;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: normal;
+  tab-size: 4;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+.hl-mirror {
+  background: var(--c-surface);
+  color: transparent;
+  border-color: transparent;
+  pointer-events: none;
+  overflow-y: hidden;
+}
+.hl-input {
+  background: transparent;
+  color: var(--c-ink);
+  resize: none;
+  outline: none;
+  caret-color: var(--c-ink);
+}
+.hl-input:focus { border-color: var(--c-accent); }
+.hl-wrap:focus-within .hl-mirror { border-color: transparent; }
+.hl { text-decoration-line: underline; text-decoration-style: wavy; text-decoration-thickness: 1.5px; text-underline-offset: 4px; }
+.hl-strong { text-decoration-color: var(--c-danger); }
+.hl-medium { text-decoration-color: var(--c-warn); }
+.hl-weak { text-decoration-color: var(--c-muted); }

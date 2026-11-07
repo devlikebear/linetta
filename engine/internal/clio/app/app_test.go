@@ -123,3 +123,49 @@ func TestRoundTrip(t *testing.T) {
 		t.Fatalf("profile %s", raw)
 	}
 }
+
+func TestCheckRunUsesImportedPostsAndRefreshes(t *testing.T) {
+	a := open(t)
+	type result struct {
+		Findings []struct {
+			Rule string `json:"rule"`
+		} `json:"findings"`
+		ContextUsed string `json:"context_used"`
+	}
+	run := func(body string) result {
+		t.Helper()
+		raw, e := call(t, a, "check.run", map[string]any{"body": body, "platform": "x", "kind": "post"})
+		if e != nil {
+			t.Fatal(e)
+		}
+		var r result
+		if err := json.Unmarshal(raw, &r); err != nil || r.Findings == nil {
+			t.Fatalf("%s %v", raw, err)
+		}
+		return r
+	}
+	has := func(r result, rule string) bool {
+		for _, f := range r.Findings {
+			if f.Rule == rule {
+				return true
+			}
+		}
+		return false
+	}
+	if r := run("결론적으로 핵심은 꾸준함이다"); len(r.Findings) != 0 {
+		t.Fatalf("no posts yet: %+v", r)
+	}
+	if _, e := call(t, a, "posts.import", map[string]any{"file_name": "p.txt", "content": sample(25), "default_kind": "post"}); e != nil {
+		t.Fatal(e)
+	}
+	r := run("결론적으로 핵심은 꾸준함이다")
+	if !has(r, "ai_phrase") || r.ContextUsed != "x/post" {
+		t.Fatalf("after import: %+v", r)
+	}
+	if r := run("   "); len(r.Findings) != 0 {
+		t.Fatalf("blank: %+v", r)
+	}
+	if _, e := call(t, a, "check.run", map[string]any{"body": "글", "platform": "x", "kind": "dm"}); e == nil || e.Code != rpc.CodeInvalidParams {
+		t.Fatalf("bad kind: %+v", e)
+	}
+}

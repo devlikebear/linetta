@@ -9,6 +9,12 @@ const ENGINE_STATUS_TIMEOUT: Duration = Duration::from_secs(2);
 // Keep renderer access explicit. New engine methods must be reviewed before the
 // Tauri webview can call them. Keep this list sorted: it is binary-searched.
 const RENDERER_ENGINE_METHODS: &[&str] = &[
+    "check.run",
+    "drafts.create",
+    "drafts.delete",
+    "drafts.get",
+    "drafts.list",
+    "drafts.update",
     "ping",
     "posts.counts",
     "posts.import",
