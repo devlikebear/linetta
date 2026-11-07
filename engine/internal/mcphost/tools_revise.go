@@ -47,6 +47,9 @@ type reviseSceneOutput struct {
 	Failures    []string          `json:"failures,omitempty"`
 	// Notice says what the write means beyond the scene, when it means something.
 	Notice string `json:"notice,omitempty"`
+	// Warnings says what the write went ahead without: the settlement of
+	// episodes before the ones it changed.
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 func (d ToolDeps) registerReviseTool(s *mcp.Server) {
@@ -57,7 +60,7 @@ func (d ToolDeps) registerReviseTool(s *mcp.Server) {
 			"and paragraph breaks. Every touched scene is " +
 			"snapshotted first and the result maps each changed scene to its snapshot_id, which " +
 			"linetta_undo_last_change can restore. Pass dry_run to preview; omit node_ids only to " +
-			"sweep the entire work.",
+			"sweep the entire work. warnings: earlier episodes not yet settled.",
 	}, record(d, "linetta_revise_scene", d.reviseScene))
 }
 
@@ -140,6 +143,16 @@ func (d ToolDeps) reviseScene(ctx context.Context, _ *mcp.CallToolRequest, in re
 				break
 			}
 		}
+	}
+	if result.Applied > 0 {
+		// Waiting before the latest changed scene covers every other one.
+		var longest []string
+		for _, nodeID := range result.ChangedNodeIDs {
+			if ids := d.pendingBefore(ctx, p.ID, nodeID); len(ids) > len(longest) {
+				longest = ids
+			}
+		}
+		out.Warnings = appendWarning(out.Warnings, d.pendingWarning(ctx, longest))
 	}
 	if result.Applied == 0 && len(result.Failures) > 0 {
 		return toolErr("nothing was revised: %s", strings.Join(out.Failures, "; ")), out, nil

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -68,4 +69,30 @@ func setLogFile(path string) {
 	agentLog.mu.Lock()
 	agentLog.path = path
 	agentLog.mu.Unlock()
+}
+
+// The two kinds of row the agent itself puts on the activity log, beside the
+// tool calls mcphost records. Named like tools so the log reads as one list.
+const (
+	GatePlan          = "plan_gate"
+	SettlementCatchUp = "settlement_catchup"
+)
+
+// GateEvent is one of those rows: which scene, and how it went. Never the
+// prose or the model's words — the log is for counting, not for reading back.
+type GateEvent struct {
+	Kind      string
+	ProjectID string
+	NodeID    string
+	RunID     string
+	OK        bool
+	Detail    string
+}
+
+// recordGate writes e when the app gave the agent somewhere to write it.
+func (s *Service) recordGate(ctx context.Context, e GateEvent) {
+	if s.deps.RecordGate == nil {
+		return
+	}
+	s.deps.RecordGate(context.WithoutCancel(ctx), e)
 }

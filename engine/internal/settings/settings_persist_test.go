@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The four settings below were once accepted by Set and kept in memory, but
@@ -209,5 +210,64 @@ func TestConfig_everyFieldSurvivesRestart(t *testing.T) {
 		if g, w := gv.FieldByName(name).Interface(), wv.FieldByName(name).Interface(); !reflect.DeepEqual(g, w) {
 			t.Errorf("Config.%s (%q) after restart = %#v, want %#v: load() does not read it back", name, key, g, w)
 		}
+	}
+}
+
+// Longform Phase 6: the moment settlement is switched on is kept, so the scenes
+// written before it never become a queue — across restarts, and for a writer
+// who switched it on before the moment was recorded.
+func TestSettlementSince_isSetWhenSwitchedOnAndSurvivesRestart(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LINETTA_HOME", dir)
+	ctx := context.Background()
+
+	s, err := NewWithSecretStore(NewMemorySecretStore())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if since, on := s.AgentSettlementSince(); on || since != 0 {
+		t.Fatalf("fresh install = since %d on %v", since, on)
+	}
+	before := time.Now().UnixMilli()
+	if _, err := s.Set(ctx, Patch{AgentSettlementEnabled: boolPtr(true)}); err != nil {
+		t.Fatal(err)
+	}
+	since, on := s.AgentSettlementSince()
+	if !on || since < before {
+		t.Fatalf("after switching on = since %d on %v, want on since %d or later", since, on, before)
+	}
+	// Setting it on again is not switching it on.
+	if _, err := s.Set(ctx, Patch{AgentSettlementEnabled: boolPtr(true)}); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := s.AgentSettlementSince(); again != since {
+		t.Errorf("since moved from %d to %d on a patch that changed nothing", since, again)
+	}
+	s2, err := NewWithSecretStore(NewMemorySecretStore())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, on := s2.AgentSettlementSince(); !on || got != since {
+		t.Errorf("after restart = since %d on %v, want %d", got, on, since)
+	}
+
+	// A settings.json from before the key: on, with no moment.
+	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(`{"agent_settlement_enabled":true}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s3, err := NewWithSecretStore(NewMemorySecretStore())
+	if err != nil {
+		t.Fatal(err)
+	}
+	backfilled, on := s3.AgentSettlementSince()
+	if !on || backfilled == 0 {
+		t.Fatalf("old file = since %d on %v, want the load moment", backfilled, on)
+	}
+	s4, err := NewWithSecretStore(NewMemorySecretStore())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s4.AgentSettlementSince(); got != backfilled {
+		t.Errorf("backfilled moment was not kept: %d then %d", backfilled, got)
 	}
 }

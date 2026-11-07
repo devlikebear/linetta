@@ -3,7 +3,7 @@ import type { ArchivedNote } from "./types";
 import type { WorksGalleryPage } from "./types";
 import type { FocusState, SceneIntent, SceneIntentState } from "./types";
 import type { ContinuityCheck, ContinuityObservation, ContinuityOpenCounts, ContinuityStatus } from "./types";
-import type { LedgerEntry, LedgerKind, LedgerState, LedgerStatus, PartArc } from "./types";
+import type { LedgerEntry, LedgerKind, LedgerState, LedgerStatus, PartArc, PendingSettlement } from "./types";
 import type {
   AcceptSuggestionsResult,
   ExtractionEstimate,
@@ -785,6 +785,9 @@ export const direction = {
 /** The work's ledger and part arcs (internal/ledger). */
 export const ledger = {
   list: (projectId: string) => rpcCall<LedgerState>("ledger.list", { project_id: projectId }),
+  /** Scenes whose current prose the settlement pass has not recorded yet. */
+  pendingSettlement: (projectId: string) =>
+    rpcCall<PendingSettlement>("ledger.pending_settlement", { project_id: projectId }),
   save: (entry: { id?: string; project_id?: string; kind?: LedgerKind; reach?: LedgerEntry["reach"]; subject?: string; body?: string; status?: LedgerStatus }) =>
     rpcCall<LedgerEntry>("ledger.save", entry),
   remove: (id: string) => rpcCall<{ ok: boolean }>("ledger.delete", { id }),

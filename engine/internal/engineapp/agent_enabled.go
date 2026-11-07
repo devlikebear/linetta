@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -12,6 +13,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/companion"
+	"github.com/devlikebear/linetta/engine/internal/ledger"
 	"github.com/devlikebear/linetta/engine/internal/mcphost"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
@@ -255,8 +257,15 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 			}
 			return n.ProjectID, n.ID, nil
 		},
-		Clock:   deps.clock,
-		LogPath: deps.logPath,
+		// The same lookup the write tools warn with: the agent's gate refuses
+		// on the answer an external client is only warned about.
+		Plans: tools.Plans,
+		// The settlement record: a pass writes how it ended, a turn catches up
+		// on what is waiting before it starts.
+		Settlements: agentSettlements(tools.Settlements),
+		RecordGate:  gateRecorder(tools.Activity),
+		Clock:       deps.clock,
+		LogPath:     deps.logPath,
 	}
 	svc = agent.New(built)
 	return &agentController{svc: svc, tools: tools, deps: built, notify: deps.notify}, svc.Close
@@ -376,4 +385,29 @@ func (c *agentController) Undo(ctx context.Context, batchID, snapshotID string) 
 		c.notify("mcp.changed", payload)
 	}
 	return nil
+}
+
+// gateRecorder puts the agent's own gate rows on the activity log beside its
+// tool calls, marked as the agent's, with the scene and the outcome only.
+func gateRecorder(activity *mcphost.ActivityRepo) func(context.Context, agent.GateEvent) {
+	if activity == nil {
+		return nil
+	}
+	return func(ctx context.Context, e agent.GateEvent) {
+		if err := activity.Record(ctx, mcphost.ActivityEntry{
+			Tool: e.Kind, ProjectID: e.ProjectID, TargetID: e.NodeID, OK: e.OK,
+			Detail: e.Detail, Source: mcphost.SourceAgent, RunID: e.RunID,
+		}); err != nil {
+			log.Printf("agent: activity log: %v", err)
+		}
+	}
+}
+
+// agentSettlements keeps a nil record nil in the interface, so the agent sees
+// "no record" rather than a record that panics.
+func agentSettlements(s *ledger.Settlements) agent.SettlementLedger {
+	if s == nil {
+		return nil
+	}
+	return s
 }
