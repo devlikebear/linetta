@@ -17,3 +17,19 @@ button.ledger-where { cursor: pointer; text-decoration: underline; }
 .ledger-list li.is-pinned { border-left: 2px solid var(--accent, var(--ink)); padding-left: 8px; }
 
 .ledger-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
+
+.ledger-answer { flex-basis: 100%; display: grid; gap: 4px; justify-items: start; }
+.ledger-answer textarea { width: 100%; min-width: 0; font: inherit; font-size: 12px; resize: vertical; }
+
+.knows-table { margin-top: 12px; }
+.knows-table summary { cursor: pointer; font-size: 13px; }
+.knows-scene { display: flex; gap: 6px; align-items: center; margin: 6px 0; font-size: 12px; }
+.knows-scene select { min-width: 0; flex: 1; font: inherit; font-size: 12px; }
+.knows-scroll { overflow-x: auto; }
+.knows-table table { border-collapse: collapse; font-size: 12px; }
+.knows-table th, .knows-table td { border-bottom: 1px solid var(--line); padding: 4px 6px; text-align: left; vertical-align: top; }
+.knows-table thead th { font-weight: 600; max-width: 160px; }
+.knows-table td[data-knows="yes"] { font-weight: 600; }
+.knows-table td[data-knows="none"] { color: var(--ink-soft); }
+.knows-reader th, .knows-reader td { background: var(--paper-soft, transparent); }
+.knows-table td .ledger-where { display: block; }

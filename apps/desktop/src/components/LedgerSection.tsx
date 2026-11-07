@@ -5,6 +5,7 @@ import { ledger as ledgerApi, mentions as mentionsApi, projects as projectsApi }
 import type { LedgerEntry, LedgerKind, LedgerState, LedgerStatus, PartArc } from "../lib/types";
 import { useI18n } from "../lib/i18n";
 import { rpcErrorMessage } from "../lib/rpcMessage";
+import { KnowsTable } from "./KnowsTable";
 import "./LedgerSection.css";
 
 /** The work's account of itself: what the story owes the reader, what has been
@@ -16,6 +17,8 @@ interface Props {
   projectId: string;
   /** Opens a scene an entry was planted in or paid in. */
   onOpenNode?: (nodeId: string) => void;
+  /** The scene open in the editor; the "who knows what" table starts there. */
+  nodeId?: string;
 }
 
 type Tab = "owed" | "settled" | "closed" | "cut";
@@ -26,13 +29,19 @@ const ADDABLE: LedgerKind[] = ["promise", "gag", "question", "decision", "number
 /** Matches the engine's briefPinnedRunes. Past it a pin may not reach the brief. */
 const PINNED_BUDGET_RUNES = 3000;
 
+/** Settled facts can be pinned, and so can a question the story still owes
+ *  (longform Phase 7): a pinned question's answer is the writer's alone. */
+function pinnable(e: LedgerEntry): boolean {
+  return tabOf(e) === "settled" || (e.kind === "question" && e.status === "open");
+}
+
 function tabOf(e: LedgerEntry): Tab {
   if (e.kind === "cut_plan") return "cut";
   if (e.status !== "open") return "closed";
   return OWED.includes(e.kind) ? "owed" : "settled";
 }
 
-export function LedgerSection({ projectId, onOpenNode }: Readonly<Props>) {
+export function LedgerSection({ projectId, onOpenNode, nodeId }: Readonly<Props>) {
   const { t } = useI18n();
   const [state, setState] = useState<LedgerState | null>(null);
   const [tab, setTab] = useState<Tab>("owed");
@@ -127,7 +136,8 @@ export function LedgerSection({ projectId, onOpenNode }: Readonly<Props>) {
       </div>
 
       {tab === "settled" && <p className="style-hint">{t("ledger.pinHint")}</p>}
-      {tab === "settled" && pinnedOverBudget && <p role="status">{t("ledger.pinnedOverBudget")}</p>}
+      {tab === "owed" && shown.some((e) => e.kind === "question") && <p className="style-hint">{t("ledger.questionPinHint")}</p>}
+      {(tab === "settled" || tab === "owed") && pinnedOverBudget && <p role="status">{t("ledger.pinnedOverBudget")}</p>}
 
       {shown.length === 0 ? (
         <p className="style-hint">{t("ledger.empty")}</p>
@@ -140,7 +150,11 @@ export function LedgerSection({ projectId, onOpenNode }: Readonly<Props>) {
               {e.attribute && <span className="ledger-kind">{e.attribute}</span>}
               {e.strength === "soft" && <span className="ledger-kind">{t("ledger.softTag")}</span>}
               {e.superseded_by && <span className="ledger-kind">{t("ledger.supersededTag")}</span>}
+              {e.kind === "question" && (e.answer ?? "") !== "" && <span className="ledger-kind">{t("ledger.answeredTag")}</span>}
               <span className="ledger-body">{e.body}</span>
+              {e.kind === "question" && (
+                <AnswerField entry={e} onSave={(answer) => run(() => ledgerApi.save({ id: e.id, answer }))} />
+              )}
               {e.planted_node_id && (
                 <button type="button" className="ledger-where" onClick={() => onOpenNode?.(e.planted_node_id ?? "")}>
                   {t("ledger.planted", { label: state?.labels[e.planted_node_id] ?? "" })}
@@ -162,7 +176,7 @@ export function LedgerSection({ projectId, onOpenNode }: Readonly<Props>) {
                     {(["arc", "volume", "work"] as const).map((r) => <option key={r} value={r}>{t(`ledger.reach.${r}`)}</option>)}
                   </select>
                 )}
-                {tabOf(e) === "settled" && (
+                {pinnable(e) && (
                   <button
                     type="button"
                     className="btn ghost sm"
@@ -210,7 +224,42 @@ export function LedgerSection({ projectId, onOpenNode }: Readonly<Props>) {
         <button type="button" className="btn ghost sm" onClick={() => void duplicate()}>{t("ledger.duplicate")}</button>
         {notice && <span className="style-hint" role="status">{notice}</span>}
       </div>
+      <KnowsTable projectId={projectId} nodeId={nodeId} version={state} onOpenNode={onOpenNode} />
     </details>
+  );
+}
+
+/** A question's answer, folded until the writer asks for it: a writer who
+ *  shares or streams their screen should not show the twist by opening the
+ *  ledger. Folding again drops it from the page, not only from view. */
+function AnswerField({ entry, onSave }: Readonly<{ entry: LedgerEntry; onSave: (answer: string) => void }>) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(entry.answer ?? "");
+  useEffect(() => { setDraft(entry.answer ?? ""); }, [entry.answer]);
+  const commit = () => {
+    const next = draft.trim();
+    if (next !== (entry.answer ?? "")) onSave(next);
+  };
+  return (
+    <span className="ledger-answer">
+      <button type="button" className="btn ghost sm" aria-expanded={open} onClick={() => setOpen(!open)}>
+        {t(open ? "ledger.answer.hide" : "ledger.answer.show")}
+      </button>
+      {open && (
+        <>
+          <textarea
+            aria-label={t("ledger.answer.label")}
+            placeholder={t("ledger.answer.placeholder")}
+            rows={2}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+          />
+          <span className="style-hint">{t("ledger.answer.hint")}</span>
+        </>
+      )}
+    </span>
   );
 }
 
