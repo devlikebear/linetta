@@ -39,6 +39,7 @@ func TestOmittedCategoryLeavesTheBundle(t *testing.T) {
 		{CategoryImages, []string{"tables/illustrations", "tables/node_representative_illustrations", "tables/illustration_requests", "tables/entity_reference_images", "images/"}},
 		{CategoryHistory, []string{"tables/node_snapshots"}},
 		{CategoryWorkAgent, []string{"tables/agent_memory", "tables/agent_memory_archive", "files/skills/", "files/memory/"}},
+		{CategoryConversations, []string{"tables/companion_messages", "tables/companion_references", "tables/agent_history_marks"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.category, func(t *testing.T) {
@@ -96,7 +97,7 @@ func TestLibraryCategoriesDoNotTouchAWorkBundle(t *testing.T) {
 }
 
 func TestOmittedRoundTripIntoAnEmptyLibrary(t *testing.T) {
-	for _, category := range []string{CategoryImages, CategoryHistory, CategoryWorkAgent} {
+	for _, category := range []string{CategoryImages, CategoryHistory, CategoryWorkAgent, CategoryConversations} {
 		t.Run(category, func(t *testing.T) {
 			src := openLibrary(t)
 			seedWork(t, src, workID)
@@ -254,6 +255,9 @@ func TestTablesAreClassifiedByCategory(t *testing.T) {
 		"node_snapshots":                    CategoryHistory,
 		"agent_memory":                      CategoryWorkAgent,
 		"agent_memory_archive":              CategoryWorkAgent,
+		"companion_references":              CategoryConversations,
+		"companion_messages":                CategoryConversations,
+		"agent_history_marks":               CategoryConversations,
 	}
 	for _, table := range allTables() {
 		if table.Category != wanted[table.Name] {
@@ -270,6 +274,7 @@ func TestPartCategory(t *testing.T) {
 		"tables/node_snapshots":       CategoryHistory,
 		"tables/agent_memory":         CategoryWorkAgent,
 		"tables/agent_memory_archive": CategoryWorkAgent,
+		"tables/companion_messages":   CategoryConversations,
 		"files/skills/a/b.md":         CategoryWorkAgent,
 		"files/memory/m.md":           CategoryWorkAgent,
 	} {
@@ -348,4 +353,69 @@ func TestOmittingWorkAgentLeavesArchivedNotesAndTheirIndex(t *testing.T) {
 	if got := archiveHits(t, dst, "등대지기"); len(got) != 1 {
 		t.Errorf("a bundle without the category touched the index: %v", got)
 	}
+}
+
+// An app from before conversations were carried writes no part for them. Its
+// bundle has no opinion about them, so the conversation here stays, and the
+// bundle reads as lacking what this library now carries.
+func TestBundleFromBeforeConversationsLeavesThemAlone(t *testing.T) {
+	src := openLibrary(t)
+	seedWork(t, src, workID)
+	bundle := exportOmit(t, src, t.TempDir(), workID, nil)
+	for name := range bundle.Parts {
+		if PartCategory(name) == CategoryConversations {
+			delete(bundle.Parts, name)
+		}
+	}
+	bundle.seal()
+
+	dst := openLibrary(t)
+	seedWork(t, dst, workID)
+	execAll(t, dst, `INSERT INTO companion_messages (id, project_id, role, intent, content, created_at) VALUES ('here', '`+workID+`', 'user', 'agent', '이 기기의 말', 2)`)
+	if err := apply(t, dst, bundle); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := dst.QueryRow(`SELECT COUNT(*) FROM companion_messages WHERE project_id = ?`, workID).Scan(&n); err != nil || n != 2 {
+		t.Fatalf("conversation rows = %d %v, want both kept", n, err)
+	}
+	current := exportOmit(t, dst, t.TempDir(), workID, nil)
+	if !bundle.LacksTablesOf(current) {
+		t.Error("the old bundle should read as lacking the conversation")
+	}
+	if current.LacksTablesOf(current) {
+		t.Error("a full bundle lacks nothing")
+	}
+}
+
+func TestMergeKeepsRowsThisDeviceHad(t *testing.T) {
+	src := openLibrary(t)
+	seedWork(t, src, workID)
+	execAll(t, src, `UPDATE companion_messages SET content = '고친 말' WHERE id = '`+workID+`-m1'`)
+	bundle := exportOmit(t, src, t.TempDir(), workID, nil)
+
+	dst := openLibrary(t)
+	seedWork(t, dst, workID)
+	execAll(t, dst, `INSERT INTO companion_messages (id, project_id, role, intent, content, created_at) VALUES ('here', '`+workID+`', 'user', 'agent', '이 기기의 말', 2)`)
+	ctx := context.Background()
+	tx, err := dst.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	if err := ApplyWith(ctx, tx, bundle, ApplyOptions{Merge: []string{CategoryConversations}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	var content string
+	if err := dst.QueryRow(`SELECT content FROM companion_messages WHERE id = ?`, workID+"-m1").Scan(&content); err != nil || content != "고친 말" {
+		t.Fatalf("shared message = %q %v", content, err)
+	}
+	var n int
+	if err := dst.QueryRow(`SELECT COUNT(*) FROM companion_messages_fts WHERE message_id = 'here'`).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("this device's message left the search index: %d %v", n, err)
+	}
+	noForeignKeyViolations(t, dst)
 }

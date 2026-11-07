@@ -318,7 +318,7 @@ func TestItemsShowSizesAndChoice(t *testing.T) {
 	for _, category := range view.Categories {
 		byID[category.ID] = category
 	}
-	if len(view.Categories) != 6 || !view.Categories[0].Required || view.Categories[0].Bytes == 0 {
+	if len(view.Categories) != 7 || !view.Categories[0].Required || view.Categories[0].Bytes == 0 {
 		t.Fatalf("categories = %+v", view.Categories)
 	}
 	if byID[vaultbundle.CategoryHistory].Enabled || !byID[vaultbundle.CategoryImages].Enabled || byID[vaultbundle.CategoryImages].Bytes == 0 {

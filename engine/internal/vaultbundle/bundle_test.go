@@ -89,6 +89,9 @@ func seedWork(t *testing.T, db *sql.DB, id string) {
 		`INSERT INTO writing_stats (project_id, day, chars_added) VALUES ('P', '2026-10-31', 10)`,
 		`INSERT INTO agent_memory (scope, project_id, body, updated_at) VALUES ('work_notes', 'P', '작업 노트', 1)`,
 		`INSERT INTO agent_memory_archive (id, project_id, body, source_message_id, archived_at) VALUES ('P-a1', 'P', '보관한 줄', 'msg', 1)`,
+		`INSERT INTO companion_references (id, project_id, node_id, source_type, purpose, title, content, created_at, updated_at) VALUES ('P-r1', 'P', 'P-n2', 'text', 'research', '자료', '자료 본문', 1, 1)`,
+		`INSERT INTO companion_messages (id, project_id, node_id, run_id, role, intent, content, created_at) VALUES ('P-m1', 'P', 'P-n2', 'run', 'user', 'agent', '에이전트와 나눈 말', 1)`,
+		`INSERT INTO agent_history_marks (project_id, start_message_id, set_at) VALUES ('P', 'P-m1', 1)`,
 		`INSERT INTO continuity_checks (id, project_id, node_id, content_version, source, checked_at) VALUES ('P-k1', 'P', 'P-n2', 3, 'agent', 1)`,
 		`INSERT INTO continuity_observations (id, check_id, project_id, node_id, category, kind, severity, summary, paragraph_from, paragraph_to, quote, status_at, created_at)
 		 VALUES ('P-v1', 'P-k1', 'P', 'P-n2', 'fact', 'gap', 'low', '요약', 0, 1, '인용', 1, 1)`,
@@ -108,7 +111,7 @@ func addDeviceRows(t *testing.T, db *sql.DB, id string) {
 	t.Helper()
 	execAll(t, db,
 		fmt.Sprintf(`INSERT INTO ai_runs (id, project_id, node_id, provider, prompt, context_json, status, started_at) VALUES ('%[1]s-run', '%[1]s', '%[1]s-n2', 'p', '비밀 프롬프트', '{}', 'done', 1)`, id),
-		fmt.Sprintf(`INSERT INTO companion_messages (id, project_id, node_id, role, content, created_at) VALUES ('%[1]s-msg', '%[1]s', '%[1]s-n2', 'user', '동반자 대화', 1)`, id),
+		fmt.Sprintf(`INSERT INTO companion_history_imports (project_id, imported_at) VALUES ('%[1]s', 777777)`, id),
 		fmt.Sprintf(`INSERT INTO publish_works (project_id, remote_url, slug) VALUES ('%[1]s', 'https://works.test', 'my-work')`, id),
 		fmt.Sprintf(`INSERT INTO publish_entities (entity_id, project_id, created_at) VALUES ('%[1]s-e1', '%[1]s', 1)`, id),
 	)
@@ -472,7 +475,7 @@ func TestOtherWorksAndDeviceRowsAreLeftOut(t *testing.T) {
 	bundle := export(t, db, t.TempDir(), workID)
 	for name, data := range bundle.Parts {
 		text := string(data)
-		for _, secret := range []string{"other-", "비밀 프롬프트", "동반자 대화", "works.test", "P-n2"} {
+		for _, secret := range []string{"other-", "비밀 프롬프트", "777777", "works.test", "P-n2"} {
 			if strings.Contains(text, secret) {
 				t.Errorf("part %s holds %q", name, secret)
 			}
@@ -551,8 +554,9 @@ func TestApplyOverAnEditedWorkRestoresItAndKeepsDeviceRows(t *testing.T) {
 	if err := db.QueryRow(`SELECT node_id FROM ai_runs WHERE id = ?`, id+"-run").Scan(&linked); err != nil || linked.String != id+"-n2" {
 		t.Errorf("ai run lost its scene: %v %v", linked, err)
 	}
-	if err := db.QueryRow(`SELECT node_id FROM companion_messages WHERE id = ?`, id+"-msg").Scan(&linked); err != nil || linked.String != id+"-n2" {
-		t.Errorf("companion message lost its scene: %v %v", linked, err)
+	var imported int64
+	if err := db.QueryRow(`SELECT imported_at FROM companion_history_imports WHERE project_id = ?`, id).Scan(&imported); err != nil || imported != 777777 {
+		t.Errorf("the device's import mark is gone: %d %v", imported, err)
 	}
 	var remote string
 	if err := db.QueryRow(`SELECT remote_url FROM publish_works WHERE project_id = ?`, id).Scan(&remote); err != nil || remote == "" {
