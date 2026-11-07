@@ -22,11 +22,11 @@ func registerSegments(body string) []regSeg {
 	spans := voice.SegmentSpans(body)
 	for i, s := range voice.Segments(body) {
 		sp := spans[i]
-		e := voice.Ending(s)
-		if e == "" || inQuote(quotes, lastHangul(r, sp)) {
+		reg := voice.Register(s)
+		if reg == 0 || inQuote(quotes, lastHangul(r, sp)) {
 			continue
 		}
-		out = append(out, regSeg{sp[0], sp[1], voice.IsPolite(e)})
+		out = append(out, regSeg{sp[0], sp[1], reg == 1})
 	}
 	return out
 }

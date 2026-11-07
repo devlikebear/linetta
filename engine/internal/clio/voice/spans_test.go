@@ -16,3 +16,19 @@ func TestSegmentSpansMatchSegments(t *testing.T) {
 		}
 	}
 }
+
+func TestRegister(t *testing.T) {
+	for seg, want := range map[string]int{
+		"써 보니 괜찮았다.":       -1,
+		"다음엔 해 볼게요.":       1,
+		"그런데 별로임":          -1,
+		"새로 생긴 것들":         0,
+		"- 생일을 넣으면 보는 페이지": 0,
+		"1. 설치했다":          0,
+		"ok":               0,
+	} {
+		if got := Register(seg); got != want {
+			t.Errorf("Register(%q) = %d, want %d", seg, got, want)
+		}
+	}
+}

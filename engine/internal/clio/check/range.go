@@ -7,27 +7,37 @@ import (
 )
 
 // rangeFeatures are the habits checked against the writer's P10..P90, with
-// the noun used in the message.
-var rangeFeatures = []struct{ name, noun string }{
-	{"emoji", "이모지"},
-	{"laugh", "ㅋㅋ·ㅎㅎ"},
-	{"hashtag", "해시태그"},
-	{"exclaim", "느낌표"},
-	{"ellipsis", "말줄임표"},
-	{"lines", "줄 수"},
-	{"length", "글 길이"},
+// the noun used in the message. A habit is a count the writer either has or
+// lacks; one the writer almost never shows is a medium finding of its own.
+var rangeFeatures = []struct {
+	name, noun string
+	habit      bool
+}{
+	{"emoji", "이모지", true},
+	{"laugh", "ㅋㅋ·ㅎㅎ", true},
+	{"hashtag", "해시태그", true},
+	{"exclaim", "느낌표", true},
+	{"ellipsis", "말줄임표", true},
+	{"lines", "줄 수", false},
+	{"length", "글 길이", false},
 }
 
-// ranges flags a draft habit below P10 or above P90 of the context.
-func ranges(body string, ctx voice.ContextProfile) []Finding {
+func featureValues(body string) map[string]float64 {
+	f := voice.Features(body).Values()
+	vals := make(map[string]float64, len(f))
+	for i, n := range voice.FeatureNames {
+		vals[n] = f[i]
+	}
+	return vals
+}
+
+// ranges flags a habit the writer almost never shows (medium), and otherwise
+// a draft value below P10 or above P90 of the context (weak).
+func ranges(body string, ctx voice.ContextProfile, corpus Corpus) []Finding {
 	if ctx.N == 0 {
 		return nil
 	}
-	f := voice.Features(body)
-	vals := map[string]float64{}
-	for i, n := range voice.FeatureNames {
-		vals[n] = f.Values()[i]
-	}
+	vals := featureValues(body)
 	label, note := basis(ctx)
 	var out []Finding
 	for _, rf := range rangeFeatures {
@@ -36,6 +46,14 @@ func ranges(body string, ctx voice.ContextProfile) []Finding {
 			continue
 		}
 		v := vals[rf.name]
+		if rf.habit && v > 0 && corpus.N > 0 && float64(corpus.HabitPosts[rf.name])/float64(corpus.N) <= rareShare {
+			out = append(out, Finding{
+				Rule: RuleRareHabit, Severity: Medium,
+				Message:  fmt.Sprintf("내 글에 거의 없는 %s예요", rf.noun),
+				Evidence: countEvidence(ctx, corpus.HabitPosts[rf.name], corpus.N, ""),
+			})
+			continue
+		}
 		var dir string
 		switch {
 		case v > st.P90:

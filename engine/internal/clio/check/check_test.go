@@ -271,3 +271,39 @@ func TestJSONTags(t *testing.T) {
 		t.Errorf("got %s", b)
 	}
 }
+
+func TestRareHabitIsMedium(t *testing.T) {
+	ctx, corpus := setup(plainPosts("x", "post", 100), "x", "post")
+	fs := find(Run("오늘도 메모를 적었다 😀", ctx, corpus), RuleRareHabit)
+	if len(fs) != 1 || fs[0].Severity != Medium || !strings.Contains(fs[0].Evidence, "100편 중 0편") {
+		t.Fatalf("emoji the writer never uses: %+v", fs)
+	}
+	// A writer who uses emoji in 5% of posts is not flagged for it.
+	posts := plainPosts("x", "post", 95)
+	for i := 0; i < 5; i++ {
+		posts = append(posts, post.Post{ID: fmt.Sprint("e", i), Platform: "x", Kind: "post", Body: fmt.Sprintf("이모지 %d번째 글이다 😀", i)})
+	}
+	ctx, corpus = setup(posts, "x", "post")
+	if fs := find(Run("오늘도 메모를 적었다 😀", ctx, corpus), RuleRareHabit); len(fs) != 0 {
+		t.Fatalf("writer's own habit flagged: %+v", fs)
+	}
+}
+
+func TestAIPhraseTwoPostsOfHundredIsTheWriters(t *testing.T) {
+	posts := plainPosts("x", "post", 98)
+	for i := 0; i < 2; i++ {
+		posts = append(posts, post.Post{ID: fmt.Sprint("d", i), Platform: "x", Kind: "post", Body: fmt.Sprintf("이번 %d번째 글 — 짧게 적었다", i)})
+	}
+	ctx, corpus := setup(posts, "x", "post")
+	if fs := find(Run("새 기능 — 오늘 붙였다", ctx, corpus), RuleAIPhrase); len(fs) != 0 {
+		t.Fatalf("em dash in 2%% of posts flagged: %+v", fs)
+	}
+}
+
+func TestListItemsAndNounPhrasesHaveNoRegister(t *testing.T) {
+	ctx, corpus := setup(plainPosts("x", "post", 30), "x", "post")
+	body := "새 버전을 올렸어요.\n새로 생긴 것들\n- 앞으로 7일 흐름\n- 뜻을 따로 볼 수 있는 페이지"
+	if fs := find(Run(body, ctx, corpus), RuleRegisterMixed); len(fs) != 0 {
+		t.Fatalf("list items counted as 반말: %+v", fs)
+	}
+}

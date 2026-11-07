@@ -134,7 +134,7 @@ func run(args []string, w io.Writer) error {
 		fmt.Fprintf(w, "  %-9s %d\n", arm, flagged[arm])
 	}
 	fmt.Fprintln(w, "\nfindings per rule (findings / texts)")
-	ruleNames := []string{check.RuleAIPhrase, check.RuleAIPattern, check.RuleRegisterMismatch, check.RuleRegisterMixed, check.RuleOutOfRange, check.RuleUnfamiliarEnding}
+	ruleNames := []string{check.RuleAIPhrase, check.RuleAIPattern, check.RuleRegisterMismatch, check.RuleRegisterMixed, check.RuleOutOfRange, check.RuleRareHabit, check.RuleUnfamiliarEnding}
 	fmt.Fprintf(w, "  %-19s", "rule")
 	for _, arm := range arms {
 		fmt.Fprintf(w, " %9s", arm)

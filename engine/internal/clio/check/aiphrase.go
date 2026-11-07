@@ -7,7 +7,7 @@ import (
 )
 
 // aiPhrases flags each occurrence of an AI tell that appears in at most
-// rareShare of the writer's posts. A phrase the writer uses is not flagged.
+// tellRare of the writer's posts. A phrase the writer uses is not flagged.
 func aiPhrases(body string, ctx voice.ContextProfile, corpus Corpus) []Finding {
 	if corpus.N == 0 {
 		return nil
@@ -15,7 +15,7 @@ func aiPhrases(body string, ctx voice.ContextProfile, corpus Corpus) []Finding {
 	var out []Finding
 	for _, tell := range voice.AITells {
 		n := corpus.TellPosts[tell]
-		if float64(n)/float64(corpus.N) > rareShare {
+		if float64(n)/float64(corpus.N) > tellRare {
 			continue
 		}
 		for from := 0; from < len(body); {

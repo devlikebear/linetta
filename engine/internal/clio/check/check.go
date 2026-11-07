@@ -30,15 +30,19 @@ const (
 	RuleRegisterMixed    = "register_mixed"
 	RuleOutOfRange       = "out_of_range"
 	RuleUnfamiliarEnding = "unfamiliar_ending"
+	RuleRareHabit        = "rare_habit"
 )
 
 // minUnfamiliarSegments is how many unseen endings a draft needs before any is flagged.
 const minUnfamiliarSegments = 2
 
 const (
-	// rareShare is the most of the writer's posts a habit may appear in and
+	// rareShare is the most of the writer's posts a register may dominate and
 	// still count as foreign to them.
 	rareShare = 0.02
+	// tellRare is the same bound for an AI phrase. It is tighter: run-12 showed
+	// a writer's own em dash in 2 of 102 posts, which 2% still flagged.
+	tellRare = 0.01
 	// mixedMax is the largest share of mixed-register posts for which a mixed
 	// draft is called unusual.
 	mixedMax = 0.10
@@ -71,12 +75,15 @@ type Corpus struct {
 	MixedPosts  int `json:"mixed_posts"`
 	// EndingPosts maps a segment ending to the posts that have it.
 	EndingPosts map[string]int `json:"ending_posts"`
+	// HabitPosts maps each counted habit in rangeFeatures (emoji, exclaim…)
+	// to the posts that have it at least once.
+	HabitPosts map[string]int `json:"habit_posts"`
 }
 
 // BuildCorpus counts habits over the posts that voice.Build groups under key:
 // "x/post" is exact, "x/*" a whole platform, "*" everything.
 func BuildCorpus(posts []post.Post, key string) Corpus {
-	c := Corpus{Key: key, TellPosts: map[string]int{}, EndingPosts: map[string]int{}}
+	c := Corpus{Key: key, TellPosts: map[string]int{}, EndingPosts: map[string]int{}, HabitPosts: map[string]int{}}
 	for _, p := range posts {
 		if !inContext(p, key) {
 			continue
@@ -87,6 +94,12 @@ func BuildCorpus(posts []post.Post, key string) Corpus {
 				c.TellPosts[t]++
 			}
 		}
+		vals := featureValues(p.Body)
+		for _, rf := range rangeFeatures {
+			if rf.habit && vals[rf.name] > 0 {
+				c.HabitPosts[rf.name]++
+			}
+		}
 		var polite, plain int
 		endings := map[string]bool{}
 		for _, s := range voice.Segments(p.Body) {
@@ -95,9 +108,10 @@ func BuildCorpus(posts []post.Post, key string) Corpus {
 				continue
 			}
 			endings[e] = true
-			if voice.IsPolite(e) {
+			switch voice.Register(s) {
+			case 1:
 				polite++
-			} else {
+			case -1:
 				plain++
 			}
 		}
@@ -137,7 +151,7 @@ func Run(body string, ctx voice.ContextProfile, corpus Corpus) []Finding {
 	out = append(out, aiPhrases(body, ctx, corpus)...)
 	out = append(out, aiPatterns(body)...)
 	out = append(out, registers(body, ctx, corpus)...)
-	out = append(out, ranges(body, ctx)...)
+	out = append(out, ranges(body, ctx, corpus)...)
 	out = append(out, unfamiliarEndings(body, ctx, corpus)...)
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
