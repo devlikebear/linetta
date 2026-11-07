@@ -129,7 +129,12 @@
    "later": "하람의 정체를 모름",
    "later_soft": false,
    "replaces": false,
-   "number": false
+   "number": false,
+   "about": "하람의 정체",
+   "knows": [
+    1,
+    0
+   ]
   }
  },
  {
@@ -148,7 +153,12 @@
    "later": "하람의 정체를 앎",
    "later_soft": false,
    "replaces": true,
-   "number": false
+   "number": false,
+   "about": "하람의 정체",
+   "knows": [
+    0,
+    1
+   ]
   }
  },
  {
@@ -433,7 +443,12 @@
    "later": "재희의 정체를 모름",
    "later_soft": false,
    "replaces": false,
-   "number": false
+   "number": false,
+   "about": "재희의 정체",
+   "knows": [
+    1,
+    0
+   ]
   }
  },
  {
@@ -452,7 +467,12 @@
    "later": "소연의 정체를 앎",
    "later_soft": false,
    "replaces": true,
-   "number": false
+   "number": false,
+   "about": "소연의 정체",
+   "knows": [
+    0,
+    1
+   ]
   }
  },
  {
@@ -737,7 +757,12 @@
    "later": "지안의 정체를 모름",
    "later_soft": false,
    "replaces": false,
-   "number": false
+   "number": false,
+   "about": "지안의 정체",
+   "knows": [
+    1,
+    0
+   ]
   }
  },
  {
@@ -756,7 +781,12 @@
    "later": "태경의 정체를 앎",
    "later_soft": false,
    "replaces": true,
-   "number": false
+   "number": false,
+   "about": "태경의 정체",
+   "knows": [
+    0,
+    1
+   ]
   }
  },
  {
@@ -1041,7 +1071,12 @@
    "later": "서진의 정체를 모름",
    "later_soft": false,
    "replaces": false,
-   "number": false
+   "number": false,
+   "about": "서진의 정체",
+   "knows": [
+    1,
+    0
+   ]
   }
  },
  {
@@ -1060,7 +1095,12 @@
    "later": "서진의 정체를 앎",
    "later_soft": false,
    "replaces": true,
-   "number": false
+   "number": false,
+   "about": "서진의 정체",
+   "knows": [
+    0,
+    1
+   ]
   }
  },
  {
@@ -1345,7 +1385,12 @@
    "later": "태경의 정체를 모름",
    "later_soft": false,
    "replaces": false,
-   "number": false
+   "number": false,
+   "about": "태경의 정체",
+   "knows": [
+    1,
+    0
+   ]
   }
  },
  {
@@ -1364,7 +1409,12 @@
    "later": "도윤의 정체를 앎",
    "later_soft": false,
    "replaces": true,
-   "number": false
+   "number": false,
+   "about": "도윤의 정체",
+   "knows": [
+    0,
+    1
+   ]
   }
  },
  {
