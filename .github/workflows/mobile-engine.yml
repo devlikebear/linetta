@@ -10,6 +10,7 @@ on:
       - "apps/desktop/src-tauri/build.rs"
       - "apps/desktop/src-tauri/tauri.conf.json"
       - "scripts/ios-toolchain/**"
+      - "scripts/test-cryptokit-aead.sh"
       - "apps/desktop/src-tauri/src/ffi.rs"
       - "apps/desktop/src/**"
       - "apps/desktop/package.json"
@@ -23,6 +24,7 @@ on:
       - "apps/desktop/src-tauri/build.rs"
       - "apps/desktop/src-tauri/tauri.conf.json"
       - "scripts/ios-toolchain/**"
+      - "scripts/test-cryptokit-aead.sh"
       - "apps/desktop/src-tauri/src/ffi.rs"
       - "apps/desktop/src/**"
       - "apps/desktop/package.json"
@@ -93,6 +95,9 @@ jobs:
           node-version: 25
           cache: pnpm
           cache-dependency-path: apps/desktop/pnpm-lock.yaml
+
+      - name: Check CryptoKit and Go open each other's sync blobs
+        run: bash scripts/test-cryptokit-aead.sh
 
       - name: Build iOS engine xcframework
         run: apps/desktop/src-tauri/scripts/build-engine-ios.sh /tmp/linetta-ios

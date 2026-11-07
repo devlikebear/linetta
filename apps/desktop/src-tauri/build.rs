@@ -123,6 +123,7 @@ fn build_go_engine() {
             cmd.env("GOOS", "ios")
                 .env("GOARCH", "arm64")
                 .env("CC", &wrapper);
+            build_cryptokit(engine_dir, out_dir, sdk);
         }
 
         run_go_build(&mut cmd, "go c-archive build failed");
@@ -245,6 +246,41 @@ fn build_go_engine() {
 
     fn run_go_build(cmd: &mut Command, message: &str) {
         assert!(cmd.status().expect("spawn go build").success(), "{message}");
+    }
+
+    // The iOS engine seals Linetta Works sync blobs with CryptoKit, so the
+    // encryption it uses is the operating system's (engine/cryptokit). The Go
+    // archive calls into this library and links only with it.
+    fn build_cryptokit(engine_dir: &Path, out_dir: &Path, sdk: &str) {
+        let source = engine_dir.join("cryptokit/LinettaCryptoKit.swift");
+        println!("cargo:rerun-if-changed={}", source.display());
+        let target = if sdk == "iphonesimulator" {
+            "arm64-apple-ios15.0-simulator"
+        } else {
+            "arm64-apple-ios15.0"
+        };
+        let library = out_dir.join("liblinetta_cryptokit.a");
+        let status = Command::new("xcrun")
+            .current_dir(out_dir)
+            .args(["--sdk", sdk, "swiftc", "-parse-as-library", "-emit-library", "-static"])
+            .args(["-module-name", "LinettaCryptoKit", "-target", target, "-O", "-o"])
+            .arg(&library)
+            .arg(&source)
+            .status()
+            .expect("spawn swiftc");
+        assert!(status.success(), "swiftc build of the CryptoKit sealer failed");
+        println!("cargo:rustc-link-lib=static=linetta_cryptokit");
+        // The Swift objects ask for the Swift runtime by name; the cdylib link
+        // needs to find it the way Xcode's link of the app does.
+        let sdkroot = xcrun(sdk, &["--show-sdk-path"]);
+        println!("cargo:rustc-link-search=native={sdkroot}/usr/lib/swift");
+        let swiftc = xcrun(sdk, &["--find", "swiftc"]);
+        if let Some(bin) = Path::new(&swiftc).parent() {
+            println!(
+                "cargo:rustc-link-search=native={}",
+                bin.join("../lib/swift").join(sdk).display()
+            );
+        }
     }
 
     fn xcrun(sdk: &str, args: &[&str]) -> String {
