@@ -450,3 +450,13 @@ func TestRunCLI_aSweepingReviseLeavesTheCatchUpToTheNextWrite(t *testing.T) {
 		t.Errorf("records = %+v, want the catch-up over n2 first", got)
 	}
 }
+
+// The settlement pass records knowledge against a question, reports leaks and
+// knowledge the character does not have, and never pays a question itself.
+func TestSettlementPromptCoversSecretsWithoutPaying(t *testing.T) {
+	for _, want := range []string{"about", "value_num 1", "비밀 누설:", "앎 위반:", "do not pay the question", "a rumour is not one"} {
+		if !strings.Contains(settlementSystemPrompt, want) {
+			t.Errorf("settlement prompt lacks %q", want)
+		}
+	}
+}

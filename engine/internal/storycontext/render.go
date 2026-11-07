@@ -644,6 +644,16 @@ func renderLedger(l LedgerBrief, lang string) string {
 	}
 	section(langPick(lang, "## 작품 규칙", "## Rules of This Work", "## 作品の規則"), l.Pinned)
 	section(langPick(lang, "## 현재 상태", "## Current State", "## 現在の状態"), l.State)
+	if len(l.Secrets) > 0 || len(l.Knows) > 0 {
+		b.WriteString(langPick(lang,
+			"## 비밀과 앎\n서술자는 작가만 아는 답을 밝히지 않는다. 인물은 모르는 답으로 움직이지 않는다.\n",
+			"## Secrets and Who Knows\nThe narrator does not tell an answer only the writer knows. No one acts on an answer they do not know.\n",
+			"## 秘密と知っていること\n語り手は作家だけが知る答えを明かさない。人物は知らない答えで動かない。\n"))
+		for _, line := range append(slices.Clone(l.Secrets), l.Knows...) {
+			b.WriteString("- " + line + "\n")
+		}
+		b.WriteString("\n")
+	}
 	part := func(p *PartArcBrief, heading string) {
 		if p == nil {
 			return

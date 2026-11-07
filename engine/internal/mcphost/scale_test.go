@@ -125,6 +125,22 @@ func TestThousandEpisodeWork(t *testing.T) {
 		}
 	}
 
+	// Questions with an answer only the writer knows, one every five episodes,
+	// and what the hero, who is in every scene, knows of each.
+	for i := range 200 {
+		scene := scenes[i*5]
+		q, err := repo.Add(ctx, 7, ledger.Entry{ProjectID: p.ID, Kind: ledger.KindQuestion, Subject: fmt.Sprintf("비밀%d", i),
+			Body: strings.Repeat("독자가 궁금해하는 것 ", 4), Answer: strings.Repeat("작가만 아는 답 ", 5), PlantedNodeID: scene.ID, Reach: ledger.ReachArc})
+		if err != nil {
+			t.Fatal(err)
+		}
+		v := float64(i % 2)
+		if _, err := repo.Add(ctx, 8, ledger.Entry{ProjectID: p.ID, Kind: ledger.KindKnowledge, Subject: "주인공", Attribute: ledger.AttributeKnows,
+			Body: fmt.Sprintf("비밀%d의 답", i), About: q.ID, ValueNum: &v, PlantedNodeID: scene.ID}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	builder := storycontext.NewContextBuilder(projects, nodes, mentions, thread.NewRepo(st), beat.NewRepo(st),
 		note.NewRepo(st), relationship.NewRepo(st)).WithLedgerSource(repo)
 	d := ToolDeps{Projects: projects, Nodes: nodes, Entities: entities, Context: builder, Ledger: repo, Source: SourceAgent}
@@ -151,6 +167,14 @@ func TestThousandEpisodeWork(t *testing.T) {
 			t.Fatal(err)
 		}
 		inBrief[at] = len(brief.Due) + len(brief.Open)
+		secretRunes := 0
+		for _, line := range append(slices.Clone(brief.Secrets), brief.Knows...) {
+			secretRunes += utf8.RuneCountInString(line)
+		}
+		fmt.Printf("SCALE at=%d secrets=%d knows=%d secret_runes=%d\n", at+1, len(brief.Secrets), len(brief.Knows), secretRunes)
+		if at > 19 && (len(brief.Secrets) == 0 || len(brief.Knows) == 0) {
+			t.Errorf("episode %d: no secrets or knows in the brief", at+1)
+		}
 	}
 	slices.Sort(times)
 	p95 := times[len(times)*95/100]

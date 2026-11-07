@@ -1,6 +1,7 @@
 package ledger
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"slices"
@@ -25,6 +26,12 @@ const (
 	// briefStateRunes bounds the current state, briefStateValueRunes one value.
 	briefStateRunes      = 2500
 	briefStateValueRunes = 80
+	// briefSecretsRunes bounds the answers only the writer knows and who in
+	// the scene knows them. briefSecretNameRunes is how much of a question
+	// names it there: the question in full is under what the story owes, or
+	// under the work's rules when the writer pinned it.
+	briefSecretsRunes    = 1500
+	briefSecretNameRunes = 40
 	// dueHorizon is how many scenes ahead counts as coming due.
 	dueHorizon = 3
 	// neglectedAfter is how many scenes an open promise may sit before the
@@ -70,6 +77,13 @@ func (r *Repo) ContextLedger(ctx context.Context, projectID, nodeID string) (sto
 		return out, err
 	}
 	out.State, out.Omitted = t.stateLines(entries, nodeID, cur)
+	known, err := r.knowsAt(ctx, t, cur, projectID, nil)
+	if err != nil {
+		return out, err
+	}
+	var secretsOmitted int
+	out.Secrets, out.Knows, secretsOmitted = t.secretLines(known, nodeID, cur, root, arc)
+	out.Omitted += secretsOmitted
 	var owed, settled []Entry
 	pinnedRoom := briefPinnedRunes
 	for _, e := range entries {
@@ -143,6 +157,82 @@ func (r *Repo) ContextLedger(ctx context.Context, projectID, nodeID string) (sto
 		}
 	}
 	return out, nil
+}
+
+// secretLines renders the answers the story has not told yet, within the reach
+// its promises have, and what each person in the scene knows of them. A person
+// is in the scene when the scene's text, plan or summary, or the previous
+// scene's summary names them. It returns how many lines did not fit.
+func (t tree) secretLines(k Knowledge, nodeID string, cur int, root, arc string) (secrets, knows []string, omitted int) {
+	room := briefSecretsRunes
+	put := func(line string, into *[]string) {
+		cost := utf8.RuneCountInString(line)
+		if cost > room {
+			omitted++
+			return
+		}
+		room -= cost
+		*into = append(*into, line)
+	}
+	names := map[string]string{}
+	var shown []Entry
+	for _, e := range t.bySceneRelevance(k.Secrets, nodeID) {
+		if e.SupersededBy != "" || !(e.Pinned || t.due(e, cur, root) || t.inReach(e, root, arc)) {
+			continue
+		}
+		name := e.Body
+		if e.Subject != "" {
+			name = e.Subject + ": " + e.Body
+		}
+		name = clip(name, briefSecretNameRunes)
+		before := len(secrets)
+		put(name+" — "+e.Answer+" (작가만 앎)", &secrets)
+		if len(secrets) > before {
+			names[e.ID] = name
+			shown = append(shown, e)
+		}
+	}
+	if len(shown) == 0 {
+		return secrets, nil, omitted
+	}
+	text := t.sceneText(nodeID)
+	if n, ok := t.byID[nodeID]; ok && n.ContentDoc != nil {
+		text += "\n" + *n.ContentDoc
+	}
+	var people []string
+	for subject := range k.People {
+		if subjectHits(subject, text) > 0 {
+			people = append(people, subject)
+		}
+	}
+	slices.SortFunc(people, func(a, b string) int {
+		return cmp.Or(subjectHits(b, text)-subjectHits(a, text), cmp.Compare(a, b))
+	})
+	for _, subject := range people {
+		var yes, no []string
+		for _, q := range shown {
+			fact, ok := k.People[subject][q.ID]
+			if !ok || fact.ValueNum == nil {
+				continue
+			}
+			if *fact.ValueNum == KnowsYes {
+				yes = append(yes, names[q.ID])
+			} else {
+				no = append(no, names[q.ID])
+			}
+		}
+		var parts []string
+		if len(yes) > 0 {
+			parts = append(parts, "앎="+strings.Join(yes, " / "))
+		}
+		if len(no) > 0 {
+			parts = append(parts, "모름="+strings.Join(no, " / "))
+		}
+		if len(parts) > 0 {
+			put(subject+": "+strings.Join(parts, ", "), &knows)
+		}
+	}
+	return secrets, knows, omitted
 }
 
 // arcOf is the container nearest a scene: its arc in a work split into volumes
