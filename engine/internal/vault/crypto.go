@@ -12,7 +12,6 @@ package vault
 import (
 	"bytes"
 	"compress/flate"
-	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hkdf"
 	"crypto/hmac"
@@ -180,11 +179,7 @@ func (k RecoveryKey) Derive() (*Keys, error) {
 	if err != nil {
 		return nil, err
 	}
-	block, err := aes.NewCipher(encKey)
-	if err != nil {
-		return nil, err
-	}
-	aead, err := cipher.NewGCMWithRandomNonce(block)
+	aead, err := newAEAD(encKey)
 	if err != nil {
 		return nil, err
 	}
