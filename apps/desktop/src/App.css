@@ -545,6 +545,8 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
   font-size: 14px; font-weight: 500;
   transition: transform .12s, background .15s, box-shadow .15s, color .15s;
 }
+/* A route link drawn as a button (the library's Linetta Works entry). */
+a.btn { text-decoration: none; }
 .btn:hover { transform: translateY(-1px); }
 .btn:active { transform: translateY(0); }
 .btn.primary { background: var(--ink); color: var(--surface); border-color: var(--ink); }
