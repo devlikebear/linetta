@@ -230,6 +230,8 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
     "visuals.set_art_style",
     "visuals.set_sheet",
     "visuals.update_image",
+    "works.gallery",
+    "works.gallery_cover",
 ];
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

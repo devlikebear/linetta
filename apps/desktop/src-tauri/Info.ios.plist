@@ -6,6 +6,14 @@
 	     the UIScene lifecycle. Declaring the manifest makes tao (0.37+) run
 	     through its scene delegate. Linetta stays single-window: two scenes
 	     would edit the same library.db at once. -->
+	<!-- Overrides Info.plist's false for iOS. The iOS build carries Linetta
+	     Works sync, which seals works on the device with standard algorithms
+	     of its own (engine/internal/vault/crypto.go) rather than the OS's, so
+	     it uses non-exempt encryption and App Store Connect asks for the
+	     export compliance answers with each build. The Mac App Store build
+	     leaves sync out and keeps false. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

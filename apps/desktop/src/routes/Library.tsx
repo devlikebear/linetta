@@ -30,7 +30,7 @@ import { SyncStatusNotice } from "../components/SyncStatusNotice";
 import { VaultNotice } from "../components/VaultNotice";
 import { pickAndReadMarkdown } from "../lib/importLoad";
 import { exportDestinationMessage, saveExportedMarkdown } from "../lib/exportSave";
-import { Archive, Download, FolderOpen, MoreHorizontal, Settings, Plus, Search, Trash2, Upload } from "../lib/icons";
+import { Archive, Download, FolderOpen, Globe, MoreHorizontal, Settings, Plus, Search, Trash2, Upload } from "../lib/icons";
 import { useToast } from "../components/ToastProvider";
 import { formatWordCount, lengthLabel, useI18n } from "../lib/i18n";
 import { OnboardingTour, type OnboardingTourStep } from "../components/onboarding/OnboardingTour";
@@ -451,6 +451,9 @@ export function Library() {
         </div>
         <div className="lib-brandmark">{t("library.brand")}</div>
         <div className="lib-top-actions">
+          <Link to="/works" className="lib-icon-btn" aria-label={t("library.works")} title={t("library.works")} data-testid="library-works">
+            <Globe size={17} />
+          </Link>
           <button className="lib-icon-btn" aria-label={t("library.menu.search")} onClick={() => setSearchOpen(true)}>
             <Search size={17} />
           </button>
@@ -468,8 +471,8 @@ export function Library() {
           </div>
           <div className="lib-meta-col">
             <div><b>{totalRecent}</b> {t("library.projectCount")}</div>
-            <div><b>{t("library.noExternalTransfer")}</b></div>
-            <div>{t("library.dataLocal", { local: t("library.local") })}</div>
+            <div><b>{t("library.metaWorks")}</b></div>
+            <div>{t("library.metaBackup")}</div>
           </div>
         </div>
 
@@ -488,6 +491,9 @@ export function Library() {
           <button className="btn ghost" onClick={() => setSearchOpen(true)} data-tour="library-search">
             <Search size={15} /> {t("library.menu.search")} <span className="kbd lib-search-kbd" style={{ marginLeft: 4 }}>⌘F</span>
           </button>
+          <Link to="/works" className="btn ghost" data-testid="library-works-action">
+            <Globe size={15} /> {t("library.works")}
+          </Link>
         </div>
 
         <div className="lib-shelf-head">

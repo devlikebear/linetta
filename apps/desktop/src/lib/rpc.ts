@@ -1,5 +1,6 @@
 import type { CharacterVisualSheet, ReferenceImageMeta, ArtStyle, StyleApproveMode, StyleCheckResult, StyleDraftState, StyleRules } from "./types";
 import type { ArchivedNote } from "./types";
+import type { WorksGalleryPage } from "./types";
 import type { FocusState, SceneIntent, SceneIntentState } from "./types";
 import type { ContinuityCheck, ContinuityObservation, ContinuityOpenCounts, ContinuityStatus } from "./types";
 import type { LedgerEntry, LedgerKind, LedgerState, LedgerStatus, PartArc } from "./types";
@@ -536,6 +537,15 @@ export const publishApi = {
 
 /** The private vault (Phase 11). A push or pull reports through the
  *  vault.progress notification and can run for minutes. */
+/** What readers see on Linetta Works, read through the site's public search.
+ *  Needs no account and sends nothing of the writer's. */
+export const worksApi = {
+  gallery: (query: { q?: string; genre?: string; page?: number }) =>
+    rpcCall<WorksGalleryPage>("works.gallery", query),
+  /** A cover as a data URL: the page loads pictures only from the app. */
+  cover: (workId: string) => rpcCall<{ data_url: string }>("works.gallery_cover", { work_id: workId }),
+};
+
 export const vaultApi = {
   /** The primary sync target's overview, or one target's when named. */
   status: (target?: string) => rpcCall<VaultOverview>("vault.status", target ? { target } : undefined),

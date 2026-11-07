@@ -1096,11 +1096,18 @@ export function Workspace() {
     const show = () => {
       void syncApi.runNow().catch(() => {});
     };
+    // iOS sends no blur when the app goes to the background, only this.
+    const visibility = () => {
+      if (document.visibilityState === "hidden") hide();
+      else show();
+    };
     window.addEventListener("blur", hide);
     window.addEventListener("focus", show);
+    document.addEventListener("visibilitychange", visibility);
     return () => {
       window.removeEventListener("blur", hide);
       window.removeEventListener("focus", show);
+      document.removeEventListener("visibilitychange", visibility);
       void flushRef.current().finally(() => syncApi.setActive(projectId, false).catch(() => {}));
     };
   }, [projectId]);

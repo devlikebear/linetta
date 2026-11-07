@@ -2,11 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Only the store builds read this key. They use standard HTTPS/TLS and
-	     the macOS Keychain, both exempt from U.S. export encryption
-	     regulations; publishing to Linetta Works is plain HTTPS. The Works
-	     sync encryption is compiled out of them (engineapp/vault_disabled.go);
-	     turning it on there makes this true. -->
+	<!-- Only the store builds read this key. The Mac App Store build uses
+	     standard HTTPS/TLS and the macOS Keychain, both exempt from U.S. export
+	     encryption regulations; publishing to Linetta Works is plain HTTPS.
+	     The Works sync encryption is compiled out of it
+	     (engineapp/vault_disabled.go); turning it on there makes this true.
+	     The iOS build carries sync, and Info.ios.plist sets it true there. -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 </dict>

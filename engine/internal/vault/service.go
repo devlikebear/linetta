@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -376,6 +377,17 @@ func (s *Service) compare(ctx context.Context, sess session, link *Link, item Re
 		return "", err
 	}
 	if !same {
+		// What changed here may be only that this version carries more of the
+		// work. Then nothing was edited, and the pull merges what is new.
+		if localChanged {
+			only, err := s.onlyNewlyCarried(ctx, link.ProjectID, link.LastHash)
+			if err != nil {
+				return "", err
+			}
+			if only {
+				return StateRemoteChanges, nil
+			}
+		}
 		return StateConflict, nil
 	}
 	link.BaseRevision, link.LastHash, link.LastSyncedAt = item.HeadRevision, hash, s.Now()
@@ -680,8 +692,9 @@ func (s *Service) pull(ctx context.Context, sess session, in PullInput, opts pul
 	if err != nil {
 		return PullResult{}, err
 	}
+	merge := false
 	if exists && !opts.force {
-		if err := s.refuseIfChanged(ctx, projectID, link, linked, bundle); err != nil {
+		if merge, err = s.refuseIfChanged(ctx, projectID, link, linked, bundle); err != nil {
 			return PullResult{}, err
 		}
 	}
@@ -711,28 +724,67 @@ func (s *Service) pull(ctx context.Context, sess session, in PullInput, opts pul
 		}
 		link.LastHash = digest.hash
 	}
-	if err := s.applyBundle(ctx, bundle, link); err != nil {
+	var applyOpts vaultbundle.ApplyOptions
+	if merge {
+		applyOpts.Merge = newlyCarried
+	}
+	if err := s.applyBundle(ctx, bundle, link, applyOpts); err != nil {
 		return PullResult{}, err
 	}
-	s.finishPull(ctx, bundle, &link, chosen.Revision == head.Revision, &out)
+	s.finishPull(ctx, bundle, &link, chosen.Revision == head.Revision, merge, &out)
 	_ = os.RemoveAll(cache)
 	s.report(link, Progress{ProjectID: projectID, ItemID: link.ItemID, Phase: PhaseApply, Done: 1, Total: 1})
 	return out, nil
 }
 
-func (s *Service) refuseIfChanged(ctx context.Context, projectID string, link Link, linked bool, bundle *vaultbundle.Bundle) error {
+// refuseIfChanged stops a pull over edits that are not in the vault. merge says
+// the only change here is a category this version newly carries: the pull then
+// keeps this device's rows of it alongside the vault's.
+func (s *Service) refuseIfChanged(ctx context.Context, projectID string, link Link, linked bool, bundle *vaultbundle.Bundle) (merge bool, err error) {
 	current, err := s.export(ctx, projectID)
 	if err != nil {
-		return err
+		return false, err
 	}
 	hash := current.Manifest.ContentHash()
 	if linked && hash == link.LastHash {
-		return nil
+		return false, nil
 	}
 	if hash == bundle.Manifest.ContentHash() {
-		return nil
+		return false, nil
 	}
-	return reason(rpc.ReasonVaultLocalChanges, fmt.Errorf("vault: work %s has changes that are not in the vault", projectID))
+	if linked {
+		only, err := s.onlyNewlyCarried(ctx, projectID, link.LastHash)
+		if err != nil {
+			return false, err
+		}
+		if only {
+			return true, nil
+		}
+	}
+	return false, reason(rpc.ReasonVaultLocalChanges, fmt.Errorf("vault: work %s has changes that are not in the vault", projectID))
+}
+
+// newlyCarried are the categories a work's bundle took on after Linetta Works
+// sync shipped. Until a device has synced a work with them, the work's last
+// hash is from before, and the rows it kept to itself are no edit.
+var newlyCarried = []string{vaultbundle.CategoryConversations}
+
+// onlyNewlyCarried says whether the work, without the newly carried categories,
+// is still what was last synced.
+func (s *Service) onlyNewlyCarried(ctx context.Context, projectID, lastHash string) (bool, error) {
+	if lastHash == "" {
+		return false, nil
+	}
+	selection, err := getSelection(ctx, s.db())
+	if err != nil {
+		return false, err
+	}
+	omit := append(slices.Clone(selection.Omit), newlyCarried...)
+	before, err := vaultbundle.Export(ctx, s.db(), s.Home, projectID, s.now(), omit)
+	if err != nil {
+		return false, err
+	}
+	return before.Manifest.ContentHash() == lastHash, nil
 }
 
 func (s *Service) cacheDir(itemID string) (string, error) {
@@ -853,13 +905,13 @@ func (s *Service) keepCopy(ctx context.Context, snapshotPath, projectID, suffix 
 	return merged.ProjectID, copyDir(vaultbundle.MemoryDir(s.Home, merged.ProjectID), vaultbundle.MemoryDir(s.Home, projectID))
 }
 
-func (s *Service) applyBundle(ctx context.Context, bundle *vaultbundle.Bundle, link Link) error {
+func (s *Service) applyBundle(ctx context.Context, bundle *vaultbundle.Bundle, link Link, opts vaultbundle.ApplyOptions) error {
 	tx, err := s.db().BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	if err := vaultbundle.Apply(ctx, tx, bundle); err != nil {
+	if err := vaultbundle.ApplyWith(ctx, tx, bundle, opts); err != nil {
 		return err
 	}
 	if err := putLink(ctx, tx, s.targetID(), link); err != nil {
@@ -870,7 +922,7 @@ func (s *Service) applyBundle(ctx context.Context, bundle *vaultbundle.Bundle, l
 
 // finishPull is what follows the commit. None of it can undo the pull, so a
 // failure is logged and reported, not returned: the writer's text is in.
-func (s *Service) finishPull(ctx context.Context, bundle *vaultbundle.Bundle, link *Link, isHead bool, out *PullResult) {
+func (s *Service) finishPull(ctx context.Context, bundle *vaultbundle.Bundle, link *Link, isHead, merged bool, out *PullResult) {
 	projectID := bundle.Manifest.ProjectID
 	if err := s.Index.Rebuild(ctx, projectID); err != nil {
 		log.Printf("vault: rebuild search index: %v", err)
@@ -883,9 +935,15 @@ func (s *Service) finishPull(ctx context.Context, bundle *vaultbundle.Bundle, li
 	// A bundle from an older schema re-exports with this one's columns, and that
 	// must not read as a change the writer made. Nor must files that did not
 	// land: as a local change they would refuse the pull that puts them back.
+	// Rows the bundle had no part for stayed, though, and so did merged ones, and
+	// they are not in the vault yet: then the bundle's own hash stays, and they
+	// go up with the next push.
 	if isHead {
 		if current, err := s.export(ctx, projectID); err == nil {
 			link.LastHash = current.Manifest.ContentHash()
+			if merged || bundle.LacksTablesOf(current) {
+				link.LastHash = bundle.Manifest.ContentHash()
+			}
 			if err := putLink(ctx, s.db(), s.targetID(), *link); err != nil {
 				log.Printf("vault: record pulled hash: %v", err)
 			}

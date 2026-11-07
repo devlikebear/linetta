@@ -12,6 +12,7 @@ const CATEGORY_KEYS: Record<string, MessageKey> = {
   images: "settings.vault.category.images",
   history: "settings.vault.category.history",
   work_agent: "settings.vault.category.workAgent",
+  conversations: "settings.vault.category.conversations",
   global_skills: "settings.vault.category.globalSkills",
   writer_profile: "settings.vault.category.writerProfile",
 };

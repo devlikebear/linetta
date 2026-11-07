@@ -17,4 +17,6 @@ export {
   Lightbulb,
   Pencil,
   Book,
+  Globe,
+  ExternalLink,
 } from "lucide-react";

@@ -23,6 +23,9 @@ const (
 	CategoryImages    = "images"
 	CategoryHistory   = "history"
 	CategoryWorkAgent = "work_agent"
+	// CategoryConversations is the built-in agent's conversation with the writer
+	// about the work, and the reference material attached to it.
+	CategoryConversations = "conversations"
 	// The two below live outside any work, in the library item.
 	CategoryGlobalSkills  = "global_skills"
 	CategoryWriterProfile = "writer_profile"
@@ -30,7 +33,7 @@ const (
 
 // Categories lists every category in the order a screen shows them.
 func Categories() []string {
-	return []string{CategoryImages, CategoryHistory, CategoryWorkAgent, CategoryGlobalSkills, CategoryWriterProfile}
+	return []string{CategoryImages, CategoryHistory, CategoryWorkAgent, CategoryConversations, CategoryGlobalSkills, CategoryWriterProfile}
 }
 
 // ValidCategory says whether id names a category.
@@ -39,7 +42,7 @@ func ValidCategory(id string) bool {
 }
 
 func isWorkCategory(id string) bool {
-	return id == CategoryImages || id == CategoryHistory || id == CategoryWorkAgent
+	return id == CategoryImages || id == CategoryHistory || id == CategoryWorkAgent || id == CategoryConversations
 }
 
 const (
@@ -83,6 +86,9 @@ var dependents = []Table{
 	{"writing_stats", byProject, ""},
 	{"agent_memory", "scope = 'work_notes' AND project_id = ?", CategoryWorkAgent},
 	{"agent_memory_archive", byProject, CategoryWorkAgent},
+	{"companion_references", byProject, CategoryConversations},
+	{"companion_messages", byProject, CategoryConversations},
+	{"agent_history_marks", byProject, CategoryConversations},
 	{"continuity_checks", byProject, ""},
 	{"continuity_observations", byProject, ""},
 	{"forecasts", byProject, ""},
@@ -97,11 +103,8 @@ var dependents = []Table{
 // work cannot silently leave it out of the vault.
 var excluded = map[string]string{
 	"ai_runs":                          "device history of model calls",
-	"companion_messages":               "device conversation history",
-	"agent_history_marks":              "where this device's conversation starts over",
 	"continuity_sample_pairs":          "what this device has sample-checked, redone by checking",
-	"companion_references":             "device conversation history",
-	"companion_history_imports":        "device conversation history",
+	"companion_history_imports":        "when this device imported the 1.0 companion's history",
 	"companion_messages_fts":           "search index, rebuilt from companion_messages",
 	"companion_messages_fts_config":    "search index, rebuilt from companion_messages",
 	"companion_messages_fts_content":   "search index, rebuilt from companion_messages",

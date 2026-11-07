@@ -335,21 +335,67 @@ func checkPartName(name string) error {
 	return nil
 }
 
+// ApplyOptions changes how Apply treats some of a work's rows.
+type ApplyOptions struct {
+	// Merge names categories whose rows on this device stay: the bundle's rows
+	// are written over the ones with the same key, and the rest are kept. A
+	// device that has only just started carrying a category merges the first
+	// time, so what it kept to itself until then is not lost.
+	Merge []string
+}
+
 // Apply replaces the work in the library with the bundle, inside the caller's
 // transaction, keeping every id. Validate first. Rows of other works and
 // tables that stay on this device are left alone, and so are the categories the
-// bundle left out, whose rows go only with a parent the bundle removes.
+// bundle left out, whose rows go only with a parent the bundle removes. A table
+// the bundle has no part for at all, because the app that wrote it did not yet
+// carry that table, is left alone the same way.
 // Rebuilding the search index and reconciling publish state are the caller's
 // job.
 func Apply(ctx context.Context, tx *sql.Tx, bundle *Bundle) error {
+	return ApplyWith(ctx, tx, bundle, ApplyOptions{})
+}
+
+// carries says whether the bundle has an opinion about a table's rows.
+func (b *Bundle) carries(table Table) bool {
+	if b.Manifest.omits(table.Category) {
+		return false
+	}
+	_, ok := b.Parts[tablePrefix+table.Name]
+	return ok
+}
+
+// LacksTablesOf says whether other holds a table this bundle has no part for,
+// outside the categories this bundle left out. Applying this bundle kept that
+// table's rows, so they are not in it.
+func (b *Bundle) LacksTablesOf(other *Bundle) bool {
+	for _, table := range allTables() {
+		if b.Manifest.omits(table.Category) {
+			continue
+		}
+		if _, ok := other.Parts[tablePrefix+table.Name]; !ok {
+			continue
+		}
+		if _, ok := b.Parts[tablePrefix+table.Name]; !ok {
+			return true
+		}
+	}
+	return false
+}
+
+// ApplyWith is Apply with options.
+func ApplyWith(ctx context.Context, tx *sql.Tx, bundle *Bundle, opts ApplyOptions) error {
 	projectID := bundle.Manifest.ProjectID
 	library, err := SchemaVersion(ctx, tx)
 	if err != nil {
 		return err
 	}
+	merging := func(table Table) bool {
+		return table.Category != "" && slices.Contains(opts.Merge, table.Category)
+	}
 	for i := len(dependents) - 1; i >= 0; i-- {
 		table := dependents[i]
-		if bundle.Manifest.omits(table.Category) {
+		if !bundle.carries(table) || merging(table) {
 			continue
 		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM `+table.Name+` WHERE `+table.Scope, projectID); err != nil {
@@ -376,15 +422,19 @@ func Apply(ctx context.Context, tx *sql.Tx, bundle *Bundle) error {
 		return err
 	}
 	for _, table := range dependents {
-		if bundle.Manifest.omits(table.Category) {
+		if !bundle.carries(table) {
 			continue
 		}
 		rows, err := reader.rows(table.Name)
 		if err != nil {
 			return err
 		}
+		write := reader.insert
+		if merging(table) {
+			write = reader.merge
+		}
 		for _, row := range rows {
-			if err := reader.insert(table.Name, row); err != nil {
+			if err := write(table.Name, row); err != nil {
 				return fmt.Errorf("restore %s: %w", table.Name, err)
 			}
 		}
@@ -664,6 +714,41 @@ func (r *rowReader) upsert(table string, row map[string]any) error {
 	}
 	if changed == 0 {
 		return fmt.Errorf("%w: %s %v belongs to another work", ErrCorrupt, table, row["id"])
+	}
+	return nil
+}
+
+// mergeKeys is the column a merged row is matched on, where it is not id.
+var mergeKeys = map[string]string{
+	"agent_history_marks": "project_id",
+}
+
+// merge writes a row over the one with the same key, or adds it. Like upsert, a
+// key that belongs to another work fails instead of being taken over.
+func (r *rowReader) merge(table string, row map[string]any) error {
+	key := mergeKeys[table]
+	if key == "" {
+		key = "id"
+	}
+	columns := sortedColumns(row)
+	sets := make([]string, 0, len(columns))
+	for _, column := range columns {
+		if column != key {
+			sets = append(sets, column+" = excluded."+column)
+		}
+	}
+	statement := insertSQL(table, columns) + ` ON CONFLICT(` + key + `) DO UPDATE SET ` + strings.Join(sets, ", ") +
+		` WHERE ` + table + `.project_id = excluded.project_id`
+	result, err := r.tx.ExecContext(r.ctx, statement, valuesOf(row, columns)...)
+	if err != nil {
+		return err
+	}
+	changed, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if changed == 0 {
+		return fmt.Errorf("%w: %s %v belongs to another work", ErrCorrupt, table, row[key])
 	}
 	return nil
 }

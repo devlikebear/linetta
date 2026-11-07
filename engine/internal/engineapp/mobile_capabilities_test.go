@@ -28,16 +28,25 @@ func TestFoldersAreUnavailableOnMobile(t *testing.T) {
 	}
 }
 
-func TestVaultIsUnavailableOnMobile(t *testing.T) {
+// Linetta Works sync ships on iOS too. Only Linetta Works can be the target:
+// there is no folder of the writer's here, and no git.
+func TestVaultIsAvailableOnMobileWithLinettaWorksOnly(t *testing.T) {
 	app := openTestApp(t, t.TempDir())
 	raw, err := app.Handle(context.Background(), []byte(`{"jsonrpc":"2.0","id":1,"method":"diagnostics.version","params":null}`))
-	if err != nil || !strings.Contains(string(raw), `"vault_available":false`) {
+	if err != nil || !strings.Contains(string(raw), `"vault_available":true`) {
 		t.Fatalf("diagnostics.version: %s %v", raw, err)
 	}
-	for _, method := range []string{"vault.status", "vault.work_status", "vault.setup", "vault.push", "vault.pull", "vault.resolve_conflict", "vault.delete_item"} {
-		raw, err := app.Handle(context.Background(), []byte(`{"jsonrpc":"2.0","id":1,"method":"`+method+`","params":{}}`))
-		if err != nil || !strings.Contains(string(raw), "not available in this build") {
-			t.Fatalf("%s: %s %v", method, raw, err)
+	raw, err = app.Handle(context.Background(), []byte(`{"jsonrpc":"2.0","id":1,"method":"sync.targets","params":{}}`))
+	if err != nil || !strings.Contains(string(raw), `"id":"works"`) {
+		t.Fatalf("sync.targets: %s %v", raw, err)
+	}
+	for _, absent := range []string{`"id":"folder"`, `"id":"git"`} {
+		if strings.Contains(string(raw), absent) {
+			t.Errorf("sync.targets offers %s on iOS: %s", absent, raw)
 		}
+	}
+	raw, err = app.Handle(context.Background(), []byte(`{"jsonrpc":"2.0","id":1,"method":"sync.set_targets","params":{"primary":"works","mirrors":["folder"]}}`))
+	if err != nil || !strings.Contains(string(raw), `"error"`) {
+		t.Fatalf("a folder mirror was accepted on iOS: %s %v", raw, err)
 	}
 }

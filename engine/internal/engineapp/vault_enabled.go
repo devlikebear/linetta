@@ -1,4 +1,4 @@
-//go:build !mobile && !mas
+//go:build !mas
 
 package engineapp
 
@@ -27,8 +27,9 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/vault"
 )
 
-// The private vault follows publishing: on in every desktop build, silent until
-// the writer connects an account and the operator approves it.
+// The private vault follows publishing: on in every build but the Mac App
+// Store's, iOS included, and silent until the writer connects an account and the
+// operator approves it.
 const vaultAvailable = true
 
 type vaultDeps struct {
@@ -86,7 +87,11 @@ func setupVault(ctx context.Context, deps vaultDeps) vaultSetup {
 	}
 	services := map[string]*vault.Service{
 		vault.TargetWorks: svc,
-		vault.TargetFolder: newService(vault.TargetFolder, func() (vault.Store, error) {
+	}
+	// iOS has no folder of the writer's to keep a copy in, only the app's own
+	// container, which the daily backup already covers.
+	if foldersAvailable {
+		services[vault.TargetFolder] = newService(vault.TargetFolder, func() (vault.Store, error) {
 			cfg, err := deps.settingsStore.Get(context.Background())
 			if err != nil {
 				return nil, err
@@ -98,7 +103,7 @@ func setupVault(ctx context.Context, deps vaultDeps) vaultSetup {
 				}
 			}
 			return directory(folder, deps.folderHooks)
-		}, nil),
+		}, nil)
 	}
 	if gitSyncAvailable {
 		services[vault.TargetGit] = newService(vault.TargetGit, func() (vault.Store, error) {

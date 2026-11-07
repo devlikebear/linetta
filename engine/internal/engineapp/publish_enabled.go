@@ -56,5 +56,8 @@ func setupPublish(deps publishDeps) (*publish.Service, func() error) {
 	s.Handle("publish.cover_set", handlers.PublishCoverSet(svc))
 	s.Handle("publish.cover_publish", handlers.PublishCoverPublish(svc))
 	s.Handle("publish.sheets_sync", handlers.PublishSheetsSync(svc))
+	// What readers see on the site, read without the writer's account.
+	s.Handle("works.gallery", handlers.WorksGallery(client))
+	s.Handle("works.gallery_cover", handlers.WorksGalleryCover(client))
 	return svc, connector.Close
 }

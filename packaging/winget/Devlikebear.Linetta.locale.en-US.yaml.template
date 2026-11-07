@@ -8,7 +8,7 @@ Author: devlikebear
 PackageName: {{PACKAGE_NAME}}
 PackageUrl: https://github.com/devlikebear/linetta
 License: Proprietary
-ShortDescription: Local-first desktop writing app for long-form fiction.
+ShortDescription: Desktop writing app for long-form fiction.
 Moniker: linetta
 Tags:
   - desktop
