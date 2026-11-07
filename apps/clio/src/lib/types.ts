@@ -110,3 +110,60 @@ export interface EngineStatus {
   ok: boolean;
   error: string | null;
 }
+
+/** draft.Draft (engine/internal/clio/draft/draft.go). Timestamps are Unix milliseconds. */
+export interface Draft {
+  id: number;
+  body: string;
+  platform: Platform;
+  kind: PostKind;
+  content_version: number;
+  published_at: number;
+  created_at: number;
+  updated_at: number;
+}
+
+/** drafts.create params. */
+export interface CreateDraftParams {
+  platform: Platform;
+  kind: PostKind;
+  body?: string;
+}
+
+/** drafts.update params. A stale content_version fails with RPC code -32009. */
+export interface UpdateDraftParams {
+  id: number;
+  content_version: number;
+  body: string;
+  platform: Platform;
+  kind: PostKind;
+}
+
+export type Severity = "strong" | "medium" | "weak";
+
+/**
+ * check.Finding. `start`/`end` are rune (code point) offsets into the body,
+ * not UTF-16 indices; convert with lib/offsets before touching the DOM.
+ * start == end == 0 means a whole-post finding.
+ */
+export interface Finding {
+  rule: string;
+  severity: Severity;
+  start: number;
+  end: number;
+  message: string;
+  evidence: string;
+}
+
+/** check.run params. */
+export interface CheckParams {
+  body: string;
+  platform: Platform;
+  kind: PostKind;
+}
+
+/** check.run result. `context_used` names the profile context the check ran against. */
+export interface CheckResult {
+  findings: Finding[];
+  context_used: string;
+}
