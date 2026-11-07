@@ -1,9 +1,165 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"sync"
+	"time"
+
+	"github.com/devlikebear/tars/pkg/llm"
 )
+
+// SettlementLedger is what the agent needs of the settlement record. An
+// interface so this package reads no store; ledger.Settlements satisfies it.
+type SettlementLedger interface {
+	// Version is a scene's content version now.
+	Version(ctx context.Context, nodeID string) (int, error)
+	// Record keeps how the pass over one scene at version ended.
+	Record(ctx context.Context, projectID, nodeID string, version int, outcome string, now int64) error
+	// Pending lists, in story order, the scenes before beforeNodeID still
+	// waiting for a settlement. Empty while settlement is off.
+	Pending(ctx context.Context, projectID, beforeNodeID string) ([]string, error)
+}
+
+// settle runs the settlement pass over scenes and records, scene by scene, how
+// it ended against the version each scene had when the pass began: prose the
+// writer changes while the pass runs is a new version, still waiting.
+func (s *Service) settle(ctx context.Context, st loopState, name string, scenes []string) string {
+	versions := map[string]int{}
+	if s.deps.Settlements != nil {
+		for _, id := range scenes {
+			v, err := s.deps.Settlements.Version(ctx, id)
+			if err != nil {
+				logf("%s after turn %s: version of %s: %v", name, st.runID, id, err)
+				continue
+			}
+			versions[id] = v
+		}
+	}
+	outcome := s.runPass(ctx, st, name, []llm.ChatMessage{
+		{Role: "system", Content: settlementSystemPrompt},
+		{Role: "user", Content: settlementRequest(st.req.ProjectID, scenes)},
+	}, settlementTools, settlementCallsPerScene*len(scenes))
+	if s.deps.Settlements == nil {
+		return outcome
+	}
+	now := s.now()
+	for _, id := range scenes {
+		v, ok := versions[id]
+		if !ok {
+			continue
+		}
+		// Recorded even when the pass was cut off: the record is what says it
+		// was, and a cancelled context must not lose it.
+		if err := s.deps.Settlements.Record(context.WithoutCancel(ctx), st.req.ProjectID, id, v, outcome, now); err != nil {
+			logf("%s after turn %s: recording %s: %v", name, st.runID, id, err)
+		}
+	}
+	return outcome
+}
+
+// A turn that writes after scenes the ledger has not caught up with settles
+// them first. Refusing the write instead would be a refusal the agent cannot
+// act on: settlement is a pass, not a tool it can call. So the turn's first
+// prose write — once both gates let it through — catches up, oldest first and
+// within a short budget, and goes ahead whatever happens; the scenes still
+// waiting are named in a line on that write's result. A turn that writes no
+// prose — a question, a world edit — never waits on a settlement.
+const (
+	catchUpMaxScenes = 3
+	catchUpTimeout   = 2 * time.Minute
+	// catchUpNoticeMax caps how many waiting scenes the notice names.
+	catchUpNoticeMax = 10
+)
+
+// catchUpOnce lets one prose write per turn run the catch-up. The mutex is
+// for the CLI bridge, whose calls arrive on HTTP handlers.
+type catchUpOnce struct {
+	mu   sync.Mutex
+	done bool
+}
+
+// first reports whether this is the turn's first call to ask, and marks it.
+func (c *catchUpOnce) first() bool {
+	if c == nil {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.done {
+		return false
+	}
+	c.done = true
+	return true
+}
+
+// catchUp settles what is waiting before target, the scene the write is
+// about, and returns the notice for what is still waiting, or "". A writer
+// who has settlement off pays for no call they did not switch on.
+func (s *Service) catchUp(ctx context.Context, st loopState, target string) string {
+	target = strings.TrimSpace(target)
+	if target == "" || s.deps.Settlements == nil || s.deps.SettlementEnabled == nil || !s.deps.SettlementEnabled() ||
+		!offers(st.schemas, "linetta_edit_ledger") {
+		return ""
+	}
+	pending, err := s.deps.Settlements.Pending(ctx, st.req.ProjectID, target)
+	if err != nil {
+		logf("settlement catch-up for turn %s: %v", st.runID, err)
+		return ""
+	}
+	if len(pending) == 0 {
+		return ""
+	}
+	batch := pending[:min(len(pending), catchUpMaxScenes)]
+	passCtx, cancel := context.WithTimeout(ctx, catchUpTimeout)
+	started := time.Now()
+	outcome := s.settle(passCtx, st, "settlement catch-up", batch)
+	cancel()
+	left, err := s.deps.Settlements.Pending(context.WithoutCancel(ctx), st.req.ProjectID, target)
+	if err != nil {
+		logf("settlement catch-up for turn %s: %v", st.runID, err)
+		left = pending
+	}
+	s.recordGate(ctx, GateEvent{
+		Kind: SettlementCatchUp, ProjectID: st.projectID, NodeID: batch[0], RunID: st.runID, OK: outcome == passDone,
+		Detail: fmt.Sprintf("outcome=%s scenes=%d left=%d ms=%d", outcome, len(batch), len(left), time.Since(started).Milliseconds()),
+	})
+	return s.pendingNotice(ctx, left)
+}
+
+// pendingNotice names the scenes still waiting, by the labels the writer
+// knows them by, the way the brief names the sections it left out.
+func (s *Service) pendingNotice(ctx context.Context, ids []string) string {
+	if len(ids) == 0 {
+		return ""
+	}
+	labels := make([]string, 0, min(len(ids), catchUpNoticeMax))
+	for _, id := range ids[:min(len(ids), catchUpNoticeMax)] {
+		label := ""
+		if s.deps.Scope != nil {
+			label = s.deps.Scope.NodeLabel(ctx, id)
+		}
+		if label == "" {
+			label = id
+		}
+		labels = append(labels, label)
+	}
+	more := ""
+	if n := len(ids) - len(labels); n > 0 {
+		more = fmt.Sprintf(" (+%d more)", n)
+	}
+	return "[system notice] Settlement pending: " + strings.Join(labels, ", ") + more +
+		". The ledger may not yet hold what these scenes changed; where it matters, check their prose rather than trusting the ledger."
+}
+
+// now is the app's clock, or the wall clock when none is wired.
+func (s *Service) now() int64 {
+	if s.deps.Clock != nil {
+		return s.deps.Clock()
+	}
+	return time.Now().UnixMilli()
+}
 
 // A settlement may read each scene and the ledger, and write what changed. Each
 // fact is one call, so it gets a larger budget than the review.

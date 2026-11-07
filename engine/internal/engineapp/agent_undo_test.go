@@ -133,6 +133,9 @@ func TestAgentUndo_withASnapshotID_tellsTheWorkspaceTheSceneChanged(t *testing.T
 		// The brief first, as every prose write must (agent/briefgate.go).
 		agenttest.ScriptedTurn{ToolName: "linetta_get_story_context",
 			ToolArgs: `{"project_id":"` + projectID + `","node_id":"` + nodeID + `"}`},
+		// And a plan for the new episode (agent/plangate.go).
+		agenttest.ScriptedTurn{ToolName: "linetta_write_summary",
+			ToolArgs: `{"node_id":"` + nodeID + `","summary":"다시 쓴다.","as_plan":true}`},
 		agenttest.ScriptedTurn{ToolName: "linetta_write_scene",
 			ToolArgs: `{"node_id":"` + nodeID + `","text":"새로 쓴 문장.","expected_content_version":0}`},
 		agenttest.ScriptedTurn{Text: "1장을 다시 썼습니다."},

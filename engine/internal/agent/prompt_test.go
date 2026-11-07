@@ -74,6 +74,15 @@ func TestSystemPrompt_statesTheRecordAndPatchHabit(t *testing.T) {
 	}
 }
 
+// Phase 6: the plan comes before a new episode's prose. The refusal says how;
+// the prompt only has to say it is the order.
+func TestSystemPrompt_statesThePlanComesFirst(t *testing.T) {
+	got := systemPrompt("en", emptyDoc(agentmemory.ScopeWriterProfile), emptyDoc(agentmemory.ScopeWorkNotes), nil, allToolGroups())
+	if !strings.Contains(got, "Write a new episode's plan before its prose") {
+		t.Error("the prompt does not say a new episode's plan comes before its prose")
+	}
+}
+
 // story-assist Phase 3 (3.C.2): the propose-vs-apply split and the
 // extraction-sweep habit are only meaningful instructions when the Review
 // group is on — linetta_propose_story_ops is absent otherwise.

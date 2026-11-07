@@ -112,10 +112,7 @@ func (s *Service) maybeEpisodeReview(ctx context.Context, st loopState) {
 	// Settlement first, so the review reads a ledger that has this scene in it.
 	if len(scenes) > 0 && enabled(s.deps.SettlementEnabled) && offers(st.schemas, "linetta_edit_ledger") {
 		passes = append(passes, func(ctx context.Context) {
-			s.runPass(ctx, st, "settlement", []llm.ChatMessage{
-				{Role: "system", Content: settlementSystemPrompt},
-				{Role: "user", Content: settlementRequest(st.req.ProjectID, scenes)},
-			}, settlementTools, settlementCallsPerScene*len(scenes))
+			s.settle(ctx, st, "settlement", scenes)
 		})
 	}
 	if len(scenes) > 0 && enabled(s.deps.EpisodeReviewEnabled) && offers(st.schemas, "linetta_report_continuity") {

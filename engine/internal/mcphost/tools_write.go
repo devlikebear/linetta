@@ -108,6 +108,9 @@ type writeSceneOutput struct {
 	// lines cut to length. Story briefs are built from these, so leaving it
 	// costs the next brief its accuracy.
 	SummaryIsPlaceholder bool `json:"summary_is_placeholder"`
+	// Warnings says what this write went ahead without: a plan for a new
+	// episode, or the settlement of earlier ones. The write happened anyway.
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 // ---------- linetta_write_summary ----------
@@ -160,7 +163,8 @@ func (d ToolDeps) registerWriteTools(s *mcp.Server, groups ToolGroups) {
 			"Registered story elements named in the text are linked " +
 			"automatically and reported in linked_elements. Linetta then files the scene's opening lines " +
 			"as a placeholder summary; call linetta_write_summary afterwards so the story brief carries a " +
-			"real one.",
+			"real one. warnings: what it went ahead without (a plan, " +
+			"earlier settlement).",
 	}, record(d, "linetta_write_scene", d.writeScene))
 
 	mcp.AddTool(s, &mcp.Tool{
@@ -293,6 +297,11 @@ func (d ToolDeps) writeScene(ctx context.Context, _ *mcp.CallToolRequest, in wri
 			writeSceneOutput{}, nil
 	}
 
+	// Read before the write: afterwards the scene is no longer empty.
+	var warnings []string
+	warnings = appendWarning(warnings, d.planWarning(ctx, n.ID))
+	warnings = appendWarning(warnings, d.settlementWarning(ctx, n.ProjectID, n.ID))
+
 	// Snapshot before touching anything, so the previous text survives even if
 	// the write itself fails partway.
 	snapshotID := ""
@@ -362,6 +371,7 @@ func (d ToolDeps) writeScene(ctx context.Context, _ *mcp.CallToolRequest, in wri
 		SnapshotID:           snapshotID,
 		SummaryIsPlaceholder: true,
 		LinkedElements:       linked,
+		Warnings:             warnings,
 		Notice:               publishedNotice(n.Status),
 	}, nil
 }

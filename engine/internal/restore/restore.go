@@ -497,6 +497,21 @@ func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, p
 	}); err != nil {
 		return MergeResult{}, fmt.Errorf("copy part_arcs: %w", err)
 	}
+	// scene_settlements (longform Phase 6): which version of each scene was
+	// last settled into the ledger. Travels with the ledger it describes and
+	// the scene's content_version, which the copy keeps, so a restored work is
+	// not handed back every scene as waiting for settlement again.
+	if err := copyRows(ctx, sdb, tx, "scene_settlements", "project_id = ?", []any{projectID}, func(row map[string]any) (map[string]any, bool) {
+		n, ok := nodeMap[asString(row["node_id"])]
+		if !ok {
+			return nil, false
+		}
+		row["node_id"] = n
+		row["project_id"] = newProjectID
+		return row, true
+	}); err != nil {
+		return MergeResult{}, fmt.Errorf("copy scene_settlements: %w", err)
+	}
 
 	if err := copyRows(ctx, sdb, tx, "node_snapshots",
 		"node_id IN (SELECT id FROM nodes WHERE project_id = ?)", []any{projectID},

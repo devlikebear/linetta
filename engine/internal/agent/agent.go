@@ -88,6 +88,16 @@ type Deps struct {
 	// SettlementEnabled reports whether a turn that wrote a scene is followed by
 	// a pass that records what the scene changed. Nil means off.
 	SettlementEnabled func() bool
+	// Plans answers whether an empty scene has anything saying what it is for
+	// (plangate.go). Nil leaves the plan gate off.
+	Plans PlanLookup
+	// Settlements records how each settlement pass went and lists the scenes
+	// still waiting for one (ledger.Settlements). Nil records nothing and
+	// catches nothing up.
+	Settlements SettlementLedger
+	// RecordGate puts a gate's refusal or a catch-up on the activity log. Nil
+	// records nothing.
+	RecordGate func(ctx context.Context, e GateEvent)
 	// ImpactReviewEnabled reports whether a turn that changed a decision or a
 	// fact is followed by a look for prose it no longer agrees with. Nil means off.
 	ImpactReviewEnabled func() bool

@@ -929,3 +929,69 @@ func TestMergeProjectKeepsAnswersAndWhatAKnowsFactIsAbout(t *testing.T) {
 		}
 	}
 }
+
+// Longform Phase 6: a scene's settlement record follows a work through a
+// backup and restore — and so through projects.duplicate, which merges the
+// same way — so the copy does not hand every scene back as waiting.
+func TestMergeProjectCopiesSceneSettlements(t *testing.T) {
+	ctx := context.Background()
+	home := t.TempDir()
+	st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	projects := project.NewRepo(st)
+	nodes := node.NewRepo(st)
+	p, err := projects.Create(ctx, 1, project.NewInput{Title: "Settled", LengthTarget: "short", DefaultPOV: "first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaf := *p.LastOpenedNodeID
+	if err := nodes.UpdateContent(ctx, leaf,
+		`{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"글"}]}]}`, 1000); err != nil {
+		t.Fatal(err)
+	}
+	on := func() (int64, bool) { return 0, true }
+	settled := ledger.NewSettlements(st, nodes, on)
+	version, err := settled.Version(ctx, leaf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := settled.Record(ctx, p.ID, leaf, version, ledger.SettlementDone, 2000); err != nil {
+		t.Fatal(err)
+	}
+
+	backupPath := filepath.Join(home, "backup.db")
+	if _, err := st.DB().ExecContext(ctx, "VACUUM INTO ?", backupPath); err != nil {
+		t.Fatal(err)
+	}
+	live, err := store.Open(ctx, filepath.Join(home, "live.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer live.Close()
+	merged, err := MergeProject(ctx, live, backupPath, home, p.ID, " copy", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	mergedNodes := node.NewRepo(live)
+	mergedP, err := project.NewRepo(live).Get(ctx, merged.ProjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	copyLeaf := *mergedP.LastOpenedNodeID
+	copySettled := ledger.NewSettlements(live, mergedNodes, on)
+	outcome, v, ok, err := copySettled.Settled(ctx, copyLeaf)
+	if err != nil || !ok || outcome != ledger.SettlementDone || v != version {
+		t.Fatalf("copy's settlement = %q v%d ok=%v err=%v, want done at v%d", outcome, v, ok, err, version)
+	}
+	pending, err := copySettled.Pending(ctx, merged.ProjectID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 0 {
+		t.Errorf("copy's pending = %v, want none: its prose is the version that was settled", pending)
+	}
+}

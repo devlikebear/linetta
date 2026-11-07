@@ -188,6 +188,8 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 		maxToolCalls:  s.maxToolCalls(),
 		historyBudget: s.replayBudget(resolved.ID),
 		brief:         newBriefGate(schemas),
+		plan:          newPlanGate(s.deps.Plans, schemas),
+		caughtUp:      &catchUpOnce{},
 	}
 
 	handedOff = true
@@ -269,6 +271,13 @@ type loopState struct {
 	// brief holds a prose write back until the turn has read the story
 	// brief (briefgate.go).
 	brief *briefGate
+	// plan holds the first prose of an empty scene back until something says
+	// what the scene is for (plangate.go).
+	plan *planGate
+	// caughtUp marks that this turn's first prose write already ran the
+	// settlement catch-up (settlement.go). A pointer for the same reason as
+	// brief: the loop and the CLI bridge pass copies of the state around.
+	caughtUp *catchUpOnce
 }
 
 // releaseSession drops one reference and logs a close that failed. A helper
@@ -659,9 +668,25 @@ func (s *Service) runTool(ctx context.Context, st loopState, call llm.ToolCall) 
 		result = askWriter(call.Arguments)
 	} else if refusal := st.brief.refusal(call.Name); refusal != "" {
 		result = toolResult{IsError: true, Text: refusal}
+	} else if refusal, nodeID := st.plan.refusal(ctx, call.Name, call.Arguments); refusal != "" {
+		result = toolResult{IsError: true, Text: refusal}
+		s.recordGate(ctx, GateEvent{Kind: GatePlan, ProjectID: st.projectID, NodeID: nodeID, RunID: st.runID, Detail: "refused: no plan"})
 	} else {
+		// Past both gates, the turn's first prose write settles the earlier
+		// scenes the ledger has not caught up with, and names what is left.
+		// The target comes first: a write with none (a revise sweeping the
+		// whole work) must not use up the turn's one catch-up.
+		notice := ""
+		if proseWriteTools[call.Name] {
+			if targets := proseTargets(call.Name, call.Arguments); len(targets) > 0 && st.caughtUp.first() {
+				notice = s.catchUp(ctx, st, targets[0])
+			}
+		}
 		result = st.session.call(ctx, st.runID, call.Name, call.Arguments)
 		st.brief.ran(call.Name, !result.IsError)
+		if notice != "" {
+			result.Text += "\n" + notice
+		}
 	}
 
 	state := "done"

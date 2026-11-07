@@ -170,6 +170,10 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	if err != nil {
 		return fmt.Errorf("settings: %w", err)
 	}
+	// Which version of each scene was last settled into the ledger, counted
+	// from the moment the writer switched settlement on (longform Phase 6).
+	settlements := ledger.NewSettlements(st, nodes, settingsStore.AgentSettlementSince)
+
 	// The reader's language, for the handful of places the engine writes text a
 	// person reads. An unreadable setting falls back to the default rather than
 	// failing whatever asked.
@@ -382,6 +386,8 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 			ledger:        ledgerRepo,
 			proposals:     proposalsSvc,
 			forecasts:     forecastSvc,
+			settlements:   settlements,
+			plans:         planLookup{nodes: nodes, projects: projects, direction: directionRepo, forecasts: forecastSvc},
 			plot:          plotBuilder,
 			manuscript:    manuscriptSearcher,
 			context:       mcpContextBuilder,
@@ -544,6 +550,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("ledger.set_pinned", handlers.SetLedgerPinned(ledgerRepo, clock))
 	s.Handle("ledger.delete", handlers.DeleteLedgerEntry(ledgerRepo))
 	s.Handle("ledger.set_arc", handlers.SetPartArc(ledgerRepo, clock))
+	s.Handle("ledger.pending_settlement", handlers.PendingSettlement(settlements, nodes))
 	s.Handle("nodes.set_plan", handlers.SetNodePlan(nodes))
 	s.Handle("continuity.list", handlers.ListContinuity(continuityRepo, nodes, entities, facts, beats))
 	// continuity.set_status fires continuity.changed, so a ContextPanel

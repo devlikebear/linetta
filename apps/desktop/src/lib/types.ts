@@ -1610,6 +1610,19 @@ export interface PartArc {
   /** 0 is unset; otherwise 1 to 10. */
   tension: number;
 }
+/** One scene waiting for a settlement pass (longform Phase 6). */
+export interface PendingSettlementItem {
+  node_id: string;
+  label: string;
+  /** The parent node's label, when the scene has one: 3화 for 씬 1. */
+  parent_label?: string;
+}
+export interface PendingSettlement {
+  /** Whether the writer has settlement switched on. Nothing waits while it is off. */
+  enabled: boolean;
+  /** In story order. */
+  items: PendingSettlementItem[];
+}
 export interface LedgerState {
   entries: LedgerEntry[];
   parts: PartArc[];

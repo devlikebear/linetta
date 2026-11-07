@@ -26,11 +26,15 @@ const mocks = vi.hoisted(() => ({
   entitiesList: vi.fn(),
   relationshipsList: vi.fn(),
   proposalsPendingCount: vi.fn().mockResolvedValue({ count: 0 }),
+  pendingSettlement: vi.fn().mockResolvedValue({ enabled: false, items: [] }),
 }));
 
 vi.mock("../lib/rpc", () => ({
   nodes: { listTree: vi.fn().mockResolvedValue([]) },
-  ledger: { list: vi.fn().mockResolvedValue({ entries: [], parts: [], labels: {} }) },
+  ledger: {
+    list: vi.fn().mockResolvedValue({ entries: [], parts: [], labels: {} }),
+    pendingSettlement: mocks.pendingSettlement,
+  },
   visuals: mocks.visuals,
   // I18nProvider reads the language through the same module.
   settings: { get: mocks.settingsGet },
@@ -122,6 +126,38 @@ describe("CanonPanel", () => {
     mocks.entitiesList.mockResolvedValue(cast);
     mocks.relationshipsList.mockResolvedValue([rel("r1", "e1", "e2"), rel("r2", "e2", "e1")]);
     mocks.proposalsPendingCount.mockResolvedValue({ count: 0 });
+    mocks.pendingSettlement.mockResolvedValue({ enabled: false, items: [] });
+  });
+
+  // longform Phase 6: the episodes waiting for settlement, above the ledger.
+  it("shows the episodes waiting for settlement and opens one", async () => {
+    const user = userEvent.setup();
+    const onOpenNode = vi.fn();
+    mocks.pendingSettlement.mockResolvedValue({
+      enabled: true,
+      items: [
+        { node_id: "n12", label: "씬 1", parent_label: "12화" },
+        { node_id: "n13", label: "13화" },
+      ],
+    });
+    renderPanel({ onOpenNode });
+    await user.click(await screen.findByRole("button", { name: "정산 대기 2화" }));
+    await user.click(screen.getByRole("button", { name: "12화 · 씬 1" }));
+    expect(onOpenNode).toHaveBeenCalledWith("n12");
+    expect(screen.getByRole("button", { name: "13화" })).toBeTruthy();
+  });
+
+  it("shows nothing about settlement when it is off or nothing waits", async () => {
+    mocks.pendingSettlement.mockResolvedValue({ enabled: false, items: [{ node_id: "n1", label: "1화" }] });
+    const { unmount } = renderPanel();
+    await screen.findByText("해윤");
+    expect(screen.queryByText(/정산 대기/)).toBeNull();
+    unmount();
+
+    mocks.pendingSettlement.mockResolvedValue({ enabled: true, items: [] });
+    renderPanel();
+    await screen.findByText("해윤");
+    expect(screen.queryByText(/정산 대기/)).toBeNull();
   });
 
   it("saves the work art style", async () => {

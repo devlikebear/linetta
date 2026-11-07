@@ -94,6 +94,13 @@ type ToolDeps struct {
 	// writer to compare (story-assist Phase 4). Nil in a build with no
 	// database open; the tool refuses rather than panicking.
 	Forecasts *forecast.Service
+	// Plans answers whether an empty scene has anything saying what it is
+	// for. A write into one that has nothing comes back with a warning. Nil
+	// warns of nothing.
+	Plans PlanLookup
+	// Settlements lists the scenes still waiting for a settlement pass. A
+	// write after them comes back with a warning. Nil warns of nothing.
+	Settlements *ledger.Settlements
 
 	// Memory is the two curated documents every agent reads. Nil in a build
 	// with no database open; the tool refuses rather than panicking.
@@ -468,4 +475,11 @@ func (d ToolDeps) RestoreSnapshot(ctx context.Context, snapshotID string) (node.
 
 func entityKindFilter(kind string) string {
 	return strings.ToLower(strings.TrimSpace(kind))
+}
+
+// PlanLookup is the plan question the write tools ask of a scene: is it still
+// empty, and does its plan, its scene intent or a beat of the chosen branch say
+// what it is for. The built-in agent's plan gate asks the same one.
+type PlanLookup interface {
+	PlanState(ctx context.Context, nodeID string) (empty, planned bool, err error)
 }

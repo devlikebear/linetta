@@ -93,6 +93,7 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
     "imports.preview",
     "ledger.delete",
     "ledger.list",
+    "ledger.pending_settlement",
     "ledger.save",
     "ledger.set_arc",
     "ledger.set_pinned",
