@@ -8,6 +8,7 @@
   const items = $derived([
     { label: t.nav.workspace, href: '#workspace' },
     { label: t.nav.assist, href: '#assist', wide: true },
+    { label: t.nav.longform, href: '#longform', wide: true },
     { label: t.nav.illustrations, href: '#illustrations', wide: true },
     { label: t.nav.publish, href: '#publish', wide: true },
     { label: t.nav.agent, href: '#agents' },
