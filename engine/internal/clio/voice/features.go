@@ -6,6 +6,7 @@ package voice
 import (
 	"regexp"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -78,6 +79,23 @@ func Segments(post string) []string {
 			// Python str.strip() strips Unicode whitespace; so does TrimSpace.
 			out = append(out, strings.TrimSpace(s))
 		}
+	}
+	return out
+}
+
+// SegmentSpans returns the rune offsets [start, end) of each segment Segments
+// returns, in the same order and after the same whitespace trim.
+func SegmentSpans(post string) [][2]int {
+	var out [][2]int
+	for _, loc := range segmentRe.FindAllStringIndex(post, -1) {
+		raw := post[loc[0]:loc[1]]
+		if !hangulRe.MatchString(raw) {
+			continue
+		}
+		lead := len(raw) - len(strings.TrimLeftFunc(raw, unicode.IsSpace))
+		trimmed := strings.TrimSpace(raw)
+		start := utf8.RuneCountInString(post[:loc[0]+lead])
+		out = append(out, [2]int{start, start + utf8.RuneCountInString(trimmed)})
 	}
 	return out
 }
