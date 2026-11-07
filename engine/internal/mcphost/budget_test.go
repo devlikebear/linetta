@@ -315,8 +315,11 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	// aliases and include switches, measured 28,356B. Long-form paging added
 	// cursors and totals to linetta_get_outline and linetta_list_characters and
 	// omitted_sections to the brief, measured 28,855B. The published notice on
-	// linetta_write_scene and linetta_revise_scene took it to 28,909B.
-	if total > 28950 {
+	// linetta_write_scene and linetta_revise_scene took it to 28,909B. The
+	// warnings an external client gets from the same two (longform Phase 6:
+	// a new episode with no plan, earlier episodes not yet settled) took it to
+	// 29,146B.
+	if total > 29200 {
 		t.Errorf("the original tool budget (excluding linetta_report_continuity) is %dB, want <= 28400B "+
 			"(#132 trimmed it from 27687B to 26525B; story-assist raised it to 27100B, 27400B, then 27500B)", total)
 	}
