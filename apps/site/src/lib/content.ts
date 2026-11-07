@@ -174,7 +174,7 @@ export const en: Translation = {
   ogLocale: 'en_US',
   path: '/',
   alts: alts('en'),
-  pageTitle: 'Linetta — a local-first writing studio for long-form fiction',
+  pageTitle: 'Linetta — write long-form fiction and publish it on Linetta Works',
   metaDescription:
     'Plan a novel, keep it consistent, and write it scene by scene in one quiet workspace. Outline, characters, plot threads and research sit beside the manuscript, in a SQLite file on your own disk. When you want more, a built-in agent or your own over MCP can check continuity, a scene can become an illustration, and an episode can go out to readers.',
 
@@ -192,7 +192,7 @@ export const en: Translation = {
   },
 
   hero: {
-    mark: 'macOS · Windows · Linux — local first',
+    mark: 'macOS · Windows · Linux — with Linetta Works',
     headline: [
       { text: 'The whole story, ' },
       { text: 'within reach', accent: true },
@@ -271,11 +271,11 @@ export const en: Translation = {
         kicker: 'The shelf',
         title: 'From one line to a full book.',
         body: 'Works sit on a shelf built for more than one of them, with word counts and status. Start a project, or bring an existing manuscript in from Markdown.',
-        alt: 'The Linetta library screen with a project card, buttons for a new project, Markdown import and search, and a note that core data stays local.',
+        alt: 'The Linetta library screen with a project card, buttons for a new project, Markdown import and search.',
         points: [
           'New project, Markdown import, and search across everything',
           'Active and archived shelves',
-          'Core data stays local — the library is a file on your own disk'
+          'Linetta Works in reach — publish episodes and browse what readers read'
         ]
       }
     ],
@@ -618,7 +618,7 @@ export const en: Translation = {
 
   footer: {
     tagline:
-      'A calm, local-first writing studio for long-form fiction. Built by one developer, in the open.',
+      'A calm writing studio for long-form fiction, connected to Linetta Works. Built by one developer, in the open.',
     cols: { project: 'Project', docs: 'Documentation', get: 'Get Linetta' },
     links: {
       project: [
@@ -650,7 +650,7 @@ export const ko: Translation = {
   ogLocale: 'ko_KR',
   path: '/ko',
   alts: alts('ko'),
-  pageTitle: 'Linetta — 장편 소설을 위한 로컬 우선 집필 스튜디오',
+  pageTitle: 'Linetta — 장편 소설을 쓰고 Linetta Works에 연재하는 집필 스튜디오',
   metaDescription:
     '아웃라인, 등장인물, 플롯 스레드, 자료를 원고 옆에 두고 씬 단위로 씁니다. 모든 데이터는 내 디스크의 SQLite 파일에 남고, 계정도 필수 클라우드도 없습니다. 원할 때는 내장 에이전트나 MCP로 연결한 내 에이전트가 연속성을 점검하고, 장면을 삽화로 그리고, 회차를 독자에게 내놓을 수 있습니다.',
 
@@ -668,7 +668,7 @@ export const ko: Translation = {
   },
 
   hero: {
-    mark: 'macOS · Windows · Linux — 로컬 우선',
+    mark: 'macOS · Windows · Linux — Linetta Works와 함께',
     headline: [
       { text: '쓰고 있는 문장 옆에,' },
       { nl: true },
@@ -743,11 +743,11 @@ export const ko: Translation = {
         kicker: '서가',
         title: '한 줄에서 한 권까지.',
         body: '작품이 여러 권을 전제로 만든 서가에 놓입니다. 분량과 상태가 함께 보이고, 새 작품을 시작하거나 쓰던 원고를 마크다운으로 가져올 수 있습니다.',
-        alt: 'Linetta 서재 화면. 작품 카드 하나와 새 작품·마크다운 가져오기·검색 버튼, 그리고 핵심 데이터가 로컬에 남는다는 표시.',
+        alt: 'Linetta 서재 화면. 작품 카드 하나와 새 작품·마크다운 가져오기·검색 버튼.',
         points: [
           '새 작품, 마크다운 가져오기, 전체 검색',
           '진행 중과 아카이브',
-          '핵심 데이터는 로컬에 — 서재는 내 디스크의 파일입니다'
+          'Linetta Works를 곁에 — 회차를 연재하고 독자가 읽는 작품을 둘러봅니다'
         ]
       }
     ],
@@ -1089,7 +1089,7 @@ export const ko: Translation = {
   },
 
   footer: {
-    tagline: '장편 소설을 위한 조용한 로컬 우선 집필 스튜디오. 개발자 한 명이 공개적으로 만듭니다.',
+    tagline: '장편 소설을 위한 조용한 집필 스튜디오. Linetta Works와 이어져 있습니다. 개발자 한 명이 공개적으로 만듭니다.',
     cols: { project: '프로젝트', docs: '문서', get: 'Linetta 받기' },
     links: {
       project: [
@@ -1121,7 +1121,7 @@ export const ja: Translation = {
   ogLocale: 'ja_JP',
   path: '/ja',
   alts: alts('ja'),
-  pageTitle: 'Linetta — 長編小説のためのローカルファースト執筆スタジオ',
+  pageTitle: 'Linetta — 長編小説を書き、Linetta Works で連載する執筆スタジオ',
   metaDescription:
     'アウトライン、登場人物、プロットの糸、資料を原稿のとなりに置き、シーン単位で書きます。データは自分のディスクの SQLite ファイルに残り、アカウントも必須のクラウドもありません。ほしいときには内蔵エージェントや MCP でつないだ自分のエージェントが連続性を点検し、場面を挿絵にし、話を読者に届けられます。',
 
@@ -1139,7 +1139,7 @@ export const ja: Translation = {
   },
 
   hero: {
-    mark: 'macOS · Windows · Linux — ローカルファースト',
+    mark: 'macOS · Windows · Linux — Linetta Works とともに',
     headline: [
       { text: 'いま書いている一文のとなりに、' },
       { nl: true },
@@ -1213,11 +1213,11 @@ export const ja: Translation = {
         kicker: '書架',
         title: '一行から一冊まで。',
         body: '作品が複数あることを前提にした書架に並びます。分量と状態が見え、新しい作品を始めることも、書きかけの原稿を Markdown から取り込むこともできます。',
-        alt: 'Linetta のライブラリ画面。作品カードが一つ、新規作成・Markdown 取り込み・検索のボタン、そして中核データがローカルに残る旨の表示。',
+        alt: 'Linetta のライブラリ画面。作品カードが一つ、新規作成・Markdown 取り込み・検索のボタン。',
         points: [
           '新規作成、Markdown 取り込み、全体検索',
           '進行中とアーカイブ',
-          '中核データはローカルに — ライブラリは自分のディスクのファイルです'
+          'Linetta Works をすぐそばに — 回を連載し、読者が読んでいる作品を見て回れます'
         ]
       }
     ],
@@ -1560,7 +1560,7 @@ export const ja: Translation = {
 
   footer: {
     tagline:
-      '長編小説のための静かなローカルファースト執筆スタジオ。開発者一人が公開の場で作っています。',
+      '長編小説のための静かな執筆スタジオ。Linetta Works とつながっています。開発者一人が公開の場で作っています。',
     cols: { project: 'プロジェクト', docs: 'ドキュメント', get: 'Linetta を入手' },
     links: {
       project: [

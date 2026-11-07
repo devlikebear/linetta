@@ -6,7 +6,7 @@ _최종 업데이트 / Last updated / 最終更新: 2026-11-07_
 
 ## 한국어
 
-Linetta("앱")는 장편소설·웹소설 집필을 위한 **로컬 우선(local-first)** 데스크톱 앱입니다. 개발자(Changheon Shin / devlikebear)는 앱을 위한 분석·광고·계정 서버를 운영하지 않으며 사용자 데이터를 수집하지 않습니다. 원고가 기기를 떠나는 경로는 사용자가 직접 설정한 것뿐입니다. 사용자가 연결한 AI 프로바이더로 원고를 보내는 내장 에이전트, 사용자가 고른 이미지 프로바이더로 프롬프트와 참조 이미지를 보내는 삽화 생성, 사용자가 직접 실행하는 외부 MCP 클라이언트, 사용자가 지정한 git 원격으로 푸시하는 GitHub 동기화, 사용자가 지정한 폴더(예: 클라우드 드라이브 폴더)로 복사하는 폴더 동기화, 사용자가 고른 회차와 시트·표지만 웹소설 사이트 Linetta Works에 올리는 게시, 그리고 사용자가 올리기로 고른 작품을 기기에서 암호화해 맡기는 Linetta Works 동기화이며, 아래 3항에서 모두 설명합니다. 이 가운데 게시와 Linetta Works 동기화만 개발자가 운영하는 서버로 보냅니다. Linetta Works 동기화로 가는 것은 개발자가 읽을 수 없는 암호문입니다.
+Linetta("앱")는 장편소설·웹소설 집필을 위한 앱입니다. 개발자(Changheon Shin / devlikebear)는 앱을 위한 분석·광고·계정 서버를 운영하지 않으며 사용자 데이터를 수집하지 않습니다. 원고가 기기를 떠나는 경로는 사용자가 직접 설정한 것뿐입니다. 사용자가 연결한 AI 프로바이더로 원고를 보내는 내장 에이전트, 사용자가 고른 이미지 프로바이더로 프롬프트와 참조 이미지를 보내는 삽화 생성, 사용자가 직접 실행하는 외부 MCP 클라이언트, 사용자가 지정한 git 원격으로 푸시하는 GitHub 동기화, 사용자가 지정한 폴더(예: 클라우드 드라이브 폴더)로 복사하는 폴더 동기화, 사용자가 고른 회차와 시트·표지만 웹소설 사이트 Linetta Works에 올리는 게시, 그리고 사용자가 올리기로 고른 작품을 기기에서 암호화해 맡기는 Linetta Works 동기화이며, 아래 3항에서 모두 설명합니다. 이 가운데 게시와 Linetta Works 동기화만 개발자가 운영하는 서버로 보냅니다. Linetta Works 동기화로 가는 것은 개발자가 읽을 수 없는 암호문입니다.
 
 ### 1. 수집하는 정보
 **개발자가 수집하는 정보는 없습니다.** 앱은 다음을 하지 않습니다.
@@ -135,7 +135,7 @@ Linetta Works 동기화는 운영자가 허가한 Linetta Works 계정만 쓸 �
 
 ## English
 
-Linetta (the "App") is a **local-first** desktop app for writing long-form fiction. The developer (Changheon Shin / devlikebear) operates no analytics, advertising, or account server for the App and does not collect user data. The App takes your writing off this device only along paths you set up yourself: the built-in agent, which sends it to an AI provider you connect; illustration generation, which sends a prompt and reference images to an image provider you choose; an MCP client you run yourself; GitHub Sync, which pushes it to a git remote you choose; Folder Sync, which copies it into a folder you choose, such as a cloud drive folder; Publishing, which puts only the episodes, sheets and cover you choose on Linetta Works, a site for reading web fiction; and Linetta Works sync, which seals a work you choose to upload on this device and keeps it there. Section 3 describes each of them. Of these, only Publishing and Linetta Works sync send anything to a server the developer operates, and what goes through Linetta Works sync is ciphertext the developer cannot read.
+Linetta (the "App") is an app for writing long-form fiction. The developer (Changheon Shin / devlikebear) operates no analytics, advertising, or account server for the App and does not collect user data. The App takes your writing off this device only along paths you set up yourself: the built-in agent, which sends it to an AI provider you connect; illustration generation, which sends a prompt and reference images to an image provider you choose; an MCP client you run yourself; GitHub Sync, which pushes it to a git remote you choose; Folder Sync, which copies it into a folder you choose, such as a cloud drive folder; Publishing, which puts only the episodes, sheets and cover you choose on Linetta Works, a site for reading web fiction; and Linetta Works sync, which seals a work you choose to upload on this device and keeps it there. Section 3 describes each of them. Of these, only Publishing and Linetta Works sync send anything to a server the developer operates, and what goes through Linetta Works sync is ciphertext the developer cannot read.
 
 ### 1. Information We Collect
 **The developer collects none.** The App:
@@ -264,7 +264,7 @@ Contact: devlikebear@gmail.com
 
 ## 日本語
 
-Linetta（以下「本アプリ」）は、長編小説・Web小説の執筆のための**ローカルファースト**なデスクトップアプリです。開発者（Changheon Shin / devlikebear）は、本アプリのための分析・広告・アカウント用サーバーを運営せず、ユーザーデータを収集しません。本アプリが原稿を端末の外に出すのは、ユーザー自身が設定した経路に限られます。ユーザーが接続した AI プロバイダーへ原稿を送信する内蔵エージェント、ユーザーが選んだ画像プロバイダーへプロンプトと参照画像を送信する挿絵生成、ユーザー自身が実行する外部 MCP クライアント、ユーザーが指定した git リモートへプッシュする GitHub 同期、ユーザーが指定したフォルダ（例: クラウドドライブのフォルダ）へコピーするフォルダ同期、ユーザーが選んだエピソードとシート・表紙だけを Web 小説サイト Linetta Works に公開する公開機能、そしてユーザーがアップロードを選んだ作品を端末で暗号化して預ける Linetta Works 同期で、いずれも第3項で説明します。このうち公開機能とLinetta Works 同期だけが、開発者の運営するサーバーへ送信します。Linetta Works 同期へ送られるのは、開発者が読めない暗号文です。
+Linetta（以下「本アプリ」）は、長編小説・Web小説の執筆のためのアプリです。開発者（Changheon Shin / devlikebear）は、本アプリのための分析・広告・アカウント用サーバーを運営せず、ユーザーデータを収集しません。本アプリが原稿を端末の外に出すのは、ユーザー自身が設定した経路に限られます。ユーザーが接続した AI プロバイダーへ原稿を送信する内蔵エージェント、ユーザーが選んだ画像プロバイダーへプロンプトと参照画像を送信する挿絵生成、ユーザー自身が実行する外部 MCP クライアント、ユーザーが指定した git リモートへプッシュする GitHub 同期、ユーザーが指定したフォルダ（例: クラウドドライブのフォルダ）へコピーするフォルダ同期、ユーザーが選んだエピソードとシート・表紙だけを Web 小説サイト Linetta Works に公開する公開機能、そしてユーザーがアップロードを選んだ作品を端末で暗号化して預ける Linetta Works 同期で、いずれも第3項で説明します。このうち公開機能とLinetta Works 同期だけが、開発者の運営するサーバーへ送信します。Linetta Works 同期へ送られるのは、開発者が読めない暗号文です。
 
 ### 1. 収集する情報
 **開発者が収集する情報はありません。** 本アプリは以下を行いません。

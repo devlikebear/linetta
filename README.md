@@ -3,7 +3,7 @@
 
 # Linetta
 
-### A calm, local-first writing studio for long-form fiction
+### A calm writing studio for long-form fiction, connected to Linetta Works
 
 Plan your story, keep your world consistent, and write scene by scene. When you want to write alongside AI, use Linetta's built-in agent or connect one you already run over MCP — neither happens on its own.
 
@@ -26,7 +26,7 @@ Linetta is made for novelists and web-fiction writers who want their manuscript,
 - **Keep the story consistent.** See [what has been measured for long serials](docs/longform-support.md). Organize characters, places, relationships, storylines, beats, summaries, and memories beside the manuscript. Agents can check a scene against all of it, and what they find or propose waits for your decision.
 - **Stay in control of AI.** Linetta calls a model only if you connect a provider — for the built-in agent, or your own agent over MCP. The activity log shows what changed and whether the built-in agent or an external client made the call, a recent structural change can be undone in one click while the app stays open, and the text an agent replaces is kept as a restorable version of the scene.
 - **See your story.** Optionally draw illustrations with ChatGPT or Gemini from your scenes and character sheets. Earlier pictures go along so faces stay the same, and nothing is drawn until you press Generate.
-- **Keep your work local.** Projects live in a local SQLite database with version snapshots and daily backups. No Linetta account or mandatory cloud is required.
+- **Own your work.** Projects are saved in a SQLite database on your device with version snapshots and daily backups. Writing needs no Linetta account, and nothing leaves until you choose to publish or sync.
 - **Publish when you choose.** Optionally connect an account on [Linetta Works](https://works.marvin-42.com) and put an episode up for readers straight from the app. Only the episodes you publish — and the Story World sheets and cover you choose to make public — leave your device. Share a published episode to X, Threads, Naver Blog, KakaoTalk, or Instagram from the publish dialog.
 - **Carry a work between devices.** If the site's operator has approved your account, Linetta Works sync keeps a work sealed under a recovery key only you hold, so you can pick it up on another computer or on iOS. It is a free beta and never your only copy.
 - **Move your manuscript freely.** Import and export Markdown, and optionally sync exported work through Git.

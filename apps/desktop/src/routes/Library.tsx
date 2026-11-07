@@ -471,8 +471,8 @@ export function Library() {
           </div>
           <div className="lib-meta-col">
             <div><b>{totalRecent}</b> {t("library.projectCount")}</div>
-            <div><b>{t("library.noExternalTransfer")}</b></div>
-            <div>{t("library.dataLocal", { local: t("library.local") })}</div>
+            <div><b>{t("library.metaWorks")}</b></div>
+            <div>{t("library.metaBackup")}</div>
           </div>
         </div>
 

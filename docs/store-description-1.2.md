@@ -11,7 +11,7 @@ it is.
 
 ## Description
 
-Linetta is a local-first app for planning and writing long-form fiction: plan
+Linetta is an app for planning and writing long-form fiction: plan
 your story, keep your world consistent, and write scene by scene. Everything
 you write is stored in a local database on this device — Linetta needs no
 account and no sign-in to use it as a writing tool on its own.
