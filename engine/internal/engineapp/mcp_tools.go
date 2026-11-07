@@ -69,7 +69,9 @@ type mcpToolRepos struct {
 	// writer to compare (story-assist Phase 4). Shared with the
 	// forecast.* RPC handlers and with proposals (purpose=forecast's own
 	// ForecastID check) — one Service, one fingerprint.
-	forecasts  *forecast.Service
+	forecasts *forecast.Service
+	// plans answers the plan gate's question for both servers.
+	plans      mcphost.PlanLookup
 	plot       *plot.Builder
 	manuscript *manuscript.Searcher
 	context    *storycontext.ContextBuilder
@@ -125,6 +127,7 @@ func buildToolDeps(deps mcpDeps, activity *mcphost.ActivityRepo) mcphost.ToolDep
 		Ledger:               deps.repos.ledger,
 		Proposals:            deps.repos.proposals,
 		Forecasts:            deps.repos.forecasts,
+		Plans:                deps.repos.plans,
 		Plot:                 deps.repos.plot,
 		Manuscript:           deps.repos.manuscript,
 		Context:              deps.repos.context,

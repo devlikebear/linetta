@@ -188,6 +188,7 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 		maxToolCalls:  s.maxToolCalls(),
 		historyBudget: s.replayBudget(resolved.ID),
 		brief:         newBriefGate(schemas),
+		plan:          newPlanGate(s.deps.Plans, schemas),
 	}
 
 	handedOff = true
@@ -269,6 +270,9 @@ type loopState struct {
 	// brief holds a prose write back until the turn has read the story
 	// brief (briefgate.go).
 	brief *briefGate
+	// plan holds the first prose of an empty scene back until something says
+	// what the scene is for (plangate.go).
+	plan *planGate
 }
 
 // releaseSession drops one reference and logs a close that failed. A helper
@@ -659,6 +663,9 @@ func (s *Service) runTool(ctx context.Context, st loopState, call llm.ToolCall) 
 		result = askWriter(call.Arguments)
 	} else if refusal := st.brief.refusal(call.Name); refusal != "" {
 		result = toolResult{IsError: true, Text: refusal}
+	} else if refusal, nodeID := st.plan.refusal(ctx, call.Name, call.Arguments); refusal != "" {
+		result = toolResult{IsError: true, Text: refusal}
+		s.recordGate(ctx, GateEvent{Kind: GatePlan, ProjectID: st.projectID, NodeID: nodeID, RunID: st.runID, Detail: "refused: no plan"})
 	} else {
 		result = st.session.call(ctx, st.runID, call.Name, call.Arguments)
 		st.brief.ran(call.Name, !result.IsError)

@@ -43,6 +43,13 @@ func TestAgentRun_writesThroughTheRealMCPToolsAndIsAudited(t *testing.T) {
 	factory := agenttest.NewScriptedClientFactory(
 		agenttest.ScriptedTurn{ToolName: "linetta_get_story_context",
 			ToolArgs: `{"project_id":"` + projectID + `","node_id":"` + nodeID + `"}`},
+		// A new episode with no plan is held back (agent/plangate.go): the
+		// first write is refused, the plan is written, and the same write
+		// goes through.
+		agenttest.ScriptedTurn{ToolName: "linetta_write_scene",
+			ToolArgs: `{"node_id":"` + nodeID + `","text":"비가 내렸다. 그는 우산을 펴지 않았다.","expected_content_version":0}`},
+		agenttest.ScriptedTurn{ToolName: "linetta_write_summary",
+			ToolArgs: `{"node_id":"` + nodeID + `","summary":"비 오는 날, 우산을 펴지 않는 남자를 들인다.","as_plan":true}`},
 		agenttest.ScriptedTurn{ToolName: "linetta_write_scene",
 			ToolArgs: `{"node_id":"` + nodeID + `","text":"비가 내렸다. 그는 우산을 펴지 않았다.","expected_content_version":0}`},
 		agenttest.ScriptedTurn{ToolName: "linetta_write_summary",
@@ -87,17 +94,23 @@ func TestAgentRun_writesThroughTheRealMCPToolsAndIsAudited(t *testing.T) {
 		t.Fatalf("mcp.activity: %+v", rpcErr)
 	}
 	var entries []struct {
-		Tool   string `json:"tool"`
-		Source string `json:"source"`
-		RunID  string `json:"run_id"`
-		OK     bool   `json:"ok"`
+		Tool     string `json:"tool"`
+		Source   string `json:"source"`
+		RunID    string `json:"run_id"`
+		TargetID string `json:"target_id"`
+		OK       bool   `json:"ok"`
 	}
 	if err := json.Unmarshal(actRaw, &entries); err != nil {
 		t.Fatalf("decode activity: %v", err)
 	}
-	var readContext, wroteScene, wroteSummary bool
+	var readContext, wroteScene, wroteSummary, planGate bool
 	for _, e := range entries {
 		switch e.Tool {
+		case "plan_gate":
+			planGate = true
+			if e.OK || e.Source != "agent" || e.TargetID != nodeID || e.RunID != run.RunID {
+				t.Errorf("plan_gate row = %+v, want a refusal of %s by this turn", e, nodeID)
+			}
 		case "linetta_get_story_context":
 			readContext = true
 			if !e.OK {
@@ -122,6 +135,9 @@ func TestAgentRun_writesThroughTheRealMCPToolsAndIsAudited(t *testing.T) {
 					"expected_content_version stale and refused")
 			}
 		}
+	}
+	if !planGate {
+		t.Error("the plan gate's refusal never reached the activity log")
 	}
 	if !readContext {
 		t.Error("linetta_get_story_context never reached the activity log")
@@ -180,8 +196,8 @@ func TestAgentRun_writesThroughTheRealMCPToolsAndIsAudited(t *testing.T) {
 			t.Errorf("history row role=%s status = %q, want done", m.Role, m.Status)
 		}
 	}
-	if roles["user"] != 1 || roles["tool"] != 3 || roles["assistant"] < 1 {
-		t.Errorf("transcript roles = %v, want one prompt, three tool events and a reply", roles)
+	if roles["user"] != 1 || roles["tool"] != 5 || roles["assistant"] < 1 {
+		t.Errorf("transcript roles = %v, want one prompt, five tool events (the refused write among them) and a reply", roles)
 	}
 }
 

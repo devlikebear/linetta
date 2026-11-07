@@ -382,6 +382,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 			ledger:        ledgerRepo,
 			proposals:     proposalsSvc,
 			forecasts:     forecastSvc,
+			plans:         planLookup{nodes: nodes, projects: projects, direction: directionRepo, forecasts: forecastSvc},
 			plot:          plotBuilder,
 			manuscript:    manuscriptSearcher,
 			context:       mcpContextBuilder,
