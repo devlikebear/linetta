@@ -58,6 +58,78 @@ func (s *Service) settle(ctx context.Context, st loopState, name string, scenes 
 	return outcome
 }
 
+// A turn that writes after scenes the ledger has not caught up with settles
+// them first. Refusing the turn instead would be a refusal the agent cannot
+// act on: settlement is a pass, not a tool it can call. So the turn catches up,
+// oldest first and within a short budget, and goes ahead whatever happens; the
+// scenes still waiting are named in a line before the writer's message.
+const (
+	catchUpMaxScenes = 3
+	catchUpTimeout   = 2 * time.Minute
+	// catchUpNoticeMax caps how many waiting scenes the notice names.
+	catchUpNoticeMax = 10
+)
+
+// catchUp settles what is waiting before the scene this turn is about, and
+// returns the notice for what is still waiting, or "". A turn with no scene —
+// a question, a world edit — catches nothing up, and neither does a writer who
+// has settlement off: they pay for no call they did not switch on.
+func (s *Service) catchUp(ctx context.Context, st loopState) string {
+	target := strings.TrimSpace(st.req.NodeID)
+	if target == "" || s.deps.Settlements == nil || s.deps.SettlementEnabled == nil || !s.deps.SettlementEnabled() ||
+		!offers(st.schemas, "linetta_edit_ledger") {
+		return ""
+	}
+	pending, err := s.deps.Settlements.Pending(ctx, st.req.ProjectID, target)
+	if err != nil {
+		logf("settlement catch-up for turn %s: %v", st.runID, err)
+		return ""
+	}
+	if len(pending) == 0 {
+		return ""
+	}
+	batch := pending[:min(len(pending), catchUpMaxScenes)]
+	passCtx, cancel := context.WithTimeout(ctx, catchUpTimeout)
+	started := time.Now()
+	outcome := s.settle(passCtx, st, "settlement catch-up", batch)
+	cancel()
+	left, err := s.deps.Settlements.Pending(context.WithoutCancel(ctx), st.req.ProjectID, target)
+	if err != nil {
+		logf("settlement catch-up for turn %s: %v", st.runID, err)
+		left = pending
+	}
+	s.recordGate(ctx, GateEvent{
+		Kind: SettlementCatchUp, ProjectID: st.projectID, NodeID: batch[0], RunID: st.runID, OK: outcome == passDone,
+		Detail: fmt.Sprintf("outcome=%s scenes=%d left=%d ms=%d", outcome, len(batch), len(left), time.Since(started).Milliseconds()),
+	})
+	return s.pendingNotice(ctx, left)
+}
+
+// pendingNotice names the scenes still waiting, by the labels the writer
+// knows them by, the way the brief names the sections it left out.
+func (s *Service) pendingNotice(ctx context.Context, ids []string) string {
+	if len(ids) == 0 {
+		return ""
+	}
+	labels := make([]string, 0, min(len(ids), catchUpNoticeMax))
+	for _, id := range ids[:min(len(ids), catchUpNoticeMax)] {
+		label := ""
+		if s.deps.Scope != nil {
+			label = s.deps.Scope.NodeLabel(ctx, id)
+		}
+		if label == "" {
+			label = id
+		}
+		labels = append(labels, label)
+	}
+	more := ""
+	if n := len(ids) - len(labels); n > 0 {
+		more = fmt.Sprintf(" (+%d more)", n)
+	}
+	return "[system notice] Settlement pending: " + strings.Join(labels, ", ") + more +
+		". The ledger may not yet hold what these scenes changed; where it matters, check their prose rather than trusting the ledger."
+}
+
 // now is the app's clock, or the wall clock when none is wired.
 func (s *Service) now() int64 {
 	if s.deps.Clock != nil {

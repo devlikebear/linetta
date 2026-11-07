@@ -211,6 +211,9 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 					fmt.Sprintf("internal error: %v", r), companion.HistoryStatusFailed)
 			}
 		}()
+		// Earlier scenes the ledger has not caught up with are settled first,
+		// within a short budget; what is left is named to the model.
+		st.notice = s.catchUp(runCtx, st)
 		if provider.IsSelfExecuting(st.provider) {
 			s.loopCLI(runCtx, st)
 			return
@@ -273,6 +276,9 @@ type loopState struct {
 	// plan holds the first prose of an empty scene back until something says
 	// what the scene is for (plangate.go).
 	plan *planGate
+	// notice is a line put before the writer's message, naming the earlier
+	// scenes still waiting for settlement after the catch-up (settlement.go).
+	notice string
 }
 
 // releaseSession drops one reference and logs a close that failed. A helper
@@ -637,7 +643,11 @@ func (s *Service) openingMessages(ctx context.Context, st loopState) []llm.ChatM
 	msgs = append(msgs, replay...)
 
 	scope := scopeLine(ctx, s.deps.Scope, st.req.ProjectID, st.req.NodeID)
-	msg := llm.ChatMessage{Role: "user", Content: scope + "\n\n" + st.req.Prompt}
+	head := scope
+	if st.notice != "" {
+		head += "\n" + st.notice
+	}
+	msg := llm.ChatMessage{Role: "user", Content: head + "\n\n" + st.req.Prompt}
 	if len(st.req.Images) > 0 {
 		msg.ContentBlocks = append(msg.ContentBlocks, llm.ContentBlock{Type: "text", Text: msg.Content})
 		for _, img := range st.req.Images {
