@@ -162,7 +162,9 @@ func (s *Service) now() int64 {
 }
 
 // A settlement may read each scene and the ledger, and write what changed. Each
-// fact is one call, so it gets a larger budget than the review.
+// fact is one call, so it gets a larger budget than the review. Reading the
+// open questions for leaks (Phase 7) adds a call a scene; the budget stays
+// until Phase 6's measurement of real passes says it runs short.
 const settlementCallsPerScene = 14
 
 // settlementTools can record in the ledger and report what does not fit. It has
@@ -183,11 +185,12 @@ const settlementSystemPrompt = `You are settling a finished chapter of fiction i
 For each scene you are given:
 1. Read it with linetta_read_scene numbered=true.
 2. Look up what the ledger already holds with linetta_list_ledger, using query for the subject.
-3. For each thing this scene changed that later scenes must honour, call linetta_edit_ledger with kind (number, timeline, knowledge or decision), subject, attribute, body, planted_node_id and planted_quote copied exactly from the scene. Use the attributes 위치, 소지금, 경지, 부상, 소속, 호칭, 작중 날짜, 앎. Set value_num when the value is a number, and strength soft when it comes from a character's mouth or a rumour rather than the narrator.
+3. For each thing this scene changed that later scenes must honour, call linetta_edit_ledger with kind (number, timeline, knowledge or decision), subject, attribute, body, planted_node_id and planted_quote copied exactly from the scene. Use the attributes 위치, 소지금, 경지, 부상, 소속, 호칭, 작중 날짜, 앎. Set value_num when the value is a number, and strength soft when it comes from a character's mouth or a rumour rather than the narrator. When a character learns the answer to an open question, or is told not to know it, record 앎 with about set to the question's id and value_num 1 (knows) or 0 (does not).
 4. When a value replaces one already recorded, pass its id as supersedes.
 5. When the result lists conflicts and the scene is not plainly changing the value, the prose and the record disagree: call linetta_report_continuity with the quote, and leave the fact as it is.
+6. Read the open questions and their answers with linetta_list_ledger kind=question. Call linetta_report_continuity with the quote where the narrator states an answer the story has not paid yet, with a note starting "비밀 누설:" (a character's guess or a rumour is not one), and where a character acts on an answer they do not know at this point, with a note starting "앎 위반:". Even when this scene is the first to tell an answer, do not pay the question: when the reader learns it is the author's call.
 
-Record only what changed and will matter. Do not retell the plot, and do not record what is already there. Nothing to record is a good result.`
+Record only what changed and will matter: knowledge only about open questions. Do not retell the plot, and do not record what is already there. Nothing to record is a good result.`
 
 func settlementRequest(projectID string, scenes []string) string {
 	var b strings.Builder
