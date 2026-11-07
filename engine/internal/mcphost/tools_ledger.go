@@ -45,6 +45,8 @@ type editLedgerInput struct {
 	ValidToNodeID *string  `json:"valid_to_node_id,omitempty" jsonschema:"scene it stops being true at"`
 	Supersedes    string   `json:"supersedes,omitempty" jsonschema:"id of the fact this one replaces"`
 	Reach         *string  `json:"reach,omitempty" jsonschema:"how far a promise runs: arc (default), volume or work"`
+	Answer        *string  `json:"answer,omitempty" jsonschema:"question only: the answer only the writer knows; keep it out of the prose until revealed"`
+	About         *string  `json:"about,omitempty" jsonschema:"앎 only: id of the question it is about; value_num 1 knows, 0 does not"`
 }
 
 func (in editLedgerInput) scope() (string, string) { return in.ProjectID, "" }
@@ -179,7 +181,7 @@ func (d ToolDeps) editLedger(ctx context.Context, _ *mcp.CallToolRequest, in edi
 			PlantedNodeID: in.PlantedNodeID, PlantedQuote: in.PlantedQuote, DueNodeID: in.DueNodeID,
 			PaidNodeID: in.PaidNodeID, PaidQuote: in.PaidQuote,
 			Attribute: in.Attribute, Strength: in.Strength, ValueNum: in.ValueNum, ValidToNodeID: in.ValidToNodeID,
-			Reach: in.Reach,
+			Reach: in.Reach, Answer: in.Answer, About: in.About,
 		})
 		if err != nil {
 			return ledgerToolErr(err), editLedgerOutput{}, nil
@@ -200,7 +202,7 @@ func (d ToolDeps) editLedger(ctx context.Context, _ *mcp.CallToolRequest, in edi
 			PlantedNodeID: deref(in.PlantedNodeID), PlantedQuote: deref(in.PlantedQuote), DueNodeID: deref(in.DueNodeID),
 			PaidNodeID: deref(in.PaidNodeID), PaidQuote: deref(in.PaidQuote), Source: d.ledgerSource(),
 			Attribute: deref(in.Attribute), Strength: deref(in.Strength), ValueNum: in.ValueNum, ValidToNodeID: deref(in.ValidToNodeID),
-			Reach: deref(in.Reach),
+			Reach: deref(in.Reach), Answer: deref(in.Answer), About: deref(in.About),
 		})
 		if err != nil {
 			return ledgerToolErr(err), editLedgerOutput{}, nil
