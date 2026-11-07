@@ -1,0 +1,24 @@
+.findings { list-style: none; margin: 0; padding: 0; }
+.finding {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  width: 100%;
+  padding: 10px 0;
+  border: none;
+  border-bottom: 1px solid var(--c-line);
+  border-radius: 0;
+  background: none;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+.finding-ranged { cursor: pointer; }
+.finding-ranged:hover .finding-message { text-decoration: underline; }
+.finding-text { display: flex; flex-direction: column; gap: 2px; }
+.finding-evidence { font-size: 12px; }
+.dot { flex: none; width: 8px; height: 8px; border-radius: 50%; margin-top: 7px; }
+.dot-strong { background: var(--c-danger); }
+.dot-medium { background: var(--c-warn); }
+.dot-weak { background: var(--c-muted); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
