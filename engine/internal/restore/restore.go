@@ -446,10 +446,17 @@ func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, p
 	// agent can draft again from the prose. A ledger entry survives losing a
 	// scene it points at; a part's arc means nothing without its part.
 	entryIDs := map[string]string{}
+	// about points at another entry by id, which may not be copied yet: it is
+	// set once every entry has its new id.
+	abouts := map[string]string{}
 	if err := copyRows(ctx, sdb, tx, "story_ledger", "project_id = ?", []any{projectID}, func(row map[string]any) (map[string]any, bool) {
 		fresh := uuid.NewString()
 		entryIDs[asString(row["id"])] = fresh
 		row["id"] = fresh
+		if about := asString(row["about"]); about != "" {
+			abouts[fresh] = about
+		}
+		row["about"] = nil
 		row["project_id"] = newProjectID
 		for _, col := range []string{"planted_node_id", "due_node_id", "paid_node_id", "valid_to_node_id"} {
 			if n, ok := nodeMap[asString(row[col])]; ok {
@@ -468,6 +475,15 @@ func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, p
 			`UPDATE story_ledger SET superseded_by = ? WHERE project_id = ? AND superseded_by = ?`,
 			to, newProjectID, from); err != nil {
 			return MergeResult{}, fmt.Errorf("remap superseded_by: %w", err)
+		}
+	}
+	for id, about := range abouts {
+		to, ok := entryIDs[about]
+		if !ok {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE story_ledger SET about = ? WHERE id = ?`, to, id); err != nil {
+			return MergeResult{}, fmt.Errorf("remap about: %w", err)
 		}
 	}
 	if err := copyRows(ctx, sdb, tx, "part_arcs", "project_id = ?", []any{projectID}, func(row map[string]any) (map[string]any, bool) {

@@ -23,6 +23,10 @@ type evalCase struct {
 		LaterSoft bool   `json:"later_soft"`
 		Replaces  bool   `json:"replaces"`
 		Number    bool   `json:"number"`
+		// About is the question a knows case is about, and Knows which way each
+		// of its two facts goes, 1 knows and 0 does not.
+		About string    `json:"about"`
+		Knows []float64 `json:"knows"`
 	} `json:"fact"`
 }
 
@@ -72,11 +76,18 @@ func evalFlags(t *testing.T, c evalCase) bool {
 		return &v
 	}
 	kind := KindNumber
+	var about string
+	earlier, later := value(c.Fact.Earlier), value(c.Fact.Later)
 	if c.Fact.Attribute == AttributeKnows {
 		kind = KindKnowledge
+		q, err := f.repo.Add(f.ctx, 1, Entry{ProjectID: f.pid, Kind: KindQuestion, Body: c.Fact.About})
+		if err != nil {
+			t.Fatal(err)
+		}
+		about, earlier, later = q.ID, &c.Fact.Knows[0], &c.Fact.Knows[1]
 	}
 	first, err := f.repo.Add(f.ctx, 1, Entry{ProjectID: f.pid, Kind: kind, Subject: c.Fact.Subject, Attribute: c.Fact.Attribute,
-		Body: c.Fact.Earlier, ValueNum: value(c.Fact.Earlier), PlantedNodeID: f.scenes[0].ID})
+		Body: c.Fact.Earlier, ValueNum: earlier, About: about, PlantedNodeID: f.scenes[0].ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +96,7 @@ func evalFlags(t *testing.T, c evalCase) bool {
 		strength = StrengthSoft
 	}
 	second, err := f.repo.Add(f.ctx, 2, Entry{ProjectID: f.pid, Kind: kind, Subject: c.Fact.Subject, Attribute: c.Fact.Attribute,
-		Body: c.Fact.Later, ValueNum: value(c.Fact.Later), Strength: strength, PlantedNodeID: f.scenes[1].ID})
+		Body: c.Fact.Later, ValueNum: later, About: about, Strength: strength, PlantedNodeID: f.scenes[1].ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,8 +117,9 @@ func evalFlags(t *testing.T, c evalCase) bool {
 // values, not prose, so this measures the comparison given facts recorded under
 // the right subject and attribute. Whether an agent records them that way is not
 // measured here. The floors hold what was measured; lower one only on purpose.
-// What a person knows piles up, so it is not compared and that type scores zero
-// here on purpose: a contradiction there takes reading, not values.
+// What a person knows piles up, so a knows case is recorded as two facts about
+// one question, which way each goes given by the case: the score is what the
+// comparison finds when an agent links them so, not whether it does.
 func TestConsistencyCasesAgainstFactComparison(t *testing.T) {
 	byType := map[string]*score{}
 	var total score
@@ -144,6 +156,10 @@ func TestConsistencyCasesAgainstFactComparison(t *testing.T) {
 	fmt.Printf("EVAL fact total precision=%.2f recall=%.2f\n", total.precision(), total.recall())
 	if total.recall() < 0.85 || total.precision() < 0.95 {
 		t.Fatalf("precision %.2f recall %.2f", total.precision(), total.recall())
+	}
+	// Phase 7 measured knows at tp=4 fp=0 fn=0 tn=4, from zero before it.
+	if k := byType["knowledge"]; k == nil || k.recall() < 1 || k.precision() < 1 {
+		t.Fatalf("knowledge: %+v", k)
 	}
 }
 

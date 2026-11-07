@@ -337,3 +337,98 @@ func TestCutPlansAreKeptWithTheirLabels(t *testing.T) {
 		t.Fatalf("got %+v", got)
 	}
 }
+
+func TestAnswersAndKnowsFactsPointAtQuestions(t *testing.T) {
+	f := setup(t, 2)
+	yes, no, half := KnowsYes, KnowsNo, 0.5
+	q, err := f.repo.Add(f.ctx, 1, Entry{ProjectID: f.pid, Kind: KindQuestion, Body: "하람은 누구인가", Answer: " 왕자다 "})
+	if err != nil || q.Answer != "왕자다" {
+		t.Fatalf("question = %+v, err %v", q, err)
+	}
+	if got, _ := f.repo.Get(f.ctx, q.ID); got.Answer != "왕자다" {
+		t.Fatalf("stored answer = %q", got.Answer)
+	}
+	if _, err := f.repo.Add(f.ctx, 1, Entry{ProjectID: f.pid, Kind: KindPromise, Body: "약속", Answer: "답"}); !errors.Is(err, ErrAnswerQuestionOnly) {
+		t.Fatalf("answer on a promise: %v", err)
+	}
+	decision, err := f.repo.Add(f.ctx, 1, Entry{ProjectID: f.pid, Kind: KindDecision, Body: "규칙"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	knows := func(about string, v *float64) Entry {
+		return Entry{ProjectID: f.pid, Kind: KindKnowledge, Subject: "서진", Attribute: AttributeKnows, Body: "하람의 정체를 앎", About: about, ValueNum: v}
+	}
+	for name, c := range map[string]struct {
+		e    Entry
+		want error
+	}{
+		"about on a decision":   {Entry{ProjectID: f.pid, Kind: KindDecision, Body: "규칙", About: q.ID}, ErrAboutKnowsOnly},
+		"about on another fact": {Entry{ProjectID: f.pid, Kind: KindKnowledge, Subject: "서진", Attribute: "위치", Body: "객잔", About: q.ID, ValueNum: &yes}, ErrAboutKnowsOnly},
+		"about a decision":      {knows(decision.ID, &yes), ErrAboutNotQuestion},
+		"about nothing":         {knows("없는-질문", &yes), ErrAboutNotQuestion},
+		"no direction":          {knows(q.ID, nil), ErrAboutNeedsValue},
+		"half a direction":      {knows(q.ID, &half), ErrAboutNeedsValue},
+	} {
+		if _, err := f.repo.Add(f.ctx, 1, c.e); !errors.Is(err, c.want) {
+			t.Errorf("%s: err = %v, want %v", name, err, c.want)
+		}
+	}
+	other := setup(t, 1)
+	if _, err := other.repo.Add(other.ctx, 1, Entry{ProjectID: other.pid, Kind: KindKnowledge, Subject: "서진", Attribute: AttributeKnows,
+		Body: "앎", About: q.ID, ValueNum: &yes}); !errors.Is(err, ErrAboutNotQuestion) {
+		t.Fatalf("about a question of another work: %v", err)
+	}
+
+	k, err := f.repo.Add(f.ctx, 2, knows(q.ID, &yes))
+	if err != nil || k.About != q.ID {
+		t.Fatalf("knows = %+v, err %v", k, err)
+	}
+	if got, _ := f.repo.Get(f.ctx, k.ID); got.About != q.ID || *got.ValueNum != KnowsYes {
+		t.Fatalf("stored knows = %+v", got)
+	}
+	k, err = f.repo.Update(f.ctx, 3, k.ID, Patch{ValueNum: &no})
+	if err != nil || *k.ValueNum != KnowsNo {
+		t.Fatalf("turned = %+v, err %v", k, err)
+	}
+	empty := ""
+	if k, err = f.repo.Update(f.ctx, 3, k.ID, Patch{About: &empty}); err != nil || k.About != "" {
+		t.Fatalf("let go of the question: %+v, %v", k, err)
+	}
+	if _, err := f.repo.Update(f.ctx, 3, decision.ID, Patch{Answer: &empty}); err != nil {
+		t.Fatalf("clearing an answer that is not there: %v", err)
+	}
+	answer := "답"
+	if _, err := f.repo.Update(f.ctx, 3, decision.ID, Patch{Answer: &answer}); !errors.Is(err, ErrAnswerQuestionOnly) {
+		t.Fatalf("answer patched onto a decision: %v", err)
+	}
+
+	// Deleting the question leaves the knows fact as a free note.
+	k, err = f.repo.Add(f.ctx, 4, knows(q.ID, &yes))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.repo.Delete(f.ctx, q.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := f.repo.Get(f.ctx, k.ID); err != nil || got.About != "" || got.Attribute != AttributeKnows {
+		t.Fatalf("after the question went: %+v, %v", got, err)
+	}
+}
+
+func TestTheWriterCanPinAnOpenQuestion(t *testing.T) {
+	f := setup(t, 1)
+	q, err := f.repo.Add(f.ctx, 1, Entry{ProjectID: f.pid, Kind: KindQuestion, Body: "하람은 누구인가", Answer: "왕자다"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := f.repo.SetPinned(f.ctx, 2, q.ID, true); err != nil || !got.Pinned {
+		t.Fatalf("pin = %+v, %v", got, err)
+	}
+	gag, err := f.repo.Add(f.ctx, 1, Entry{ProjectID: f.pid, Kind: KindGag, Body: "반복 개그"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.repo.SetPinned(f.ctx, 2, gag.ID, true); !errors.Is(err, ErrNotPinnable) {
+		t.Fatalf("pinned a gag: %v", err)
+	}
+}

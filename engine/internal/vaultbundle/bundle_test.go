@@ -67,6 +67,11 @@ func seedWork(t *testing.T, db *sql.DB, id string) {
 		`INSERT INTO project_style_drafts (project_id, body, created_at) VALUES ('P', '초안', 1)`,
 		`INSERT INTO story_ledger (id, project_id, kind, body, status, source, created_at, updated_at) VALUES ('P-l1', 'P', 'promise', '복선', 'open', 'writer', 1, 1)`,
 		`INSERT INTO story_ledger (id, project_id, kind, body, status, source, pinned, created_at, updated_at) VALUES ('P-l2', 'P', 'decision', '규칙', 'open', 'writer', 1, 1, 1)`,
+		// A knows fact names its question, so the bundle has to bring the question
+		// in first whatever order its rows sort in.
+		`INSERT INTO story_ledger (id, project_id, kind, body, status, source, answer, created_at, updated_at) VALUES ('P-l3', 'P', 'question', '다라의 정체', 'open', 'writer', '왕자다', 1, 1)`,
+		`INSERT INTO story_ledger (id, project_id, kind, subject, body, status, source, attribute, value_num, about, created_at, updated_at)
+		 VALUES ('P-l4', 'P', 'knowledge', '가나', '다라의 정체를 앎', 'open', 'agent', '앎', 1, 'P-l3', 1, 1)`,
 		`INSERT INTO part_arcs (node_id, project_id, role, goal, tension, updated_at) VALUES ('P-n2', 'P', '승', '목표', 5, 1)`,
 		`INSERT INTO scene_settlements (node_id, project_id, content_version, outcome, settled_at) VALUES ('P-n2', 'P', 3, 'done', 1)`,
 		`INSERT INTO project_focus (project_id, body, anchor_node_id, set_at) VALUES ('P', '집중', 'P-n2', 1)`,

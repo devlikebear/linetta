@@ -72,6 +72,10 @@ TEMPLATES = [
      "\"나는 평생 약장수로만 살았소.\" {a}는 {b} 앞에서 태연하게 거짓말을 했다."),
 ]
 
+# Which way each knows fact goes, 1 knows and 0 does not, recorded with the
+# question the case is about. The test reads these, never the sentences.
+KNOWS = {True: [1, 0], False: [0, 1]}
+
 
 def fill(text, a, b, place, item):
     return text.format(a=a, b=b, place=place, item=item)
@@ -87,6 +91,19 @@ def main():
             item = rng.choice(ITEMS)
             pad = lambda: " ".join(rng.sample(FILLER, 2))
             later_soft = kind == "lie" and not contradiction
+            fact = {
+                "subject": "작품" if kind == "date" else a,
+                "attribute": attribute,
+                "earlier": fill(v1, a, b, place, item),
+                "later": fill(v2, a, b, place, item),
+                "later_soft": later_soft,
+                # A fact that legitimately moves on is recorded as a replacement.
+                "replaces": not contradiction and kind not in ("date", "alias", "flashback", "lie"),
+                "number": kind == "date",
+            }
+            if kind == "knowledge":
+                fact["about"] = f"{b}의 정체"
+                fact["knows"] = KNOWS[contradiction]
             cases.append({
                 "id": f"{kind}-{'c' if contradiction else 'n'}{round_no}",
                 "type": kind,
@@ -96,16 +113,7 @@ def main():
                     f"{pad()} {fill(s1, a, b, place, item)} {pad()}",
                     f"{pad()} {fill(s2, a, b, place, item)} {pad()}",
                 ],
-                "fact": {
-                    "subject": "작품" if kind == "date" else a,
-                    "attribute": attribute,
-                    "earlier": fill(v1, a, b, place, item),
-                    "later": fill(v2, a, b, place, item),
-                    "later_soft": later_soft,
-                    # A fact that legitimately moves on is recorded as a replacement.
-                    "replaces": not contradiction and kind not in ("date", "alias", "flashback", "lie"),
-                    "number": kind == "date",
-                },
+                "fact": fact,
             })
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(cases, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")

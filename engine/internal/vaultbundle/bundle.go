@@ -433,13 +433,39 @@ func ApplyWith(ctx context.Context, tx *sql.Tx, bundle *Bundle, opts ApplyOption
 		if merging(table) {
 			write = reader.merge
 		}
-		for _, row := range rows {
+		for _, row := range referencedFirst(table.Name, rows) {
 			if err := write(table.Name, row); err != nil {
 				return fmt.Errorf("restore %s: %w", table.Name, err)
 			}
 		}
 	}
 	return placeOpenedNode(ctx, tx, projectID)
+}
+
+// selfReferences names the column in a table that points at another row of the
+// same table. A bundle's rows come sorted by their text, not by what they
+// point at.
+var selfReferences = map[string]string{"story_ledger": "about"}
+
+// referencedFirst puts the rows nothing in the table needs ahead of the rows
+// that point at another one, so a foreign key into the same table finds its
+// row. One pass is enough: what a knows fact points at, a question, never
+// points at anything itself.
+func referencedFirst(table string, rows []map[string]any) []map[string]any {
+	column, ok := selfReferences[table]
+	if !ok {
+		return rows
+	}
+	ordered := make([]map[string]any, 0, len(rows))
+	var pointing []map[string]any
+	for _, row := range rows {
+		if asString(row[column]) == "" {
+			ordered = append(ordered, row)
+		} else {
+			pointing = append(pointing, row)
+		}
+	}
+	return append(ordered, pointing...)
 }
 
 // placeOpenedNode points the work at its first scene when this device has no

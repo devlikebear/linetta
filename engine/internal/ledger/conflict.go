@@ -24,7 +24,15 @@ type Previous struct {
 // Conflicts compares a fact with what the ledger holds for the same subject and
 // attribute at the same point in the story. It works from values alone, so it
 // finds what is written under the same name and nothing subtler.
+//
+// What a person knows piles up, so a knows fact is compared only when it names
+// the question it is about: then the last one before it, about the same
+// question, says what it may not say.
 func (r *Repo) Conflicts(ctx context.Context, e Entry) ([]Conflict, *Previous, error) {
+	if e.Attribute == AttributeKnows && e.About != "" {
+		conflicts, err := r.knowsConflicts(ctx, e)
+		return conflicts, nil, err
+	}
 	if e.Attribute == "" || e.Attribute == AttributeKnows {
 		return nil, nil, nil
 	}
@@ -67,6 +75,59 @@ func (r *Repo) Conflicts(ctx context.Context, e Entry) ([]Conflict, *Previous, e
 		}
 	}
 	return conflicts, previous, nil
+}
+
+// knowsConflicts compares a knows fact about a question with the last one
+// before it for the same person and question. Learning is no conflict; knowing
+// and then not knowing is, and so is learning again what was already known. A
+// fact that replaces the earlier one (amnesia, say) was meant, and is not.
+func (r *Repo) knowsConflicts(ctx context.Context, e Entry) ([]Conflict, error) {
+	if e.ValueNum == nil || e.Strength == StrengthSoft {
+		return nil, nil
+	}
+	all, err := r.nodes.ListByProject(ctx, e.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	t := newTree(all)
+	cur, onStory := t.index[e.PlantedNodeID]
+	if !onStory {
+		cur = len(t.leaves)
+	}
+	entries, err := r.List(ctx, Filter{ProjectID: e.ProjectID, Kinds: []string{KindKnowledge}, Status: StatusOpen})
+	if err != nil {
+		return nil, err
+	}
+	var prior *Entry
+	for i := range entries {
+		other := entries[i]
+		if other.ID == e.ID || other.Subject != e.Subject || other.Attribute != AttributeKnows ||
+			other.About != e.About || other.ValueNum == nil || other.Strength == StrengthSoft {
+			continue
+		}
+		if other.SupersededBy == e.ID {
+			return nil, nil
+		}
+		at := t.plantedAt(other)
+		if other.SupersededBy != "" || at > cur || (at == cur && other.CreatedAt > e.CreatedAt) {
+			continue
+		}
+		if prior == nil || t.storyOrder(other, *prior) >= 0 {
+			prior = &entries[i]
+		}
+	}
+	if prior == nil || *prior.ValueNum != KnowsYes {
+		return nil, nil
+	}
+	where := "앞에서"
+	if n, ok := t.byID[prior.PlantedNodeID]; ok {
+		where = n.Label + "에서"
+	}
+	reason := fmt.Sprintf("%s는 이미 %s 알았습니다", e.Subject, where)
+	if *e.ValueNum == KnowsNo {
+		reason = fmt.Sprintf("%s는 %s 안 것을 모르는 것으로 서술됩니다", e.Subject, where)
+	}
+	return []Conflict{{EntryID: prior.ID, Body: prior.Body, Reason: reason}}, nil
 }
 
 // disagrees reports whether two facts about one thing cannot both stand. A date

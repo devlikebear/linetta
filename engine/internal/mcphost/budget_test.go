@@ -298,9 +298,13 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	// linetta_apply_story_ops and linetta_write_summary share, measured at
 	// 27,618B; the ledger tools carry their own allowance, 4,500B. Facts with a
 	// span and paged listing took them to 5,552B. Reach and linetta_find_impact
-	// took them to 6,526B.
-	if ledgerTools > 6600 {
-		t.Errorf("the ledger tools cost %dB, want <= 6600B", ledgerTools)
+	// took them to 6,526B. Phase 7's answer and about took them to 6,893B:
+	// 103B for the two fields every entry in a listing or an edit now shows,
+	// the rest for their input descriptions, which tell an agent that only a
+	// question has an answer, the prose keeps it until it is revealed, and a
+	// knows fact about a question says 1 or 0.
+	if ledgerTools > 6950 {
+		t.Errorf("the ledger tools cost %dB, want <= 6950B", ledgerTools)
 	}
 	// The three inbox tools measured 3,790B: list 1,621B, accept 1,331B,
 	// reject 838B.
