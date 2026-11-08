@@ -179,7 +179,12 @@ func (c *settleClient) turnResults() []string {
 	return toolMessages(c.lastTurn)
 }
 
-func catchUpTurn(t *testing.T, on bool, mode string, turn []llm.ChatResponse, pending []string) (*settleClient, *fakeSettlements, *gateLog) {
+// catchUpTurn runs one turn and closes the service once passes settlement
+// passes have reached the provider. agent.done goes out BEFORE the passes
+// after the turn are started (endDone, then afterReply), and Close refuses
+// any pass not yet started — so a test that closes on agent.done alone races
+// the turn's own settlement, and loses it on a loaded machine.
+func catchUpTurn(t *testing.T, on bool, mode string, turn []llm.ChatResponse, pending []string, passes int) (*settleClient, *fakeSettlements, *gateLog) {
 	t.Helper()
 	rec := &recorder{}
 	c := &settleClient{turn: turn, mode: mode}
@@ -190,6 +195,7 @@ func catchUpTurn(t *testing.T, on bool, mode string, turn []llm.ChatResponse, pe
 		t.Fatal(err)
 	}
 	waitFor(t, "agent.done", func() bool { return rec.has("agent.done") })
+	waitFor(t, "the settlement passes", func() bool { return len(c.settlementRequests()) >= passes })
 	if err := svc.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +206,7 @@ func catchUpTurn(t *testing.T, on bool, mode string, turn []llm.ChatResponse, pe
 // has it on or off — even with a scene open and episodes waiting.
 func TestCatchUp_aTurnWithNoProseWriteCatchesNothingUp(t *testing.T) {
 	for _, on := range []bool{false, true} {
-		c, ledger, log := catchUpTurn(t, on, passDone, []llm.ChatResponse{textReply("네")}, []string{"n2"})
+		c, ledger, log := catchUpTurn(t, on, passDone, []llm.ChatResponse{textReply("네")}, []string{"n2"}, 0)
 		if got := c.settlementRequests(); len(got) != 0 {
 			t.Fatalf("on=%v: passes = %q, want none", on, got)
 		}
@@ -212,7 +218,7 @@ func TestCatchUp_aTurnWithNoProseWriteCatchesNothingUp(t *testing.T) {
 
 // Settlement off: a writing turn makes no call before its write either.
 func TestCatchUp_nothingRunsWhenSettlementIsOff(t *testing.T) {
-	c, ledger, _ := catchUpTurn(t, false, passDone, writingTurn("n5"), []string{"n2"})
+	c, ledger, _ := catchUpTurn(t, false, passDone, writingTurn("n5"), []string{"n2"}, 0)
 	if got := c.settlementRequests(); len(got) != 0 {
 		t.Fatalf("passes = %q, want none", got)
 	}
@@ -224,7 +230,7 @@ func TestCatchUp_nothingRunsWhenSettlementIsOff(t *testing.T) {
 // The turn's first prose write settles what waits before its scene, once;
 // the second write in the same turn does not run it again.
 func TestCatchUp_runsOnceBeforeTheFirstWrite(t *testing.T) {
-	c, ledger, log := catchUpTurn(t, true, passDone, writingTurn("n5", "n6"), []string{"n2", "n3"})
+	c, ledger, log := catchUpTurn(t, true, passDone, writingTurn("n5", "n6"), []string{"n2", "n3"}, 2)
 	// The pass after the turn settles what it wrote; the first is the catch-up.
 	got := c.settlementRequests()
 	if len(got) != 2 || !strings.Contains(got[0], "n2") || !strings.Contains(got[0], "n3") || strings.Contains(got[1], "n2") {
@@ -266,7 +272,7 @@ func TestCatchUp_aSweepingReviseLeavesTheCatchUpToTheNextWrite(t *testing.T) {
 		toolReply("linetta_write_scene", `{"node_id":"n6"}`),
 		textReply("썼어요"),
 	}
-	c, ledger, _ := catchUpTurn(t, true, passFailed, turn, []string{"n2"})
+	c, ledger, _ := catchUpTurn(t, true, passFailed, turn, []string{"n2"}, 2)
 	got := c.settlementRequests()
 	if len(got) < 1 || !strings.Contains(got[0], "n2") {
 		t.Fatalf("passes = %q, want the catch-up over n2 first", got)
@@ -286,7 +292,7 @@ func TestCatchUp_aSweepingReviseLeavesTheCatchUpToTheNextWrite(t *testing.T) {
 
 // Past three scenes, the rest are named on the write's own result.
 func TestCatchUp_settlesThreeAndNamesTheRestOnTheWrite(t *testing.T) {
-	c, _, _ := catchUpTurn(t, true, passDone, writingTurn("n6"), []string{"n1", "n2", "n3", "n4", "n5"})
+	c, _, _ := catchUpTurn(t, true, passDone, writingTurn("n6"), []string{"n1", "n2", "n3", "n4", "n5"}, 2)
 	got := c.settlementRequests()
 	if len(got) != 2 || !strings.Contains(got[0], "n3") || strings.Contains(got[0], "n4") {
 		t.Fatalf("passes = %q, want the catch-up over n1..n3, then the turn's own", got)
@@ -299,7 +305,7 @@ func TestCatchUp_settlesThreeAndNamesTheRestOnTheWrite(t *testing.T) {
 
 // A failed catch-up does not stop the write.
 func TestCatchUp_aFailedPassDoesNotStopTheWrite(t *testing.T) {
-	c, ledger, log := catchUpTurn(t, true, passFailed, writingTurn("n5"), []string{"n2"})
+	c, ledger, log := catchUpTurn(t, true, passFailed, writingTurn("n5"), []string{"n2"}, 2)
 	if want := []settlementRecord{{"n2", 2, passFailed}}; !slices.Equal(ledger.recorded()[:1], want) {
 		t.Errorf("records = %+v", ledger.recorded())
 	}
@@ -333,6 +339,8 @@ func TestCatchUp_waitsForTheWriteThePlanGateLetsThrough(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitFor(t, "agent.done", func() bool { return rec.has("agent.done") })
+	// The pass after the turn starts after agent.done; see catchUpTurn.
+	waitFor(t, "the settlement passes", func() bool { return len(c.settlementRequests()) >= 2 })
 	if err := svc.Close(); err != nil {
 		t.Fatal(err)
 	}
