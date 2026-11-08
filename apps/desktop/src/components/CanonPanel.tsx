@@ -151,7 +151,7 @@ export function CanonPanel({
           onBeforeCheck={onBeforeStyleCheck}
         />
         <SettlementPending key={`settlement-${projectId}`} projectId={projectId} refreshKey={refreshKey} onOpenNode={onOpenNode} />
-        <LedgerSection key={`ledger-${projectId}`} projectId={projectId} onOpenNode={onOpenNode} />
+        <LedgerSection key={`ledger-${projectId}`} projectId={projectId} nodeId={nodeId} onOpenNode={onOpenNode} />
         <ContinuitySection
           key={`continuity-${projectId}`}
           projectId={projectId}
