@@ -33,6 +33,11 @@ func (r *Repo) KnowsAt(ctx context.Context, projectID, nodeID string, subjects [
 	if !onStory {
 		cur = len(t.leaves)
 	}
+	return r.knowsAt(ctx, t, cur, projectID, subjects)
+}
+
+// knowsAt is KnowsAt on an outline already read.
+func (r *Repo) knowsAt(ctx context.Context, t tree, cur int, projectID string, subjects []string) (Knowledge, error) {
 	entries, err := r.List(ctx, Filter{ProjectID: projectID, Kinds: []string{KindQuestion, KindKnowledge}})
 	if err != nil {
 		return Knowledge{}, err

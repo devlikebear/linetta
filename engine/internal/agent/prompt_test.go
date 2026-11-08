@@ -95,6 +95,17 @@ func TestSystemPrompt_statesProposeVsApplyWhenReviewOn(t *testing.T) {
 	}
 }
 
+// Phase 7: a question carries its answer and a 앎 fact points at the question,
+// so the brief can show the secret and the ledger can compare who knows it.
+func TestSystemPrompt_ledgerHabitKeepsAnswersAndPointsKnowledgeAtQuestions(t *testing.T) {
+	got := systemPrompt("en", emptyDoc(agentmemory.ScopeWriterProfile), emptyDoc(agentmemory.ScopeWorkNotes), nil, allToolGroups())
+	for _, want := range []string{"put it in answer and keep it out of the prose", "points at its question with about"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("prompt missing %q", want)
+		}
+	}
+}
+
 func TestSystemPrompt_withReviewOffDropsThePropose(t *testing.T) {
 	groups := allToolGroups()
 	groups.review = false
