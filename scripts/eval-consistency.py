@@ -25,7 +25,7 @@ import time
 
 CASES = pathlib.Path(__file__).parent.parent / "engine/internal/ledger/testdata/eval/consistency.json"
 PROMPT = """아래는 소설의 장면들이다. 함께 참일 수 없는 진술이 있는지 찾아라.
-인물의 거짓말, 소문, 시간이 흘러 달라진 것, 나중에 밝혀진 사정은 모순이 아니다.
+장면은 이야기 순서대로 놓였다. 인물의 거짓말, 소문, 시간이 흘러 달라진 것, 나중에 밝혀진 사정은 모순이 아니다.
 첫 줄에 YES 또는 NO만 써라.
 
 {scenes}"""
