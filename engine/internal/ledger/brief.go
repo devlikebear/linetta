@@ -236,17 +236,23 @@ func (t tree) secretLines(k Knowledge, nodeID string, cur int, root, arc string)
 }
 
 // arcOf is the container nearest a scene: its arc in a work split into volumes
-// and arcs, its part in one that is not.
+// and arcs, its part in one that is not. A scene at the work's top level, the
+// shape every new work starts in, is in no container and has no arc: "".
 func (t tree) arcOf(id string) string {
 	n, ok := t.byID[id]
-	if !ok || n.ParentID == nil {
+	if !ok {
 		return id
+	}
+	if n.ParentID == nil {
+		return ""
 	}
 	return *n.ParentID
 }
 
 // inReach says whether a promise is still in play where the story is now. One
-// planted nowhere has no place to fall out of sight from.
+// planted nowhere has no place to fall out of sight from, and neither has one
+// planted in, or read from, a scene outside every container: the work is the
+// only arc such a scene has.
 func (t tree) inReach(e Entry, root, arc string) bool {
 	if e.Reach == ReachWork || e.PlantedNodeID == "" {
 		return true
@@ -254,10 +260,14 @@ func (t tree) inReach(e Entry, root, arc string) bool {
 	if _, ok := t.byID[e.PlantedNodeID]; !ok {
 		return true
 	}
+	planted := t.arcOf(e.PlantedNodeID)
+	if planted == "" || arc == "" {
+		return true
+	}
 	if e.Reach == ReachVolume {
 		return t.root(e.PlantedNodeID) == root
 	}
-	return t.arcOf(e.PlantedNodeID) == arc
+	return planted == arc
 }
 
 // bySceneRelevance orders settled entries for a scene: those whose subject the
