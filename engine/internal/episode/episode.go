@@ -277,3 +277,82 @@ func resolve(nodes []node.Node, preset, nodeID string) (Episode, error) {
 	}
 	return Episode{}, ErrNotFound
 }
+
+// FromNodes lists the episodes of a work whose nodes the caller already
+// holds, as List does from the store.
+func FromNodes(nodes []node.Node, preset string) []Episode {
+	return episodes(nodes, preset)
+}
+
+// Chars adds up an episode's scenes, each counted the way the work counts
+// (node.WordCount is already in the work's character count basis).
+func Chars(ep Episode, wordCount map[string]int) int {
+	total := 0
+	for _, id := range ep.LeafIDs {
+		total += wordCount[id]
+	}
+	return total
+}
+
+// WordCounts maps each node to its word_count, for Chars.
+func WordCounts(nodes []node.Node) map[string]int {
+	out := make(map[string]int, len(nodes))
+	for _, n := range nodes {
+		out[n.ID] = n.WordCount
+	}
+	return out
+}
+
+// Measured is the episode a scene belongs to, with its length.
+type Measured struct {
+	Episode Episode
+	// Chars is the whole episode, the scene included.
+	Chars int
+	// SceneChars is the scene's own count.
+	SceneChars int
+	// LastScene is whether the scene is the episode's last, the point at
+	// which the episode is as long as it is going to be.
+	LastScene bool
+}
+
+// Measure finds the episode nodeID is a scene of and adds it up. ok is false
+// for a work with no episode structure (a short story has no episode length
+// to keep) and for a node that is not a scene of any episode.
+func Measure(ctx context.Context, nr *node.Repo, preset, nodeID string) (Measured, bool, error) {
+	n, err := nr.Get(ctx, nodeID)
+	if errors.Is(err, node.ErrNotFound) {
+		return Measured{}, false, nil
+	}
+	if err != nil {
+		return Measured{}, false, err
+	}
+	nodes, err := nr.ListByProject(ctx, n.ProjectID)
+	if err != nil {
+		return Measured{}, false, err
+	}
+	m, ok := measure(nodes, preset, nodeID)
+	return m, ok, nil
+}
+
+func measure(nodes []node.Node, preset, nodeID string) (Measured, bool) {
+	ep, err := resolve(nodes, preset, nodeID)
+	if err != nil || ep.Whole {
+		return Measured{}, false
+	}
+	at := -1
+	for i, id := range ep.LeafIDs {
+		if id == nodeID {
+			at = i
+		}
+	}
+	if at < 0 {
+		return Measured{}, false
+	}
+	counts := WordCounts(nodes)
+	return Measured{
+		Episode:    ep,
+		Chars:      Chars(ep, counts),
+		SceneChars: counts[nodeID],
+		LastScene:  at == len(ep.LeafIDs)-1,
+	}, true
+}

@@ -65,3 +65,32 @@ func TestValidEpisodeRange(t *testing.T) {
 		}
 	}
 }
+
+// The cases episodeLength.test.ts checks, so the two implementations agree.
+func TestJudgeEpisode(t *testing.T) {
+	for _, tc := range []struct {
+		chars, min, max int
+		want            EpisodeLength
+	}{
+		{3925, 0, 0, EpisodeLength{State: LengthProgress}},
+		{5000, 0, 0, EpisodeLength{State: LengthProgress}},
+		{3925, 5000, 0, EpisodeLength{State: LengthShort, Delta: -1075}},
+		{0, 5000, 0, EpisodeLength{State: LengthShort, Delta: -5000}},
+		{5000, 5000, 0, EpisodeLength{State: LengthOK}},
+		{5500, 4500, 5500, EpisodeLength{State: LengthOK}},
+		{5820, 4500, 5500, EpisodeLength{State: LengthLong, Delta: 320}},
+		{5820, 0, 5500, EpisodeLength{State: LengthLong, Delta: 320}},
+	} {
+		if got := JudgeEpisode(tc.chars, tc.min, tc.max); got != tc.want {
+			t.Errorf("JudgeEpisode(%d, %d, %d) = %+v, want %+v", tc.chars, tc.min, tc.max, got, tc.want)
+		}
+	}
+}
+
+func TestGroup(t *testing.T) {
+	for n, want := range map[int]string{0: "0", 999: "999", 1000: "1,000", 5300: "5,300", 1234567: "1,234,567", -1075: "-1,075"} {
+		if got := Group(n); got != want {
+			t.Errorf("Group(%d) = %q, want %q", n, got, want)
+		}
+	}
+}

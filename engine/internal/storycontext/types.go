@@ -158,9 +158,31 @@ type ProjectMeta struct {
 	// EpisodeCharTarget is the length the writer set for an episode, or 0 when
 	// they left it at the default.
 	EpisodeCharTarget int `json:"episode_char_target,omitempty"`
+	// EpisodeCharMin and EpisodeCharMax bound an episode's length, 0 when the
+	// work sets no bound. Either one being set makes EpisodeCharTarget the
+	// work's own, so it is carried even at the default.
+	EpisodeCharMin int `json:"episode_char_min,omitempty"`
+	EpisodeCharMax int `json:"episode_char_max,omitempty"`
 	// CharCountBasis is how the work counts characters (charcount.WithSpaces
 	// or charcount.WithoutSpaces), which a length target is measured in.
 	CharCountBasis string `json:"char_count_basis,omitempty"`
+	// Episode is how long the episode being written is so far, for a scene
+	// of an episode in a work that bounds episode length.
+	Episode *EpisodeLengthBrief `json:"episode,omitempty"`
+}
+
+// EpisodeLengthBrief is the episode a scene belongs to, measured against the
+// work's bounds, so the agent knows how much this scene has to carry.
+type EpisodeLengthBrief struct {
+	Label string `json:"label"`
+	// Chars is the episode as it stands, this scene included.
+	Chars int `json:"chars"`
+	// OtherScenesChars is the episode without this scene: what the scene
+	// adds to when it is rewritten.
+	OtherScenesChars int `json:"other_scenes_chars"`
+	// State and Delta judge Chars (charcount.JudgeEpisode).
+	State string `json:"state"`
+	Delta int    `json:"delta,omitempty"`
 }
 
 // LedgerBrief is the work's ledger as one scene's brief sees it. Each line is

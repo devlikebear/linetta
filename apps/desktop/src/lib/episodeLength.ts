@@ -21,7 +21,7 @@ export interface EpisodeLength {
 
 type Bounds = Pick<LengthRule, "episode_char_min" | "episode_char_target" | "episode_char_max">;
 
-/** Judges an episode of chars characters (engine episode length rules keep
+/** Judges an episode of chars characters (the engine's charcount.JudgeEpisode keeps
  *  the same boundaries: reaching the minimum or the maximum exactly is ok). */
 export function episodeLength(chars: number, rule: Bounds): EpisodeLength {
   const min = Math.max(0, rule.episode_char_min);

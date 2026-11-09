@@ -11,6 +11,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/charcount"
 	"github.com/devlikebear/linetta/engine/internal/entity"
+	"github.com/devlikebear/linetta/engine/internal/episode"
 	"github.com/devlikebear/linetta/engine/internal/illustref"
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/node"
@@ -434,7 +435,10 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 			// Left at the default it says nothing the writer chose, and could
 			// only argue with a length they gave in conversation.
 			EpisodeCharTarget: chosenEpisodeCharTarget(proj),
+			EpisodeCharMin:    proj.EpisodeCharMin,
+			EpisodeCharMax:    proj.EpisodeCharMax,
 			CharCountBasis:    charcount.Normalize(proj.CharCountBasis),
+			Episode:           b.episodeLength(ctx, proj, n),
 		},
 		Outline:       proj.Outline,
 		Hierarchical:  hierarchical,
@@ -458,9 +462,13 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 }
 
 // chosenEpisodeCharTarget is the episode target when the writer chose one:
-// a target of their own, or the default measured without spaces, which is a
-// different length from the default the agents would otherwise assume.
+// a target of their own, the default measured without spaces, which is a
+// different length from the default the agents would otherwise assume, or
+// any target in a work that bounds episode length.
 func chosenEpisodeCharTarget(proj project.Project) int {
+	if proj.EpisodeCharMin > 0 || proj.EpisodeCharMax > 0 {
+		return proj.EpisodeCharTarget
+	}
 	if proj.EpisodeCharTarget == project.DefaultEpisodeCharTarget &&
 		charcount.Normalize(proj.CharCountBasis) == charcount.WithSpaces {
 		return 0
@@ -1451,4 +1459,24 @@ func renderNotesPreview(notes []NoteBrief) string {
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+// episodeLength measures the episode n is a scene of, for a work that bounds
+// episode length. A brief built without it is still a brief: nil on error.
+func (b *ContextBuilder) episodeLength(ctx context.Context, proj project.Project, n node.Node) *EpisodeLengthBrief {
+	if proj.EpisodeCharMin <= 0 && proj.EpisodeCharMax <= 0 {
+		return nil
+	}
+	m, ok, err := episode.Measure(ctx, b.nodes, proj.OutlinePreset, n.ID)
+	if err != nil || !ok {
+		return nil
+	}
+	judged := charcount.JudgeEpisode(m.Chars, proj.EpisodeCharMin, proj.EpisodeCharMax)
+	return &EpisodeLengthBrief{
+		Label:            m.Episode.Label,
+		Chars:            m.Chars,
+		OtherScenesChars: m.Chars - m.SceneChars,
+		State:            judged.State,
+		Delta:            judged.Delta,
+	}
 }

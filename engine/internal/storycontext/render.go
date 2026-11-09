@@ -757,11 +757,77 @@ func renderProjectMeta(m ProjectMeta, lang string) string {
 	if m.DefaultPOV != "" {
 		parts = append(parts, langPick(lang, "시점: ", "POV: ", "視点: ")+mapDefaultPOV(m.DefaultPOV, lang))
 	}
-	if m.EpisodeCharTarget > 0 {
-		target := fmt.Sprintf(langPick(lang, "회차 목표 분량: %d자", "Episode length target: %d characters", "各話の目標分量: %d字"), m.EpisodeCharTarget)
-		parts = append(parts, target+renderCharCountBasis(m.CharCountBasis, lang))
+	if rule := renderEpisodeRule(m, lang); rule != "" {
+		parts = append(parts, rule)
 	}
-	return strings.Join(parts, " · ")
+	line := strings.Join(parts, " · ")
+	if progress := renderEpisodeProgress(m, lang); progress != "" {
+		if line != "" {
+			line += "\n"
+		}
+		line += progress
+	}
+	return line
+}
+
+// renderEpisodeRule states the work's episode length the way a contest's
+// rules do: a bound is a rule, the target what to aim for within it. A work
+// with only a target keeps the line it always had.
+func renderEpisodeRule(m ProjectMeta, lang string) string {
+	basis := renderCharCountBasis(m.CharCountBasis, lang)
+	lo, hi := charcount.Group(m.EpisodeCharMin), charcount.Group(m.EpisodeCharMax)
+	var bound string
+	switch {
+	case m.EpisodeCharMin > 0 && m.EpisodeCharMax > 0:
+		bound = fmt.Sprintf(langPick(lang, "회차 분량: %s~%s자%s", "Episode length: %s–%s characters%s", "各話の分量: %s〜%s字%s"), lo, hi, basis)
+	case m.EpisodeCharMin > 0:
+		bound = fmt.Sprintf(langPick(lang, "회차 분량: 최소 %s자%s", "Episode length: at least %s characters%s", "各話の分量: 最低%s字%s"), lo, basis)
+	case m.EpisodeCharMax > 0:
+		bound = fmt.Sprintf(langPick(lang, "회차 분량: 최대 %s자%s", "Episode length: at most %s characters%s", "各話の分量: 最大%s字%s"), hi, basis)
+	default:
+		if m.EpisodeCharTarget <= 0 {
+			return ""
+		}
+		target := fmt.Sprintf(langPick(lang, "회차 목표 분량: %d자", "Episode length target: %d characters", "各話の目標分量: %d字"), m.EpisodeCharTarget)
+		return target + basis
+	}
+	if m.EpisodeCharTarget <= 0 {
+		return bound
+	}
+	aim := charcount.Group(m.EpisodeCharTarget)
+	return bound + fmt.Sprintf(langPick(lang, ", %s자 안팎을 목표로", ", aiming for about %s", "、%s字前後を目標に"), aim)
+}
+
+// renderEpisodeProgress says how long the episode being written is so far
+// and how far it is from the work's bounds, so a scene is written to the
+// length the episode still needs rather than to the target alone.
+func renderEpisodeProgress(m ProjectMeta, lang string) string {
+	e := m.Episode
+	if e == nil {
+		return ""
+	}
+	head := fmt.Sprintf(langPick(lang,
+		"이 회차(%s): 지금 %s자 (이 씬 제외 %s자)",
+		"This episode (%s): %s characters so far (%s without this scene)",
+		"この話(%s): 現在%s字(この場面を除く%s字)"),
+		e.Label, charcount.Group(e.Chars), charcount.Group(e.OtherScenesChars))
+	var tail string
+	switch e.State {
+	case charcount.LengthShort:
+		tail = fmt.Sprintf(langPick(lang, "최소까지 %s자", "%s short of the minimum", "最低まであと%s字"), charcount.Group(-e.Delta))
+	case charcount.LengthLong:
+		tail = fmt.Sprintf(langPick(lang, "최대보다 %s자 많음", "%s over the maximum", "最大を%s字超過"), charcount.Group(e.Delta))
+	case charcount.LengthOK:
+		tail = langPick(lang, "기준 안", "within the bounds", "基準内")
+	case charcount.LengthProgress:
+		if m.EpisodeCharMax > 0 {
+			tail = fmt.Sprintf(langPick(lang, "최대까지 %s자", "%s left before the maximum", "最大まであと%s字"), charcount.Group(m.EpisodeCharMax-e.Chars))
+		}
+	}
+	if tail == "" {
+		return head
+	}
+	return head + " · " + tail
 }
 
 // renderCharCountBasis names the characters a length target counts, so an

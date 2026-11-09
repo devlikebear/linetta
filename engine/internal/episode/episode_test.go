@@ -306,3 +306,51 @@ func TestListAndResolve_readTheStore(t *testing.T) {
 		t.Fatalf("Resolve(missing) err = %v", err)
 	}
 }
+
+func TestMeasure(t *testing.T) {
+	nodes := []node.Node{
+		container("arc", "", 0, "1권"),
+		container("ep-1", "arc", 0, "1화"),
+		leaf2("ep-2", "arc", 1, "2화", 4100),
+		container("ep-3", "arc", 2, "3화"),
+		leaf2("s-1", "ep-1", 0, "씬 1", 2100),
+		leaf2("s-2", "ep-1", 1, "씬 2", 1825),
+	}
+	for _, tc := range []struct {
+		name, id string
+		ok       bool
+		want     Measured
+	}{
+		{name: "first scene of a container episode", id: "s-1", ok: true,
+			want: Measured{Chars: 3925, SceneChars: 2100}},
+		{name: "last scene of a container episode", id: "s-2", ok: true,
+			want: Measured{Chars: 3925, SceneChars: 1825, LastScene: true}},
+		{name: "an episode that is a single scene", id: "ep-2", ok: true,
+			want: Measured{Chars: 4100, SceneChars: 4100, LastScene: true}},
+		{name: "an episode container is not a scene", id: "ep-1"},
+		{name: "an empty episode has no scene", id: "ep-3"},
+		{name: "an arc holds several episodes", id: "arc"},
+		{name: "unknown node", id: "nope"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := measure(nodes, webnovel, tc.id)
+			if ok != tc.ok {
+				t.Fatalf("ok = %v, want %v", ok, tc.ok)
+			}
+			got.Episode = Episode{}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("got %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestMeasure_shortStoryHasNoEpisodeLength(t *testing.T) {
+	nodes := []node.Node{
+		container("part", "", 0, "본문"),
+		leaf2("s-1", "part", 0, "씬 1", 3000),
+	}
+	if _, ok := measure(nodes, project.OutlinePresetNovel, "s-1"); ok {
+		t.Fatal("a work with no episode structure was measured as an episode")
+	}
+}

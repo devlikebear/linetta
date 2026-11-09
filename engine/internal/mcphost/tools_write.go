@@ -109,7 +109,9 @@ type writeSceneOutput struct {
 	// costs the next brief its accuracy.
 	SummaryIsPlaceholder bool `json:"summary_is_placeholder"`
 	// Warnings says what this write went ahead without: a plan for a new
-	// episode, or the settlement of earlier ones. The write happened anyway.
+	// episode, or the settlement of earlier ones. It also says when the write
+	// left its episode shorter or longer than the work allows. The write
+	// happened anyway.
 	Warnings []string `json:"warnings,omitempty"`
 }
 
@@ -164,7 +166,7 @@ func (d ToolDeps) registerWriteTools(s *mcp.Server, groups ToolGroups) {
 			"automatically and reported in linked_elements. Linetta then files the scene's opening lines " +
 			"as a placeholder summary; call linetta_write_summary afterwards so the story brief carries a " +
 			"real one. warnings: what it went ahead without (a plan, " +
-			"earlier settlement).",
+			"earlier settlement), and an episode left outside the work's length bounds.",
 	}, record(d, "linetta_write_scene", d.writeScene))
 
 	mcp.AddTool(s, &mcp.Tool{
@@ -363,6 +365,8 @@ func (d ToolDeps) writeScene(ctx context.Context, _ *mcp.CallToolRequest, in wri
 		d.EnqueueSummary(n.ID)
 	}
 	d.notifyChanged(n.ProjectID, "linetta_write_scene", []string{n.ID}, "")
+	// Read after the write: the episode's length is what the write left.
+	warnings = appendWarning(warnings, d.lengthWarning(ctx, n.ProjectID, n.ID))
 
 	return nil, writeSceneOutput{
 		NodeID:               after.ID,

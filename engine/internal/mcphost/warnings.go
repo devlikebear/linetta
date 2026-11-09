@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"github.com/devlikebear/linetta/engine/internal/charcount"
+	"github.com/devlikebear/linetta/engine/internal/episode"
 )
 
 // The built-in agent is held back from writing a new episode with no plan, and
@@ -67,6 +70,44 @@ func (d ToolDeps) pendingWarning(ctx context.Context, ids []string) string {
 	}
 	return fmt.Sprintf("%d earlier episode(s) are not settled into the ledger yet: %s%s. The ledger may not hold "+
 		"what they changed; check their prose where it matters.", len(ids), strings.Join(labels, ", "), more)
+}
+
+// lengthWarning says the episode nodeID belongs to is outside the work's
+// length bounds, read AFTER the write. A short episode is only reported from
+// its last scene: before that it is short because it is not finished. Empty
+// for a work with no bounds, or with no episode structure.
+func (d ToolDeps) lengthWarning(ctx context.Context, projectID, nodeID string) string {
+	if d.Projects == nil || d.Nodes == nil {
+		return ""
+	}
+	p, err := d.Projects.Get(ctx, projectID)
+	if err != nil || (p.EpisodeCharMin <= 0 && p.EpisodeCharMax <= 0) {
+		return ""
+	}
+	m, ok, err := episode.Measure(ctx, d.Nodes, p.OutlinePreset, nodeID)
+	if err != nil {
+		logf("length warning: %v", err)
+		return ""
+	}
+	if !ok {
+		return ""
+	}
+	basis := "including spaces"
+	if charcount.Normalize(p.CharCountBasis) == charcount.WithoutSpaces {
+		basis = "excluding spaces"
+	}
+	judged := charcount.JudgeEpisode(m.Chars, p.EpisodeCharMin, p.EpisodeCharMax)
+	switch {
+	case judged.State == charcount.LengthShort && m.LastScene:
+		return fmt.Sprintf("episode %s is %s characters (%s); the minimum is %s — %s short. Continue the "+
+			"episode or tell the writer it is short.", m.Episode.Label, charcount.Group(m.Chars), basis,
+			charcount.Group(p.EpisodeCharMin), charcount.Group(-judged.Delta))
+	case judged.State == charcount.LengthLong:
+		return fmt.Sprintf("episode %s is %s characters (%s), over the %s maximum by %s. Tighten it or "+
+			"tell the writer it runs long.", m.Episode.Label, charcount.Group(m.Chars), basis,
+			charcount.Group(p.EpisodeCharMax), charcount.Group(judged.Delta))
+	}
+	return ""
 }
 
 func appendWarning(list []string, w string) []string {
