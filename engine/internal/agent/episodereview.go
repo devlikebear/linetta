@@ -49,7 +49,12 @@ For each scene you are given:
    - pacing: an opening with no hook, no turn in the scene, or an ending that is merely cut off.
 3. Call linetta_report_continuity once per scene, source quotes copied exactly. An empty list is a good result.
 
-Report only what you can point at in the text. Taste is not a finding. Do not suggest prose longer than a sentence.`
+Report only what you can point at in the text. Taste is not a finding. Do not suggest prose longer than a sentence.` + passLanguage
+
+// passLanguage ends every pass prompt. The prompts are in English and the
+// writer reads what a pass reports in the panel: on a real model (2026-11-09)
+// the review wrote its findings in English about a Korean scene.
+const passLanguage = "\n\nWrite every summary, note and suggestion in the language the scene is written in."
 
 // noteWrittenScene remembers which scene a tool call wrote.
 func noteWrittenScene(written *[]string, name, args string) {
