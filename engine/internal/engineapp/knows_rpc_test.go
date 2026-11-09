@@ -89,3 +89,49 @@ func TestKnowsAtRPC_tableForTheSceneCast(t *testing.T) {
 		t.Fatalf("without a scene got %+v", got)
 	}
 }
+
+// ledger.save keeps everything it is given when it creates an entry, not only
+// when it updates one: a question written already paid, with its reach and the
+// scene it is due by, stays that way. The 2026-11-09 synthetic run found the
+// create path dropping all of these without a word.
+func TestLedgerSaveCreateKeepsEveryField(t *testing.T) {
+	app := openApp(t)
+	projectID, nodeID := seedProjectWithScene(t, app)
+	doc := `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"하람은 북문 앞에서 서린을 기다렸다."}]}]}`
+	if _, rpcErr := call(t, app, "nodes.update_content", `{"id":"`+nodeID+`","doc":`+mustJSON(t, doc)+`}`); rpcErr != nil {
+		t.Fatalf("nodes.update_content: %+v", rpcErr)
+	}
+	raw, _ := json.Marshal(map[string]any{
+		"project_id": projectID, "kind": "question", "body": "하람은 누구인가", "reach": "work",
+		"status": "paid", "planted_node_id": nodeID, "planted_quote": "북문 앞에서",
+		"due_node_id": nodeID, "paid_node_id": nodeID, "paid_quote": "서린을 기다렸다",
+	})
+	out, rpcErr := call(t, app, "ledger.save", string(raw))
+	if rpcErr != nil {
+		t.Fatalf("ledger.save: %+v", rpcErr)
+	}
+	var e struct {
+		Status       string `json:"status"`
+		Reach        string `json:"reach"`
+		PlantedQuote string `json:"planted_quote"`
+		DueNodeID    string `json:"due_node_id"`
+		PaidNodeID   string `json:"paid_node_id"`
+		PaidQuote    string `json:"paid_quote"`
+	}
+	if err := json.Unmarshal(out, &e); err != nil {
+		t.Fatal(err)
+	}
+	if e.Status != "paid" || e.Reach != "work" || e.PlantedQuote != "북문 앞에서" || e.DueNodeID != nodeID ||
+		e.PaidNodeID != nodeID || e.PaidQuote != "서린을 기다렸다" {
+		t.Fatalf("created entry = %+v", e)
+	}
+}
+
+func mustJSON(t *testing.T, s string) string {
+	t.Helper()
+	b, err := json.Marshal(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
