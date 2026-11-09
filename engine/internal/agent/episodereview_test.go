@@ -130,6 +130,7 @@ func TestEpisodeReview_doesNotRunWhenOffOrWhenNothingWasWritten(t *testing.T) {
 				t.Fatalf("Run: %v", err)
 			}
 			waitFor(t, "the run to end", func() bool { return rec.has("agent.done") })
+			waitIdle(t, svc)
 			if err := svc.Close(); err != nil {
 				t.Fatal(err)
 			}

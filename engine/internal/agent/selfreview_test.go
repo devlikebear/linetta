@@ -379,6 +379,7 @@ func TestSelfReview_doesNotStartWhenTheSettingIsOff(t *testing.T) {
 	// review attaches to — so this covers "at any count" in the direction that
 	// matters.
 	waitFor(t, "the run to end", func() bool { return rec.has("agent.error") })
+	waitIdle(t, svc)
 	if err := svc.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}

@@ -224,6 +224,23 @@ func newService(t *testing.T, client llm.Client, rec *recorder) *Service {
 	return svc
 }
 
+// waitIdle waits until the turn and every pass it started have returned.
+// agent.done goes out before afterReply decides which passes to start, and
+// Close refuses a pass that has not started yet, so a test that closes on done
+// alone can pass while a switch is ignored. The turn holds its place in the
+// wait group through afterReply, and each pass takes its own before the turn
+// lets go of its, so once the group is empty nothing more will start.
+func waitIdle(t *testing.T, svc *Service) {
+	t.Helper()
+	idle := make(chan struct{})
+	go func() { svc.wg.Wait(); close(idle) }()
+	select {
+	case <-idle:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for the turn and its passes to return")
+	}
+}
+
 // waitFor polls until cond holds or the deadline passes. Run is asynchronous
 // by contract — it returns a run id and the work happens in a goroutine — so
 // every assertion about the outcome has to wait for it.

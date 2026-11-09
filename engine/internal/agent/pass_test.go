@@ -197,6 +197,7 @@ func TestPassesStayOffUntilTheWriterTurnsThemOn(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitFor(t, "agent.done", func() bool { return rec.has("agent.done") })
+	waitIdle(t, svc)
 	if err := svc.Close(); err != nil {
 		t.Fatal(err)
 	}
