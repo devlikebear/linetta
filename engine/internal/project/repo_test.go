@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -393,6 +394,84 @@ func TestProjectEpisodeCharTargetUpdate(t *testing.T) {
 	bad := 0
 	if _, err := repo.Update(ctx, 4000, UpdateInput{ID: p.ID, EpisodeCharTarget: &bad}); err != ErrInvalidEpisodeCharTarget {
 		t.Fatalf("invalid episode_char_target err = %v, want ErrInvalidEpisodeCharTarget", err)
+	}
+}
+
+func TestProjectEpisodeCharRangeDefaults(t *testing.T) {
+	s := openStore(t)
+	repo := NewRepo(s)
+	ctx := context.Background()
+	novel, err := repo.Create(ctx, 1000, NewInput{Title: "장편", Genres: []string{}, LengthTarget: "novel", DefaultPOV: "first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if novel.EpisodeCharMin != 0 || novel.EpisodeCharTarget != DefaultEpisodeCharTarget || novel.EpisodeCharMax != 0 {
+		t.Fatalf("new novel rule = %d/%d/%d, want 0/%d/0", novel.EpisodeCharMin, novel.EpisodeCharTarget, novel.EpisodeCharMax, DefaultEpisodeCharTarget)
+	}
+	web, err := repo.Create(ctx, 1000, NewInput{Title: "연재", Genres: []string{}, LengthTarget: "series", DefaultPOV: "first", OutlinePreset: OutlinePresetWebNovel})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if web.EpisodeCharMin != 5000 || web.EpisodeCharTarget != 5300 || web.EpisodeCharMax != 0 || web.CharCountBasis != "with_spaces" {
+		t.Fatalf("new web novel rule = %d/%d/%d %s, want 5000/5300/0 with_spaces", web.EpisodeCharMin, web.EpisodeCharTarget, web.EpisodeCharMax, web.CharCountBasis)
+	}
+}
+
+func TestProjectEpisodeCharRangeUpdate(t *testing.T) {
+	s := openStore(t)
+	repo := NewRepo(s)
+	ctx := context.Background()
+	p, err := repo.Create(ctx, 1000, NewInput{Title: "웹소설", Genres: []string{}, LengthTarget: "series", DefaultPOV: "first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// All three move together, through states a field-by-field update would refuse.
+	lo, mid, hi := 4500, 5000, 5500
+	got, err := repo.Update(ctx, 2000, UpdateInput{ID: p.ID, EpisodeCharMin: &lo, EpisodeCharTarget: &mid, EpisodeCharMax: &hi})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.EpisodeCharMin != 4500 || got.EpisodeCharTarget != 5000 || got.EpisodeCharMax != 5500 {
+		t.Fatalf("rule = %d/%d/%d, want 4500/5000/5500", got.EpisodeCharMin, got.EpisodeCharTarget, got.EpisodeCharMax)
+	}
+	again, err := repo.Update(ctx, 3000, UpdateInput{ID: p.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.EpisodeCharMin != 4500 || again.EpisodeCharMax != 5500 {
+		t.Fatalf("nil bounds should preserve, got %d/%d", again.EpisodeCharMin, again.EpisodeCharMax)
+	}
+	zero := 0
+	if cleared, err := repo.Update(ctx, 3500, UpdateInput{ID: p.ID, EpisodeCharMin: &zero, EpisodeCharMax: &zero}); err != nil || cleared.EpisodeCharMin != 0 || cleared.EpisodeCharMax != 0 {
+		t.Fatalf("clearing bounds = %+v, %v", cleared, err)
+	}
+	if _, err := repo.Update(ctx, 3600, UpdateInput{ID: p.ID, EpisodeCharMin: &lo, EpisodeCharMax: &hi}); err != nil {
+		t.Fatal(err)
+	}
+
+	ptr := func(v int) *int { return &v }
+	for _, tc := range []struct {
+		name string
+		in   UpdateInput
+	}{
+		{"min past max", UpdateInput{EpisodeCharMin: ptr(6000)}},
+		{"target under min", UpdateInput{EpisodeCharTarget: ptr(4000)}},
+		{"target past max", UpdateInput{EpisodeCharTarget: ptr(6000)}},
+		{"max under target", UpdateInput{EpisodeCharMax: ptr(4800)}},
+		{"negative min", UpdateInput{EpisodeCharMin: ptr(-1)}},
+		{"negative max", UpdateInput{EpisodeCharMax: ptr(-1)}},
+	} {
+		tc.in.ID = p.ID
+		if _, err := repo.Update(ctx, 4000, tc.in); !errors.Is(err, ErrInvalidEpisodeCharRange) {
+			t.Errorf("%s: err = %v, want ErrInvalidEpisodeCharRange", tc.name, err)
+		}
+	}
+	kept, err := repo.Get(ctx, p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kept.EpisodeCharMin != 4500 || kept.EpisodeCharTarget != 5000 || kept.EpisodeCharMax != 5500 {
+		t.Fatalf("refused updates changed the rule: %d/%d/%d", kept.EpisodeCharMin, kept.EpisodeCharTarget, kept.EpisodeCharMax)
 	}
 }
 

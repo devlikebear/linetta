@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   settingsGet: vi.fn(),
   settingsSet: vi.fn(),
   projectsUpdate: vi.fn(),
+  projectsList: vi.fn(),
   projectsRewriteSynopsis: vi.fn(),
   projectsClearSynopsis: vi.fn(),
   continuityOpenCounts: vi.fn(),
@@ -34,6 +35,7 @@ vi.mock("../lib/rpc", () => ({
   },
   projects: {
     update: mocks.projectsUpdate,
+    list: mocks.projectsList,
     rewriteSynopsis: mocks.projectsRewriteSynopsis,
     clearSynopsis: mocks.projectsClearSynopsis,
   },
@@ -149,7 +151,57 @@ describe("ContextPanel", () => {
       id: webnovel.id,
       char_count_basis: "without_spaces",
       episode_char_target: 4000,
+      episode_char_min: 0,
+      episode_char_max: 0,
     });
+  });
+
+  it("names a minimum preset by its floor and applies its bounds with it", async () => {
+    const applied = { ...webnovel, episode_char_min: 5000, episode_char_target: 5300 };
+    mocks.projectsUpdate.mockResolvedValueOnce(applied);
+    renderContextPanel({ project: webnovel });
+
+    expect(screen.getByRole("option", { name: "최소 회차 · 공백 포함 5,000자 이상" })).toBeTruthy();
+    await userEvent.selectOptions(screen.getByTestId("char-count-preset-select"), "builtin:minimum-with-spaces");
+
+    await waitFor(() =>
+      expect(mocks.projectsUpdate).toHaveBeenCalledWith({
+        id: webnovel.id,
+        char_count_basis: "with_spaces",
+        episode_char_target: 5300,
+        episode_char_min: 5000,
+        episode_char_max: 0,
+      }),
+    );
+  });
+
+  it("saves an episode minimum and clears it when emptied", async () => {
+    const ruled = { ...webnovel, episode_char_min: 5000, episode_char_target: 5300 };
+    mocks.projectsUpdate.mockResolvedValue(ruled);
+    renderContextPanel({ project: { ...webnovel, episode_char_target: 5300 } });
+
+    const min = screen.getByRole("textbox", { name: "최소" });
+    expect((min as HTMLInputElement).value).toBe("");
+    await userEvent.type(min, "5,000{Enter}");
+    await waitFor(() => expect(mocks.projectsUpdate).toHaveBeenCalledWith({ id: webnovel.id, episode_char_min: 5000 }));
+
+    cleanupAndRender({ project: ruled });
+    const filled = screen.getByRole("textbox", { name: "최소" }) as HTMLInputElement;
+    expect(filled.value).toBe("5000");
+    await userEvent.clear(filled);
+    await userEvent.type(filled, "{Enter}");
+    await waitFor(() => expect(mocks.projectsUpdate).toHaveBeenLastCalledWith({ id: webnovel.id, episode_char_min: 0 }));
+  });
+
+  it("refuses bounds that leave the target outside them, without asking the engine", async () => {
+    renderContextPanel({ project: { ...webnovel, episode_char_target: 5000 } });
+
+    const max = screen.getByRole("textbox", { name: "최대" }) as HTMLInputElement;
+    await userEvent.type(max, "4000{Enter}");
+
+    expect(await screen.findByText("최소 ≤ 회차 목표 ≤ 최대가 되도록 넣어 주세요.")).toBeTruthy();
+    expect(mocks.projectsUpdate).not.toHaveBeenCalled();
+    expect(max.value).toBe("");
   });
 
   it("shows a hand-set rule as custom and lists the writer's saved presets", async () => {

@@ -84,3 +84,21 @@ func walk(v any, basis string) int {
 	}
 	return 0
 }
+
+// ValidEpisodeRange reports whether an episode length rule holds together:
+// the bounds are 0 (none) or positive, the minimum is not past the maximum,
+// and the target is positive and within both. A work and a saved preset are
+// held to the same rule.
+func ValidEpisodeRange(min, target, max int) bool {
+	switch {
+	case min < 0 || max < 0 || target <= 0:
+		return false
+	case max > 0 && min > max:
+		return false
+	case target < min:
+		return false
+	case max > 0 && target > max:
+		return false
+	}
+	return true
+}

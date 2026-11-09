@@ -8,6 +8,8 @@ import { PlotPanel } from "./PlotPanel";
 import { User, MapPin, Box, Lightbulb, Book, Search } from "../lib/icons";
 import { InlineEditableText } from "./InlineEditableText";
 import { CharCountPresetPicker } from "./CharCountPresetPicker";
+import { EpisodeRuleOffer } from "./EpisodeRuleOffer";
+import { lengthRuleOf, validLengthRule } from "../lib/charCountPresets";
 import { localeForLanguage, useI18n } from "../lib/i18n";
 import type { EpisodeStatusCounts } from "../hooks/useFirstLeaf";
 import { StatsSection } from "./StatsSection";
@@ -184,15 +186,30 @@ export function ContextPanel({ project, node, charCount, todayChars = null, epis
     }, 600);
   };
 
-  const saveEpisodeTarget = async (next: string) => {
-    const compact = next.replace(/,/g, "");
-    const parsed = Number.parseInt(compact, 10);
-    if (!/^\d+$/.test(compact) || parsed <= 0) {
-      throw new Error("invalid episode target");
+  const lengthRule = lengthRuleOf(project);
+  const [lengthRangeError, setLengthRangeError] = useState(false);
+  /** Saves one of the episode length fields; a value that would leave the
+   *  minimum, target and maximum out of order is refused here and by the
+   *  engine, and the field goes back to what the work has. */
+  const saveEpisodeLength = async (
+    field: "episode_char_target" | "episode_char_min" | "episode_char_max",
+    next: string,
+  ) => {
+    const compact = next.replace(/,/g, "").trim();
+    const bound = field !== "episode_char_target";
+    const parsed = bound && compact === "" ? 0 : Number.parseInt(compact, 10);
+    if (!/^\d*$/.test(compact) || Number.isNaN(parsed) || (!bound && parsed <= 0)) {
+      throw new Error("invalid episode length");
     }
-    const updated = await projectsApi.update({ id: project.id, episode_char_target: parsed });
+    if (!validLengthRule({ ...lengthRule, [field]: parsed })) {
+      setLengthRangeError(true);
+      throw new Error("episode length out of order");
+    }
+    setLengthRangeError(false);
+    const updated = await projectsApi.update({ id: project.id, [field]: parsed });
     onProjectChanged?.(updated);
   };
+  const saveEpisodeTarget = (next: string) => saveEpisodeLength("episode_char_target", next);
 
   const charCountBasis = charCountBasisOf(project);
   const [basisBusy, setBasisBusy] = useState(false);
@@ -298,7 +315,39 @@ export function ContextPanel({ project, node, charCount, todayChars = null, epis
                 <span>{pct}% / {Math.round(target / 1000)}k</span>
               )}
             </div>
+            {isWebnovelProject && (
+              <div className="progress-meta episode-bounds-meta" data-testid="episode-bounds">
+                <span className="episode-target-meta">
+                  <span>{t("workspace.episodeMin")}</span>
+                  <InlineEditableText
+                    value={lengthRule.episode_char_min > 0 ? String(lengthRule.episode_char_min) : ""}
+                    ariaLabel={t("workspace.episodeMin")}
+                    className="episode-target-input"
+                    allowEmpty
+                    placeholder={t("workspace.episodeBoundNone")}
+                    onCommit={(v) => saveEpisodeLength("episode_char_min", v)}
+                  />
+                  <span>{t("workspace.charUnit")}</span>
+                </span>
+                <span className="episode-target-meta">
+                  <span>{t("workspace.episodeMax")}</span>
+                  <InlineEditableText
+                    value={lengthRule.episode_char_max > 0 ? String(lengthRule.episode_char_max) : ""}
+                    ariaLabel={t("workspace.episodeMax")}
+                    className="episode-target-input"
+                    allowEmpty
+                    placeholder={t("workspace.episodeBoundNone")}
+                    onCommit={(v) => saveEpisodeLength("episode_char_max", v)}
+                  />
+                  <span>{t("workspace.charUnit")}</span>
+                </span>
+              </div>
+            )}
+            {isWebnovelProject && lengthRangeError && (
+              <p className="char-preset-error" role="alert">{t("workspace.episodeRangeError")}</p>
+            )}
           </div>
+          {isWebnovelProject && <EpisodeRuleOffer project={project} onProjectChanged={onProjectChanged} />}
           {isWebnovelProject && <CharCountPresetPicker project={project} onProjectChanged={onProjectChanged} />}
           <label className="char-basis-row">
             <span>{t("workspace.charCountBasis")}</span>

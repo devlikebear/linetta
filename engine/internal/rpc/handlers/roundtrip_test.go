@@ -89,6 +89,8 @@ func TestExportImportRoundTripCompleteness(t *testing.T) {
 		Synopsis:          ptrutil.To("주인공이 잃어버린 도시를 찾는 이야기."),
 		Outline:           ptrutil.To("1부: 출발\n2부: 귀환"),
 		EpisodeCharTarget: ptrutil.To(4200),
+		EpisodeCharMin:    ptrutil.To(4000),
+		EpisodeCharMax:    ptrutil.To(4500),
 	}); err != nil {
 		t.Fatalf("update project: %v", err)
 	}
@@ -229,6 +231,9 @@ func TestExportImportRoundTripCompleteness(t *testing.T) {
 	}
 	if got.EpisodeCharTarget != 4200 {
 		t.Errorf("episode char target = %d", got.EpisodeCharTarget)
+	}
+	if got.EpisodeCharMin != 4000 || got.EpisodeCharMax != 4500 {
+		t.Errorf("episode char range = %d..%d, want 4000..4500", got.EpisodeCharMin, got.EpisodeCharMax)
 	}
 
 	nodes, err := dst.nodes.ListByProject(ctx, result.ProjectID)

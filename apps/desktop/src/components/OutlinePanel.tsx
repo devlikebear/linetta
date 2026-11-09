@@ -6,6 +6,7 @@ import { flatten, sumLeafChars } from "../hooks/useFirstLeaf";
 import type { NodeStatus, PublishEpisodeState } from "../lib/types";
 import { OUTLINE_BADGE_STATES, PUBLISH_STATE_KEYS } from "../lib/publish";
 import { displayNodeLabel, useI18n } from "../lib/i18n";
+import { episodeLength } from "../lib/episodeLength";
 import { InlineEditableText } from "./InlineEditableText";
 import { planNodeMove, type DropPosition } from "../lib/outlineMove";
 import {
@@ -55,6 +56,10 @@ interface Props {
   canUndoRepair?: boolean;
   outlinePresetId?: OutlinePresetId;
   episodeCharTarget?: number;
+  /** The work's episode bounds (0 = none); a gauge under the minimum shows
+   *  how far short it is. */
+  episodeCharMin?: number;
+  episodeCharMax?: number;
   onOutlinePresetChange?: (presetId: OutlinePresetId) => void;
   tourTarget?: string;
   /** Opens "Where the story could go" (story-assist Phase 4). Omitted
@@ -99,6 +104,8 @@ export function OutlinePanel({
   canUndoRepair,
   outlinePresetId,
   episodeCharTarget = 5000,
+  episodeCharMin = 0,
+  episodeCharMax = 0,
   onOutlinePresetChange,
   tourTarget,
   onOpenForecasts,
@@ -354,6 +361,8 @@ export function OutlinePanel({
             canOpenMenu={canOpenMenu}
             showEpisodeProgress={showEpisodeProgress}
             episodeCharTarget={episodeCharTarget}
+            episodeCharMin={episodeCharMin}
+            episodeCharMax={episodeCharMax}
             outlinePreset={outlinePreset}
             publishStates={publishStates}
             representatives={representatives}
@@ -567,6 +576,8 @@ function RailNode({
   canOpenMenu,
   showEpisodeProgress,
   episodeCharTarget,
+  episodeCharMin,
+  episodeCharMax,
   outlinePreset,
   publishStates,
   representatives,
@@ -588,6 +599,8 @@ function RailNode({
   canOpenMenu: (n: TreeNode) => boolean;
   showEpisodeProgress: boolean;
   episodeCharTarget: number;
+  episodeCharMin: number;
+  episodeCharMax: number;
   outlinePreset: OutlineStructurePreset;
   publishStates?: ReadonlyMap<string, PublishEpisodeState>;
   /** node id → the picture that stands for it (illustration Phase 4). */
@@ -630,18 +643,32 @@ function RailNode({
       ? isStructuralChapterLabel(node.label, outlinePreset)
       : depth > 0);
   const episodeChars = isEpisode ? sumLeafChars(node) : 0;
-  const normalizedTarget = Math.max(1, episodeCharTarget);
-  const episodePercent = Math.min(100, Math.round((episodeChars / normalizedTarget) * 100));
+  const length = episodeLength(episodeChars, {
+    episode_char_min: episodeCharMin,
+    episode_char_target: episodeCharTarget,
+    episode_char_max: episodeCharMax,
+  });
+  const goal = Math.max(1, length.goal);
+  const episodePercent = Math.min(100, Math.round((episodeChars / goal) * 100));
+  const fmt = (v: number) => v.toLocaleString(language);
+  const lengthTitle =
+    length.state === "short"
+      ? t("outline.episodeShort", { min: fmt(episodeCharMin), count: fmt(-length.delta) })
+      : length.state === "long"
+        ? t("outline.episodeLong", { max: fmt(episodeCharMax), count: fmt(length.delta) })
+        : undefined;
+  const fillClass =
+    length.state === "short" ? " is-short" : length.state === "long" ? " is-long" : length.complete ? " is-complete" : "";
   const episodeProgress = isEpisode ? (
-    <span className="episode-progress">
+    <span className={`episode-progress is-${length.state}`} title={lengthTitle} data-length-state={length.state}>
       <span className="episode-count">
-        {episodeChars.toLocaleString(language)} / {normalizedTarget.toLocaleString(language)}
+        {fmt(episodeChars)} / {fmt(goal)}
+        {length.delta !== 0 && (
+          <span className="episode-delta">{length.delta > 0 ? `+${fmt(length.delta)}` : `−${fmt(-length.delta)}`}</span>
+        )}
       </span>
       <span className="episode-meter" aria-hidden="true">
-        <span
-          className={`episode-meter-fill${episodeChars >= normalizedTarget ? " is-complete" : ""}`}
-          style={{ width: `${episodePercent}%` }}
-        />
+        <span className={`episode-meter-fill${fillClass}`} style={{ width: `${episodePercent}%` }} />
       </span>
     </span>
   ) : null;
@@ -791,6 +818,8 @@ function RailNode({
           canOpenMenu={canOpenMenu}
           showEpisodeProgress={showEpisodeProgress}
           episodeCharTarget={episodeCharTarget}
+          episodeCharMin={episodeCharMin}
+          episodeCharMax={episodeCharMax}
           outlinePreset={outlinePreset}
           publishStates={publishStates}
           representatives={representatives}

@@ -575,6 +575,40 @@ describe("OutlinePanel", () => {
     expect(document.querySelector(".episode-meter-fill.is-complete")).not.toBeInTheDocument();
   });
 
+  it("marks episodes under the work's minimum with how far short they are, and ones past the maximum quietly", () => {
+    const leafEpisode = (id: string, label: string, chars: number): TreeNode => ({
+      ...scene,
+      id,
+      parent_id: "arc-1",
+      label,
+      word_count: chars,
+    });
+    const arc: TreeNode = {
+      ...chapter,
+      id: "arc-1",
+      label: "1권",
+      children: [leafEpisode("ep-1", "1화", 3925), leafEpisode("ep-2", "2화", 5000), leafEpisode("ep-3", "3화", 5820)],
+    };
+
+    renderOutline({
+      tree: [arc],
+      currentId: "ep-1",
+      outlinePresetId: "webnovel",
+      episodeCharTarget: 5300,
+      episodeCharMin: 5000,
+      episodeCharMax: 5500,
+    });
+
+    const states = [...document.querySelectorAll<HTMLElement>(".episode-progress")].map((el) => el.dataset.lengthState);
+    expect(states).toEqual(["short", "ok", "long"]);
+    expect(screen.getByText("−1,075")).toBeInTheDocument();
+    expect(screen.getByText("+320")).toBeInTheDocument();
+    expect(screen.getByTitle("최소 5,000자까지 1,075자 모자람")).toBeInTheDocument();
+    expect(document.querySelectorAll(".episode-meter-fill.is-short")).toHaveLength(1);
+    expect(document.querySelectorAll(".episode-meter-fill.is-complete")).toHaveLength(1);
+    expect(document.querySelectorAll(".episode-meter-fill.is-long")).toHaveLength(1);
+  });
+
   it("keeps the plain word count on scene leaves inside an episode", () => {
     const episode: TreeNode = {
       ...chapter,

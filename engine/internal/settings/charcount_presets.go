@@ -17,6 +17,10 @@ type CharCountPreset struct {
 	Name              string `json:"name"`
 	CharCountBasis    string `json:"char_count_basis"`
 	EpisodeCharTarget int    `json:"episode_char_target"`
+	// EpisodeCharMin and EpisodeCharMax bound the episode (0 = no bound), as
+	// on a work; a preset saved before they existed reads as 0.
+	EpisodeCharMin int `json:"episode_char_min,omitempty"`
+	EpisodeCharMax int `json:"episode_char_max,omitempty"`
 }
 
 const (
@@ -46,6 +50,10 @@ func normalizeCharCountPreset(p CharCountPreset) (CharCountPreset, error) {
 		return p, fmt.Errorf("settings: char count preset %q has unknown basis %q", p.ID, p.CharCountBasis)
 	case p.EpisodeCharTarget <= 0 || p.EpisodeCharTarget > MaxCharCountPresetTarget:
 		return p, fmt.Errorf("settings: char count preset %q episode_char_target %d out of range (1-%d)", p.ID, p.EpisodeCharTarget, MaxCharCountPresetTarget)
+	case p.EpisodeCharMax > MaxCharCountPresetTarget:
+		return p, fmt.Errorf("settings: char count preset %q episode_char_max %d out of range (0-%d)", p.ID, p.EpisodeCharMax, MaxCharCountPresetTarget)
+	case !charcount.ValidEpisodeRange(p.EpisodeCharMin, p.EpisodeCharTarget, p.EpisodeCharMax):
+		return p, fmt.Errorf("settings: char count preset %q range %d/%d/%d does not hold together", p.ID, p.EpisodeCharMin, p.EpisodeCharTarget, p.EpisodeCharMax)
 	}
 	return p, nil
 }
