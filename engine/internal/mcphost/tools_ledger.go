@@ -39,14 +39,14 @@ type editLedgerInput struct {
 	DueNodeID     *string  `json:"due_node_id,omitempty" jsonschema:"scene or part it must pay off by"`
 	PaidNodeID    *string  `json:"paid_node_id,omitempty"`
 	PaidQuote     *string  `json:"paid_quote,omitempty" jsonschema:"exact text from that scene"`
-	Attribute     *string  `json:"attribute,omitempty" jsonschema:"makes a settled entry a fact: 위치, 소지금, 경지, 부상, 소속, 호칭, 작중 날짜 or 앎. Use planted_node_id as where it starts"`
+	Attribute     *string  `json:"attribute,omitempty" jsonschema:"makes a settled entry a fact: 위치, 소지금, 경지, 부상, 소속, 호칭, 나이, 작중 날짜, 경과 or 앎. Use planted_node_id as where it starts"`
 	Strength      *string  `json:"strength,omitempty" jsonschema:"hard for what the narrator states, soft for what a character says or a rumour"`
-	ValueNum      *float64 `json:"value_num,omitempty" jsonschema:"the number a fact holds, such as money or a day count"`
+	ValueNum      *float64 `json:"value_num,omitempty" jsonschema:"the number a fact holds: 경과 and 작중 날짜 in days, 나이 in years"`
 	ValidToNodeID *string  `json:"valid_to_node_id,omitempty" jsonschema:"scene it stops being true at"`
 	Supersedes    string   `json:"supersedes,omitempty" jsonschema:"id of the fact this one replaces"`
 	Reach         *string  `json:"reach,omitempty" jsonschema:"how far a promise runs: arc (default), volume or work"`
 	Answer        *string  `json:"answer,omitempty" jsonschema:"question only: the answer only the writer knows; keep it out of the prose until revealed"`
-	About         *string  `json:"about,omitempty" jsonschema:"앎 only: id of the question it is about; value_num 1 knows, 0 does not"`
+	About         *string  `json:"about,omitempty" jsonschema:"앎: question id; value_num 1 knows, 0 not. 경과: id of the timeline event counted from"`
 }
 
 func (in editLedgerInput) scope() (string, string) { return in.ProjectID, "" }

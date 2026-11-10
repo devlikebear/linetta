@@ -277,9 +277,10 @@ func (r *Repo) validate(ctx context.Context, e Entry) error {
 	return r.checkNode(ctx, e.ProjectID, e.PaidNodeID, e.PaidQuote)
 }
 
-// checkSecret holds the answer to a question and the question a knows fact is
-// about. A knows fact about a question says which way it goes, so the next one
-// can be compared with it.
+// checkSecret holds the answer to a question and what a fact's about points
+// at. A knows fact is about a question and says which way it goes, so the next
+// one can be compared with it. An elapsed fact is about an event; without a
+// number it is kept and not compared, like a knows fact without a question.
 func (r *Repo) checkSecret(ctx context.Context, e Entry) error {
 	if e.Answer != "" && e.Kind != KindQuestion {
 		return ErrAnswerQuestionOnly
@@ -287,20 +288,28 @@ func (r *Repo) checkSecret(ctx context.Context, e Entry) error {
 	if e.About == "" {
 		return nil
 	}
-	if e.Kind != KindKnowledge || e.Attribute != AttributeKnows {
-		return ErrAboutKnowsOnly
-	}
-	q, err := r.Get(ctx, e.About)
-	if errors.Is(err, ErrNotFound) || (err == nil && (q.ProjectID != e.ProjectID || q.Kind != KindQuestion)) {
-		return ErrAboutNotQuestion
-	}
-	if err != nil {
+	switch {
+	case e.Kind == KindKnowledge && e.Attribute == AttributeKnows:
+		q, err := r.Get(ctx, e.About)
+		if errors.Is(err, ErrNotFound) || (err == nil && (q.ProjectID != e.ProjectID || q.Kind != KindQuestion)) {
+			return ErrAboutNotQuestion
+		}
+		if err != nil {
+			return err
+		}
+		if e.ValueNum == nil || (*e.ValueNum != KnowsYes && *e.ValueNum != KnowsNo) {
+			return ErrAboutNeedsValue
+		}
+		return nil
+	case e.Kind == KindTimeline && e.Attribute == AttributeElapsed:
+		ev, err := r.Get(ctx, e.About)
+		if errors.Is(err, ErrNotFound) || (err == nil && (ev.ProjectID != e.ProjectID || ev.Kind != KindTimeline ||
+			ev.Attribute == AttributeElapsed || ev.ID == e.ID)) {
+			return ErrAboutNotEvent
+		}
 		return err
 	}
-	if e.ValueNum == nil || (*e.ValueNum != KnowsYes && *e.ValueNum != KnowsNo) {
-		return ErrAboutNeedsValue
-	}
-	return nil
+	return ErrAboutWrongFact
 }
 
 func (r *Repo) checkNode(ctx context.Context, projectID, nodeID, quote string) error {

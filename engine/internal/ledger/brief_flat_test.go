@@ -64,3 +64,47 @@ func TestBriefKeepsPromisesInAWorkWithNoParts(t *testing.T) {
 		t.Fatalf("omitted = %d, want nothing left out", b.Omitted)
 	}
 }
+
+// Story time in a work with no parts: the elapsed time two scenes back still
+// reaches the brief.
+func TestBriefKeepsStoryTimeInAWorkWithNoParts(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	p, err := project.NewRepo(st).Create(ctx, 1, project.NewInput{Title: "T", LengthTarget: "series", DefaultPOV: "first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nodes := node.NewRepo(st)
+	if err := nodes.Delete(ctx, *p.LastOpenedNodeID, 2); err != nil {
+		t.Fatal(err)
+	}
+	var scenes []node.Node
+	for i := range 4 {
+		n, err := nodes.CreateRoot(ctx, p.ID, node.KindLeaf, fmt.Sprintf("%d화", i+1), "", int64(10+i))
+		if err != nil {
+			t.Fatal(err)
+		}
+		scenes = append(scenes, n)
+	}
+	repo := NewRepo(st, nodes)
+	ev, err := repo.Add(ctx, 1, Entry{ProjectID: p.ID, Kind: KindTimeline, Body: "등대지기 실종", PlantedNodeID: scenes[0].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	days := 90.0
+	if _, err := repo.Add(ctx, 2, Entry{ProjectID: p.ID, Kind: KindTimeline, Subject: ev.Body, Attribute: AttributeElapsed, Body: "석 달",
+		About: ev.ID, ValueNum: &days, PlantedNodeID: scenes[1].ID}); err != nil {
+		t.Fatal(err)
+	}
+	b, err := repo.ContextLedger(ctx, p.ID, scenes[3].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(b.Time) != 1 || !strings.Contains(b.Time[0], "등대지기 실종(1화): 2화에서 석 달(약 90일)") {
+		t.Fatalf("time = %q", b.Time)
+	}
+}

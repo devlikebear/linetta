@@ -51,10 +51,12 @@ var (
 	ErrInvalidStrength = errors.New("ledger: strength must be hard or soft")
 	ErrSupersedePinned = errors.New("ledger: the writer pinned that entry; ask them to change it")
 	ErrNotPinnable     = errors.New("ledger: only an open question, decision, number, timeline or knowledge entry can be pinned")
-	// The truth behind a secret and what a person's knowing is about.
+	// The truth behind a secret, what a person's knowing is about, and the
+	// event an elapsed time is counted from.
 	ErrAnswerQuestionOnly = errors.New("ledger: only a question carries an answer")
-	ErrAboutKnowsOnly     = errors.New("ledger: only a knowledge entry with the attribute 앎 can be about a question")
+	ErrAboutWrongFact     = errors.New("ledger: about belongs to a knowledge fact with the attribute 앎 (a question's id) or a timeline fact with the attribute 경과 (an event's id)")
 	ErrAboutNotQuestion   = errors.New("ledger: about must be the id of a question in this work")
+	ErrAboutNotEvent      = errors.New("ledger: about must be the id of a timeline entry in this work that is an event, not another 경과")
 	ErrAboutNeedsValue    = errors.New("ledger: a knows fact about a question needs value_num 1 (knows) or 0 (does not know)")
 )
 
@@ -108,8 +110,9 @@ type Entry struct {
 	// Answer is the truth behind a question, which only the writer knows until
 	// the scene that pays the question tells the reader.
 	Answer string `json:"answer,omitempty"`
-	// About is the question a knows fact is about. Its ValueNum then says which
-	// way: KnowsYes or KnowsNo.
+	// About is the question a knows fact is about, its ValueNum then saying
+	// which way: KnowsYes or KnowsNo. On an elapsed fact it is the timeline
+	// event the time is counted from, its ValueNum the days since.
 	About     string `json:"about,omitempty"`
 	CreatedAt int64  `json:"created_at"`
 	UpdatedAt int64  `json:"updated_at"`
@@ -134,6 +137,15 @@ const AttributeDate = "작중 날짜"
 // AttributeKnows piles up: a person comes to know one thing after another, and
 // the second does not replace the first.
 const AttributeKnows = "앎"
+
+// AttributeElapsed is how long it has been, at its scene, since the event its
+// About names. Its ValueNum is in days. An event is a timeline entry with no
+// elapsed attribute of its own; its ValueNum, when known, is its story date.
+const AttributeElapsed = "경과"
+
+// AttributeAge with a ValueNum is a person's age in years: time since their
+// birth, compared like an elapsed fact with the person as the event.
+const AttributeAge = "나이"
 
 // The two values a knows fact about a question can hold.
 const (

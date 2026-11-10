@@ -362,8 +362,8 @@ func TestAnswersAndKnowsFactsPointAtQuestions(t *testing.T) {
 		e    Entry
 		want error
 	}{
-		"about on a decision":   {Entry{ProjectID: f.pid, Kind: KindDecision, Body: "규칙", About: q.ID}, ErrAboutKnowsOnly},
-		"about on another fact": {Entry{ProjectID: f.pid, Kind: KindKnowledge, Subject: "서진", Attribute: "위치", Body: "객잔", About: q.ID, ValueNum: &yes}, ErrAboutKnowsOnly},
+		"about on a decision":   {Entry{ProjectID: f.pid, Kind: KindDecision, Body: "규칙", About: q.ID}, ErrAboutWrongFact},
+		"about on another fact": {Entry{ProjectID: f.pid, Kind: KindKnowledge, Subject: "서진", Attribute: "위치", Body: "객잔", About: q.ID, ValueNum: &yes}, ErrAboutWrongFact},
 		"about a decision":      {knows(decision.ID, &yes), ErrAboutNotQuestion},
 		"about nothing":         {knows("없는-질문", &yes), ErrAboutNotQuestion},
 		"no direction":          {knows(q.ID, nil), ErrAboutNeedsValue},

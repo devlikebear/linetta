@@ -72,6 +72,23 @@ TEMPLATES = [
      "\"나는 평생 약장수로만 살았소.\" {a}는 {b} 앞에서 태연하게 거짓말을 했다."),
 ]
 
+# Elapsed time since an event (longform Phase 8). The event, each scene's story
+# date in days, and how long since the event each scene says. The contradiction
+# is #346's: three months, then three years when twelve days have passed by the
+# calendar the story keeps. The other moves on by as much as the story does.
+ELAPSED = [
+    (True, "{b} 실종", [100, 112], "90", "1095",
+     "장이 선 지 백 일째 되는 날이었다. {b}가 실종된 지 석 달이 지났다. {a}는 {place}에서 소식을 기다렸다.",
+     "열이틀 뒤 장이 다시 섰다. {a}는 {place}에서 {b}가 사라진 지 삼 년이 흘렀다고 중얼거렸다."),
+    (False, "{b} 실종", [100, 190], "90", "180",
+     "장이 선 지 백 일째 되는 날이었다. {b}가 실종된 지 석 달이 지났다. {a}는 {place}에서 소식을 기다렸다.",
+     "다시 석 달이 흘렀다. {b}가 사라진 지 반년, {a}는 {place}를 떠나기로 했다."),
+]
+
+# The alias cases again with the age recorded as a number of years, so an age
+# is compared as time since birth instead of as a word.
+AGES = {"서른": "30", "열일곱": "17"}
+
 # Which way each knows fact goes, 1 knows and 0 does not, recorded with the
 # question the case is about. The test reads these, never the sentences.
 KNOWS = {True: [1, 0], False: [0, 1]}
@@ -115,6 +132,42 @@ def main():
                 ],
                 "fact": fact,
             })
+    # Added after the first set, from their own seed, so that set stays as it was.
+    rng = random.Random(20261110)
+    for round_no in range(5):
+        for contradiction, event, clock, v1, v2, s1, s2 in ELAPSED:
+            a, b = rng.sample(PEOPLE, 2)
+            place = rng.choice(PLACES)
+            pad = lambda: " ".join(rng.sample(FILLER, 2))
+            cases.append({
+                "id": f"elapsed-{'c' if contradiction else 'n'}{round_no}",
+                "type": "elapsed",
+                "split": "tune" if round_no == 0 else "eval",
+                "contradiction": contradiction,
+                "scenes": [
+                    f"{pad()} {fill(s1, a, b, place, '')} {pad()}",
+                    f"{pad()} {fill(s2, a, b, place, '')} {pad()}",
+                ],
+                "fact": {
+                    "subject": fill(event, a, b, place, ""),
+                    "attribute": "경과",
+                    "earlier": v1,
+                    "later": v2,
+                    "later_soft": False,
+                    "replaces": False,
+                    "number": True,
+                    "event": fill(event, a, b, place, ""),
+                    "clock": clock,
+                },
+            })
+    for c in [c for c in cases if c["type"] == "alias"]:
+        age = json.loads(json.dumps(c))
+        age["id"] = c["id"].replace("alias", "age")
+        age["type"] = "age"
+        age["fact"]["earlier"] = AGES[c["fact"]["earlier"]]
+        age["fact"]["later"] = AGES[c["fact"]["later"]]
+        age["fact"]["number"] = True
+        cases.append(age)
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(cases, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     print(len(cases), "cases", sum(c["contradiction"] for c in cases), "contradictions")

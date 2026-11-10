@@ -550,10 +550,12 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("ledger.save", handlers.SaveLedgerEntry(ledgerRepo, clock))
 	s.Handle("ledger.set_pinned", handlers.SetLedgerPinned(ledgerRepo, clock))
 	s.Handle("ledger.knows_at", handlers.KnowsAt(ledgerRepo, nodes, mentions))
+	s.Handle("ledger.story_time", handlers.StoryTime(ledgerRepo, nodes))
 	s.Handle("ledger.delete", handlers.DeleteLedgerEntry(ledgerRepo))
 	s.Handle("ledger.set_arc", handlers.SetPartArc(ledgerRepo, clock))
 	s.Handle("ledger.pending_settlement", handlers.PendingSettlement(settlements, nodes))
 	s.Handle("nodes.set_plan", handlers.SetNodePlan(nodes))
+	s.Handle("nodes.set_flashback", handlers.SetNodeFlashback(nodes))
 	s.Handle("continuity.list", handlers.ListContinuity(continuityRepo, nodes, entities, facts, beats))
 	// continuity.set_status fires continuity.changed, so a ContextPanel
 	// showing the open-observation badge for the scene the writer just

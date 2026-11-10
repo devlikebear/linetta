@@ -333,6 +333,30 @@ func SetNodeStatus(nodes *node.Repo, now Clock) rpc.Handler {
 	}
 }
 
+// SetNodeFlashback returns a handler for nodes.set_flashback: a scene marked or
+// unmarked as a flashback.
+func SetNodeFlashback(nodes *node.Repo) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p struct {
+			ID        string `json:"id"`
+			Flashback *bool  `json:"flashback"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil || p.ID == "" || p.Flashback == nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id and flashback required"}
+		}
+		if err := nodes.SetFlashback(ctx, p.ID, *p.Flashback); err != nil {
+			if errors.Is(err, node.ErrNotFound) {
+				return nil, rpc.NotFound(rpc.ReasonNodeNotFound, "node not found")
+			}
+			if errors.Is(err, node.ErrFlashbackOnContainer) {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
+			}
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.RawMessage(`{"ok":true}`), nil
+	}
+}
+
 func DeleteNode(nodes *node.Repo, now Clock) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var p idParam

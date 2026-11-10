@@ -27,6 +27,10 @@ type evalCase struct {
 		// of its two facts goes, 1 knows and 0 does not.
 		About string    `json:"about"`
 		Knows []float64 `json:"knows"`
+		// Event is what an elapsed case counts from, and Clock each scene's
+		// story date in days, recorded as the measure the comparison reads.
+		Event string    `json:"event"`
+		Clock []float64 `json:"clock"`
 	} `json:"fact"`
 }
 
@@ -85,6 +89,20 @@ func evalFlags(t *testing.T, c evalCase) bool {
 			t.Fatal(err)
 		}
 		about, earlier, later = q.ID, &c.Fact.Knows[0], &c.Fact.Knows[1]
+	}
+	if c.Fact.Attribute == AttributeElapsed {
+		kind = KindTimeline
+		ev, err := f.repo.Add(f.ctx, 1, Entry{ProjectID: f.pid, Kind: KindTimeline, Body: c.Fact.Event, PlantedNodeID: f.scenes[0].ID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		about = ev.ID
+		for i, day := range c.Fact.Clock {
+			if _, err := f.repo.Add(f.ctx, 1, Entry{ProjectID: f.pid, Kind: KindTimeline, Subject: "작품", Attribute: AttributeDate,
+				Body: strconv.FormatFloat(day, 'f', -1, 64) + "일", ValueNum: &day, PlantedNodeID: f.scenes[i].ID}); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 	first, err := f.repo.Add(f.ctx, 1, Entry{ProjectID: f.pid, Kind: kind, Subject: c.Fact.Subject, Attribute: c.Fact.Attribute,
 		Body: c.Fact.Earlier, ValueNum: earlier, About: about, PlantedNodeID: f.scenes[0].ID})
@@ -161,14 +179,25 @@ func TestConsistencyCasesAgainstFactComparison(t *testing.T) {
 	if k := byType["knowledge"]; k == nil || k.recall() < 1 || k.precision() < 1 {
 		t.Fatalf("knowledge: %+v", k)
 	}
+	// Phase 8: elapsed time from zero (no such type), with both scenes' story
+	// dates recorded. An age as a number must not flag what the word did not.
+	if k := byType["elapsed"]; k == nil || k.recall() < 0.8 || k.precision() < 0.95 {
+		t.Fatalf("elapsed: %+v", k)
+	}
+	if k := byType["age"]; k == nil || k.recall() < 0.8 || k.precision() < 0.95 {
+		t.Fatalf("age: %+v", k)
+	}
 }
 
 // Given a changed fact, the scene it clashes with has to be among the candidates:
-// the agent reads nothing else.
+// the agent reads nothing else. The elapsed and age cases are for comparing
+// values: their facts' bodies are bare numbers, which no search of the prose
+// finds, and the age cases repeat the alias ones. They are left out so this
+// stays the measure it was.
 func TestConsistencyCasesFindTheEarlierScene(t *testing.T) {
 	found, all := 0, 0
 	for _, c := range loadEvalCases(t) {
-		if c.Split != "eval" || !c.Contradiction {
+		if c.Split != "eval" || !c.Contradiction || c.Type == "elapsed" || c.Type == "age" {
 			continue
 		}
 		f := setup(t, 2)

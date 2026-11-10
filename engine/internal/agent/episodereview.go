@@ -41,7 +41,7 @@ const episodeReviewSystemPrompt = `You are reviewing a chapter of fiction you di
 For each scene you are given:
 1. Read it with linetta_read_scene numbered=true, and read the brief with linetta_get_story_context. Look up earlier scenes when something depends on them.
 2. Read it as someone who has seen only this episode, then as someone who has read everything before it. Look for:
-   - timeline, fact: numbers, dates or sequences that contradict the text or the ledger. Work the arithmetic.
+   - timeline, fact: numbers, dates or sequences that contradict the text or the ledger. Work the arithmetic. Hold each "how long since" in the prose against the brief's ## 작중 시간: time since one event never shrinks, and grows only by what has passed. Report one that does not fit as timeline.
    - character: who knows what, and speech that does not sound like them.
    - motive: a choice no sensible person would make here; a villain who gives way with no resistance, pressure or calculation shown.
    - readability: a line compressed past understanding, or a number or term the reader cannot place.

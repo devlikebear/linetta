@@ -56,8 +56,8 @@ func seedWork(t *testing.T, db *sql.DB, id string) {
 		 VALUES ('P', '작품', '["판타지"]', 'long', '3rd', '문체', 'P-n2', 42, 1, 2, '개요', '줄거리')`,
 		`INSERT INTO nodes (id, project_id, parent_id, ordinal, kind, label, title, content_doc, word_count, created_at, updated_at)
 		 VALUES ('P-n1', 'P', NULL, 0, 'episode', '1화', '시작', NULL, 0, 1, 1)`,
-		`INSERT INTO nodes (id, project_id, parent_id, ordinal, kind, label, title, content_doc, word_count, content_version, created_at, updated_at)
-		 VALUES ('P-n2', 'P', 'P-n1', 0, 'scene', '씬 1', '', '{"type":"doc","content":[{"type":"paragraph"}]}', 42, 3, 1, 2)`,
+		`INSERT INTO nodes (id, project_id, parent_id, ordinal, kind, label, title, content_doc, word_count, content_version, flashback, created_at, updated_at)
+		 VALUES ('P-n2', 'P', 'P-n1', 0, 'scene', '씬 1', '', '{"type":"doc","content":[{"type":"paragraph"}]}', 42, 3, 1, 1, 2)`,
 		`INSERT INTO entities (id, project_id, kind, name, aliases, created_at, updated_at) VALUES ('P-e1', 'P', 'character', '가나', '["나"]', 1, 1)`,
 		`INSERT INTO entities (id, project_id, kind, name, created_at, updated_at) VALUES ('P-e2', 'P', 'character', '다라', 1, 1)`,
 		`INSERT INTO entity_visuals (entity_id, hair, updated_at) VALUES ('P-e1', '검은 머리', 1)`,

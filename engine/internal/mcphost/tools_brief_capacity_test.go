@@ -27,7 +27,12 @@ func (capacityLedger) ContextLedger(context.Context, string, string) (storyconte
 	for i := range 10 {
 		secrets = append(secrets, fmt.Sprintf("질문 %d — %s (작가만 앎)", i, strings.Repeat("작가만 아는 답 ", 16)))
 	}
-	return storycontext.LedgerBrief{Due: lines[:6], Settled: lines[6:], Secrets: secrets[:6], Knows: secrets[6:]}, nil
+	// The story time section at its budget: 600 runes of elapsed times.
+	times := make([]string, 0, 6)
+	for i := range 6 {
+		times = append(times, fmt.Sprintf("사건 %d(1화): 3화에서 %s(약 90일)", i, strings.Repeat("석 달 ", 22)))
+	}
+	return storycontext.LedgerBrief{Due: lines[:6], Settled: lines[6:], Secrets: secrets[:6], Knows: secrets[6:], Time: times}, nil
 }
 
 type capacityFacts struct{}

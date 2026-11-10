@@ -14,9 +14,13 @@ type factKey struct{ subject, attribute string }
 
 // holdsAt reports whether a fact is true at story position cur. A fact starts at
 // the scene it was planted in, or from the start without one; it stops at the
-// scene it runs to, where the next value takes over.
+// scene it runs to, where the next value takes over. A fact planted in a
+// flashback holds in that scene alone: it was true then, not now.
 func (t tree) holdsAt(e Entry, cur int) bool {
 	if e.Attribute == "" || e.Status != StatusOpen || e.SupersededBy != "" || t.after(e.PlantedNodeID, cur) {
+		return false
+	}
+	if at := t.plantedAt(e); at != cur && t.flashbackAt(at) {
 		return false
 	}
 	if i, ok := t.index[e.ValidToNodeID]; ok && i <= cur {
@@ -85,7 +89,8 @@ func (t tree) stateLines(entries []Entry, nodeID string, cur int) ([]string, int
 	values := map[string][]string{}
 	var subjects []string
 	for _, e := range now {
-		if e.Pinned {
+		// An elapsed time from an event is under the story time instead.
+		if e.Pinned || (e.Attribute == AttributeElapsed && e.About != "") {
 			continue
 		}
 		if _, seen := values[e.Subject]; !seen {

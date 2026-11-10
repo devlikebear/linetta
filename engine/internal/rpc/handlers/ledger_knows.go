@@ -17,6 +17,8 @@ type KnowsScene struct {
 	NodeID      string `json:"node_id"`
 	Label       string `json:"label"`
 	ParentLabel string `json:"parent_label,omitempty"`
+	// Flashback is set on a scene the writer marked as one.
+	Flashback bool `json:"flashback,omitempty"`
 }
 
 // KnowsSecret is a question still open at the scene whose answer the writer
@@ -147,7 +149,7 @@ func storyScenes(all []node.Node) []KnowsScene {
 		}
 		for _, c := range children[parent] {
 			if c.Kind == node.KindLeaf {
-				s := KnowsScene{NodeID: c.ID, Label: c.Label}
+				s := KnowsScene{NodeID: c.ID, Label: c.Label, Flashback: c.Flashback}
 				if c.ParentID != nil {
 					s.ParentLabel = byID[*c.ParentID].Label
 				}

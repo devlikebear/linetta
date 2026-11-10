@@ -89,6 +89,9 @@ type settleClient struct {
 	firstMsg string
 	lastTurn []llm.ChatMessage
 	calls    atomic.Int32
+	// script, when set, is what a done pass says, one reply for each reply it
+	// has already given.
+	script []llm.ChatResponse
 }
 
 func (c *settleClient) Ask(context.Context, string) (string, error) { return "", nil }
@@ -109,6 +112,15 @@ func (c *settleClient) Chat(_ context.Context, msgs []llm.ChatMessage, _ llm.Cha
 			return llm.ChatResponse{Message: llm.ChatMessage{Role: "assistant", ToolCalls: []llm.ToolCall{
 				{ID: "r" + string(rune('a'+n%26)), Name: "linetta_read_scene", Arguments: `{}`},
 			}}}, nil
+		}
+		replied := 0
+		for _, m := range msgs {
+			if m.Role == "assistant" {
+				replied++
+			}
+		}
+		if replied < len(c.script) {
+			return c.script[replied], nil
 		}
 		return textReply(""), nil
 	}
