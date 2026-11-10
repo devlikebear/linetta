@@ -121,3 +121,6 @@
 .publish-sheet-reason {
   flex: 1 1 100%;
 }
+
+.publish-length.is-short { color: var(--warn); }
+.publish-length.is-long { color: var(--muted-2); }

@@ -17,6 +17,12 @@ export interface Project {
    *  absent (an older engine) means no bound. */
   episode_char_min?: number;
   episode_char_max?: number;
+  /** What a contest or serial site asks of the whole work; 0, false or
+   *  absent means the work sets none (episode-length Phase 3). */
+  submission_min_episodes?: number;
+  submission_total_min?: number;
+  submission_total_max?: number;
+  submission_needs_synopsis?: boolean;
   /** How the work counts characters; scenes' and the work's word_count follow it. */
   char_count_basis?: CharCountBasis;
   synopsis: string;
@@ -35,6 +41,10 @@ export interface UpdateProjectInput {
   episode_char_target?: number;
   episode_char_min?: number;
   episode_char_max?: number;
+  submission_min_episodes?: number;
+  submission_total_min?: number;
+  submission_total_max?: number;
+  submission_needs_synopsis?: boolean;
   char_count_basis?: CharCountBasis;
   synopsis?: string;
   style_notes?: string;
@@ -2200,4 +2210,37 @@ export interface WorksGalleryPage {
   items: WorksGalleryWork[];
   /** The site's address. */
   site: string;
+}
+
+/** One episode outside the work's episode bounds. */
+export interface SubmissionEpisode {
+  node_id: string;
+  /** The episode's first scene, where the app opens it. */
+  scene_id: string;
+  label: string;
+  chars: number;
+  /** Negative under the minimum, positive over the maximum. */
+  delta: number;
+}
+
+/** The work measured against its submission rule (projects.submission_check). */
+export interface SubmissionReport {
+  has_rule: boolean;
+  /** False for a work without episodes (a short story). */
+  structured: boolean;
+  episodes: number;
+  min_episodes: number;
+  /** Whether the work bounds episode length; without it meeting/short/long say nothing. */
+  episode_rule: boolean;
+  meeting: number;
+  short: SubmissionEpisode[];
+  long: SubmissionEpisode[];
+  total_chars: number;
+  total_min: number;
+  total_max: number;
+  total_state: "short" | "ok" | "long" | "progress";
+  total_delta?: number;
+  needs_synopsis: boolean;
+  has_synopsis: boolean;
+  ready: boolean;
 }

@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
+	"github.com/devlikebear/linetta/engine/internal/submission"
 )
 
 // Clock is an injected millisecond-precision source. Tests pass deterministic
@@ -90,6 +92,29 @@ func GetProject(repo *project.Repo) rpc.Handler {
 	}
 }
 
+// SubmissionCheck returns a handler for projects.submission_check: the work
+// measured against its submission rule (episode-length Phase 3).
+func SubmissionCheck(projects *project.Repo, nodes *node.Repo) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p idParam
+		if err := json.Unmarshal(params, &p); err != nil || p.ID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id required"}
+		}
+		proj, err := projects.Get(ctx, p.ID)
+		if errors.Is(err, project.ErrNotFound) {
+			return nil, rpc.NotFound(rpc.ReasonProjectNotFound, "project not found")
+		}
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		all, err := nodes.ListByProject(ctx, proj.ID)
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.Marshal(submission.Check(all, proj))
+	}
+}
+
 // UpdateProject returns a handler for projects.update.
 func UpdateProject(repo *project.Repo, now Clock) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
@@ -105,6 +130,7 @@ func UpdateProject(repo *project.Repo, now Clock) rpc.Handler {
 			errors.Is(err, project.ErrInvalidOutlinePreset) ||
 			errors.Is(err, project.ErrInvalidEpisodeCharTarget) ||
 			errors.Is(err, project.ErrInvalidEpisodeCharRange) ||
+			errors.Is(err, project.ErrInvalidSubmissionRule) ||
 			errors.Is(err, project.ErrInvalidCharCountBasis) {
 			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
 		}

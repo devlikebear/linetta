@@ -560,3 +560,46 @@ func TestRepo_Get(t *testing.T) {
 		t.Errorf("Get of missing: err = %v, want ErrNotFound", err)
 	}
 }
+
+func TestProjectSubmissionRule(t *testing.T) {
+	s := openStore(t)
+	repo := NewRepo(s)
+	ctx := context.Background()
+	p, err := repo.Create(ctx, 1000, NewInput{Title: "공모전", Genres: []string{}, LengthTarget: "series", DefaultPOV: "first", OutlinePreset: OutlinePresetWebNovel})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.HasSubmissionRule() {
+		t.Fatalf("a new work starts with a submission rule: %+v", p)
+	}
+	seven, lo, hi, yes := 7, 30000, 50000, true
+	got, err := repo.Update(ctx, 2000, UpdateInput{ID: p.ID, SubmissionMinEpisodes: &seven, SubmissionTotalMin: &lo,
+		SubmissionTotalMax: &hi, SubmissionNeedsSynopsis: &yes})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.SubmissionMinEpisodes != 7 || got.SubmissionTotalMin != 30000 || got.SubmissionTotalMax != 50000 || !got.SubmissionNeedsSynopsis {
+		t.Fatalf("rule = %+v", got)
+	}
+	reread, err := repo.Get(ctx, p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reread.SubmissionMinEpisodes != 7 || !reread.SubmissionNeedsSynopsis || !reread.HasSubmissionRule() {
+		t.Fatalf("reread rule = %+v", reread)
+	}
+	small := 20000
+	if _, err := repo.Update(ctx, 3000, UpdateInput{ID: p.ID, SubmissionTotalMax: &small}); !errors.Is(err, ErrInvalidSubmissionRule) {
+		t.Fatalf("max under min: err = %v, want ErrInvalidSubmissionRule", err)
+	}
+	neg := -1
+	if _, err := repo.Update(ctx, 3000, UpdateInput{ID: p.ID, SubmissionMinEpisodes: &neg}); !errors.Is(err, ErrInvalidSubmissionRule) {
+		t.Fatalf("negative episodes: err = %v, want ErrInvalidSubmissionRule", err)
+	}
+	zero, no := 0, false
+	cleared, err := repo.Update(ctx, 4000, UpdateInput{ID: p.ID, SubmissionMinEpisodes: &zero, SubmissionTotalMin: &zero,
+		SubmissionTotalMax: &zero, SubmissionNeedsSynopsis: &no})
+	if err != nil || cleared.HasSubmissionRule() {
+		t.Fatalf("clearing = %+v, %v", cleared, err)
+	}
+}

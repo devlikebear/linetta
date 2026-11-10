@@ -2521,6 +2521,7 @@ export function Workspace() {
             onProjectChanged={handleProjectChanged}
             tourTarget="workspace-context"
             onOpenContinuity={openContinuityForScene}
+            onOpenScene={(id) => void navigateToNode({ id } as NodeRow)}
           />
         ) : null}
       </div>
@@ -2617,6 +2618,8 @@ export function Workspace() {
           projectId={load.project.id}
           nodeId={publishTarget}
           charCountBasis={charCountBasis}
+          episodeCharMin={load.project.episode_char_min ?? 0}
+          episodeCharMax={load.project.episode_char_max ?? 0}
           onClose={closePublish}
           onOpenSettings={() => {
             setPublishTarget(null);

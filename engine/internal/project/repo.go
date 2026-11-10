@@ -25,6 +25,9 @@ var (
 	// ErrInvalidEpisodeCharRange: the minimum, target and maximum an update
 	// leaves do not fit together (see charcount.ValidEpisodeRange).
 	ErrInvalidEpisodeCharRange = errors.New("invalid episode length range")
+	// ErrInvalidSubmissionRule: the submission rule an update leaves does not
+	// hold together (see ValidSubmissionRule).
+	ErrInvalidSubmissionRule = errors.New("invalid submission rule")
 )
 
 // Repo persists Projects (and the auto-created first leaf node) in SQLite.
@@ -247,6 +250,21 @@ func (r *Repo) Update(ctx context.Context, now int64, in UpdateInput) (Project, 
 		!charcount.ValidEpisodeRange(cur.EpisodeCharMin, cur.EpisodeCharTarget, cur.EpisodeCharMax) {
 		return Project{}, ErrInvalidEpisodeCharRange
 	}
+	if in.SubmissionMinEpisodes != nil {
+		cur.SubmissionMinEpisodes = *in.SubmissionMinEpisodes
+	}
+	if in.SubmissionTotalMin != nil {
+		cur.SubmissionTotalMin = *in.SubmissionTotalMin
+	}
+	if in.SubmissionTotalMax != nil {
+		cur.SubmissionTotalMax = *in.SubmissionTotalMax
+	}
+	if in.SubmissionNeedsSynopsis != nil {
+		cur.SubmissionNeedsSynopsis = *in.SubmissionNeedsSynopsis
+	}
+	if !ValidSubmissionRule(cur.SubmissionMinEpisodes, cur.SubmissionTotalMin, cur.SubmissionTotalMax) {
+		return Project{}, ErrInvalidSubmissionRule
+	}
 	recount := false
 	if in.CharCountBasis != nil {
 		if !charcount.Valid(*in.CharCountBasis) {
@@ -284,8 +302,8 @@ func (r *Repo) Update(ctx context.Context, now int64, in UpdateInput) (Project, 
 		return Project{}, err
 	}
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE projects SET title = ?, genres = ?, length_target = ?, default_pov = ?, style_notes = ?, outline = ?, outline_preset = ?, episode_char_target = ?, episode_char_min = ?, episode_char_max = ?, char_count_basis = ?, synopsis = ?, updated_at = ? WHERE id = ?`,
-		cur.Title, string(genresJSON), cur.LengthTarget, cur.DefaultPOV, cur.StyleNotes, cur.Outline, cur.OutlinePreset, cur.EpisodeCharTarget, cur.EpisodeCharMin, cur.EpisodeCharMax, cur.CharCountBasis, cur.Synopsis, now, in.ID); err != nil {
+		`UPDATE projects SET title = ?, genres = ?, length_target = ?, default_pov = ?, style_notes = ?, outline = ?, outline_preset = ?, episode_char_target = ?, episode_char_min = ?, episode_char_max = ?, submission_min_episodes = ?, submission_total_min = ?, submission_total_max = ?, submission_needs_synopsis = ?, char_count_basis = ?, synopsis = ?, updated_at = ? WHERE id = ?`,
+		cur.Title, string(genresJSON), cur.LengthTarget, cur.DefaultPOV, cur.StyleNotes, cur.Outline, cur.OutlinePreset, cur.EpisodeCharTarget, cur.EpisodeCharMin, cur.EpisodeCharMax, cur.SubmissionMinEpisodes, cur.SubmissionTotalMin, cur.SubmissionTotalMax, cur.SubmissionNeedsSynopsis, cur.CharCountBasis, cur.Synopsis, now, in.ID); err != nil {
 		return Project{}, err
 	}
 	if recount {
@@ -300,7 +318,8 @@ func (r *Repo) Update(ctx context.Context, now int64, in UpdateInput) (Project, 
 }
 
 const baseSelect = `
-SELECT id, title, genres, length_target, default_pov, style_notes, outline, outline_preset, episode_char_target, episode_char_min, episode_char_max, char_count_basis, synopsis,
+SELECT id, title, genres, length_target, default_pov, style_notes, outline, outline_preset, episode_char_target, episode_char_min, episode_char_max,
+       submission_min_episodes, submission_total_min, submission_total_max, submission_needs_synopsis, char_count_basis, synopsis,
        word_count, last_opened_node_id, created_at, updated_at, archived_at
 FROM projects`
 
@@ -317,7 +336,8 @@ func scan(row scanner) (Project, error) {
 		archivedAt sql.NullInt64
 	)
 	if err := row.Scan(&p.ID, &p.Title, &genresJSON, &p.LengthTarget, &p.DefaultPOV,
-		&p.StyleNotes, &p.Outline, &p.OutlinePreset, &p.EpisodeCharTarget, &p.EpisodeCharMin, &p.EpisodeCharMax, &p.CharCountBasis, &p.Synopsis, &p.WordCount, &lastNode, &p.CreatedAt, &p.UpdatedAt, &archivedAt); err != nil {
+		&p.StyleNotes, &p.Outline, &p.OutlinePreset, &p.EpisodeCharTarget, &p.EpisodeCharMin, &p.EpisodeCharMax,
+		&p.SubmissionMinEpisodes, &p.SubmissionTotalMin, &p.SubmissionTotalMax, &p.SubmissionNeedsSynopsis, &p.CharCountBasis, &p.Synopsis, &p.WordCount, &lastNode, &p.CreatedAt, &p.UpdatedAt, &archivedAt); err != nil {
 		return Project{}, err
 	}
 	if err := json.Unmarshal([]byte(genresJSON), &p.Genres); err != nil {

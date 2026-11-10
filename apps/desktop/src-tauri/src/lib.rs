@@ -146,6 +146,7 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
     "projects.get",
     "projects.list",
     "projects.restore",
+    "projects.submission_check",
     "projects.update",
     "proposals.accept",
     "proposals.extraction_estimate",

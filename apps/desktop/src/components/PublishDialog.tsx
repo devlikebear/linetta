@@ -6,6 +6,7 @@ import { continuity as continuityApi, openExternalUrl, publishApi } from "../lib
 import { rpcErrorMessage } from "../lib/rpcMessage";
 import { charCountBasisLabelKey, DEFAULT_CHAR_COUNT_BASIS } from "../lib/charCount";
 import { PUBLISH_STATE_KEYS, findPublishEpisode } from "../lib/publish";
+import { episodeLength } from "../lib/episodeLength";
 import { SHARE_TARGETS, shareAction, type ShareTarget } from "../lib/share";
 import { PublishSheetsSection } from "./PublishSheetsSection";
 import type {
@@ -41,6 +42,10 @@ export interface PublishDialogProps {
   onChanged?: (status: PublishWorkStatus) => void;
   /** The work's basis, which an episode's count is in. */
   charCountBasis?: CharCountBasis;
+  /** The work's episode bounds (0: none). An episode outside them is named
+   *  here; it can still be published. */
+  episodeCharMin?: number;
+  episodeCharMax?: number;
 }
 
 function reasonOf(error: unknown): string | null {
@@ -48,7 +53,7 @@ function reasonOf(error: unknown): string | null {
   return typeof data?.reason === "string" ? data.reason : null;
 }
 
-export function PublishDialog({ open, projectId, nodeId, onClose, onOpenSettings, onChanged, charCountBasis = DEFAULT_CHAR_COUNT_BASIS }: PublishDialogProps) {
+export function PublishDialog({ open, projectId, nodeId, onClose, onOpenSettings, onChanged, charCountBasis = DEFAULT_CHAR_COUNT_BASIS, episodeCharMin = 0, episodeCharMax = 0 }: PublishDialogProps) {
   const { language, t } = useI18n();
   const [connection, setConnection] = useState<PublishConnectStatus | null>(null);
   const [status, setStatus] = useState<PublishWorkStatus | null>(null);
@@ -299,6 +304,7 @@ export function PublishDialog({ open, projectId, nodeId, onClose, onOpenSettings
                   {shown?.number ? ` · ${t("publish.number", { number: String(shown.number) })}` : ""}
                 </p>
                 {episode.empty && <p className="sd" role="alert">{t("errors.publishEmptyEpisode")}</p>}
+                {!episode.empty && <EpisodeLengthNote chars={episode.char_count} min={episodeCharMin} max={episodeCharMax} />}
                 {episode.illustrations ? (
                   <p className="sd" data-testid="publish-illustrations">
                     {t("publish.illustrations", { count: episode.illustrations })}
@@ -467,4 +473,27 @@ export function PublishDialog({ open, projectId, nodeId, onClose, onOpenSettings
       </div>
     </div>
   );
+}
+
+/** Says when the episode is outside the work's bounds. Publishing goes on:
+ *  the writer may mean to post a short episode. */
+function EpisodeLengthNote({ chars, min, max }: Readonly<{ chars: number; min: number; max: number }>) {
+  const { language, t } = useI18n();
+  const judged = episodeLength(chars, { episode_char_min: min, episode_char_target: Math.max(min, 1), episode_char_max: max });
+  const num = (n: number) => n.toLocaleString(language);
+  if (judged.state === "short") {
+    return (
+      <p className="sd publish-length is-short" data-testid="publish-length">
+        {t("publish.episodeShort", { min: num(min), count: num(-judged.delta) })}
+      </p>
+    );
+  }
+  if (judged.state === "long") {
+    return (
+      <p className="sd publish-length is-long" data-testid="publish-length">
+        {t("publish.episodeLong", { max: num(max), count: num(judged.delta) })}
+      </p>
+    );
+  }
+  return null;
 }

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -256,5 +256,37 @@ describe("PublishDialog", () => {
     renderDialog();
     await screen.findByTestId("publish-episode");
     expect(screen.queryByTestId("publish-illustrations")).toBeNull();
+  });
+  describe("episode length", () => {
+    const renderWithBounds = (min: number, max: number) =>
+      render(
+        <PublishDialog open projectId="p1" nodeId="scene-a" onClose={() => {}} onOpenSettings={() => {}}
+          episodeCharMin={min} episodeCharMax={max} />,
+      );
+
+    it("says how far a short episode is from the minimum, and still offers to publish", async () => {
+      rpc.workStatus.mockResolvedValue(status({ episodes: [episode({ char_count: 3925 })] }));
+      renderWithBounds(5000, 0);
+      expect(await screen.findByTestId("publish-length")).toHaveTextContent("publish.episodeShort:5,000,1,075");
+      expect(screen.getByTestId("publish-length")).toHaveClass("is-short");
+    });
+
+    it("says how far a long episode runs past the maximum", async () => {
+      rpc.workStatus.mockResolvedValue(status({ episodes: [episode({ char_count: 5820 })] }));
+      renderWithBounds(4500, 5500);
+      expect(await screen.findByTestId("publish-length")).toHaveTextContent("publish.episodeLong:5,500,320");
+    });
+
+    it("says nothing for an episode within the bounds or a work without any", async () => {
+      rpc.workStatus.mockResolvedValue(status({ episodes: [episode({ char_count: 3925 })] }));
+      renderWithBounds(0, 0);
+      await screen.findByTestId("publish-episode");
+      expect(screen.queryByTestId("publish-length")).toBeNull();
+      cleanup();
+      rpc.workStatus.mockResolvedValue(status({ episodes: [episode({ char_count: 5120 })] }));
+      renderWithBounds(5000, 0);
+      await screen.findByTestId("publish-episode");
+      expect(screen.queryByTestId("publish-length")).toBeNull();
+    });
   });
 });

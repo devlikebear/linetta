@@ -67,6 +67,12 @@ type Project struct {
 	// work's basis; 0 means no bound. EpisodeCharTarget lies between them.
 	EpisodeCharMin int `json:"episode_char_min"`
 	EpisodeCharMax int `json:"episode_char_max"`
+	// The submission rule: what a contest or serial site asks of the whole
+	// work. 0 and false mean the work sets none (see ValidSubmissionRule).
+	SubmissionMinEpisodes   int  `json:"submission_min_episodes"`
+	SubmissionTotalMin      int  `json:"submission_total_min"`
+	SubmissionTotalMax      int  `json:"submission_total_max"`
+	SubmissionNeedsSynopsis bool `json:"submission_needs_synopsis"`
 	// CharCountBasis is how the work counts characters: charcount.WithSpaces
 	// or charcount.WithoutSpaces. WordCount and every scene's count follow it.
 	CharCountBasis   string  `json:"char_count_basis"`
@@ -107,6 +113,26 @@ type UpdateInput struct {
 	EpisodeCharTarget *int      `json:"episode_char_target,omitempty"`
 	EpisodeCharMin    *int      `json:"episode_char_min,omitempty"`
 	EpisodeCharMax    *int      `json:"episode_char_max,omitempty"`
-	CharCountBasis    *string   `json:"char_count_basis,omitempty"`
-	Synopsis          *string   `json:"synopsis,omitempty"`
+
+	SubmissionMinEpisodes   *int    `json:"submission_min_episodes,omitempty"`
+	SubmissionTotalMin      *int    `json:"submission_total_min,omitempty"`
+	SubmissionTotalMax      *int    `json:"submission_total_max,omitempty"`
+	SubmissionNeedsSynopsis *bool   `json:"submission_needs_synopsis,omitempty"`
+	CharCountBasis          *string `json:"char_count_basis,omitempty"`
+	Synopsis                *string `json:"synopsis,omitempty"`
+}
+
+// HasSubmissionRule reports whether the work sets any submission rule.
+func (p Project) HasSubmissionRule() bool {
+	return p.SubmissionMinEpisodes > 0 || p.SubmissionTotalMin > 0 || p.SubmissionTotalMax > 0 ||
+		p.SubmissionNeedsSynopsis
+}
+
+// ValidSubmissionRule reports whether a submission rule holds together: no
+// negative numbers, and the work's shortest length not past its longest.
+func ValidSubmissionRule(minEpisodes, totalMin, totalMax int) bool {
+	if minEpisodes < 0 || totalMin < 0 || totalMax < 0 {
+		return false
+	}
+	return totalMax == 0 || totalMin <= totalMax
 }

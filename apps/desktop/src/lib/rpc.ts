@@ -1,6 +1,7 @@
 import type { CharacterVisualSheet, ReferenceImageMeta, ArtStyle, StyleApproveMode, StyleCheckResult, StyleDraftState, StyleRules } from "./types";
 import type { ArchivedNote } from "./types";
 import type { WorksGalleryPage } from "./types";
+import type { SubmissionReport } from "./types";
 import type { FocusState, SceneIntent, SceneIntentState } from "./types";
 import type { ContinuityCheck, ContinuityObservation, ContinuityOpenCounts, ContinuityStatus } from "./types";
 import type { KnowsAt, LedgerEntry, LedgerKind, LedgerState, LedgerStatus, PartArc, PendingSettlement } from "./types";
@@ -240,6 +241,8 @@ export const projects = {
   get: (id: string) => rpcCall<Project>("projects.get", { id }),
   update: (input: UpdateProjectInput) => rpcCall<Project>("projects.update", input),
   clearSynopsis: (id: string) => rpcCall<Project>("projects.clear_synopsis", { id }),
+  /** The work against its submission rule: episodes, their length, the whole work, the synopsis. */
+  submissionCheck: (id: string) => rpcCall<SubmissionReport>("projects.submission_check", { id }),
   archive: (id: string) => rpcCall<{ ok: true }>("projects.archive", { id }),
   restore: (id: string) => rpcCall<{ ok: true }>("projects.restore", { id }),
   delete: (id: string) => rpcCall<{ ok: true }>("projects.delete", { id }),
