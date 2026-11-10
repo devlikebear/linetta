@@ -21,10 +21,11 @@ import pathlib
 import random
 import subprocess
 import sys
+import time
 
 CASES = pathlib.Path(__file__).parent.parent / "engine/internal/ledger/testdata/eval/consistency.json"
 PROMPT = """아래는 소설의 장면들이다. 함께 참일 수 없는 진술이 있는지 찾아라.
-인물의 거짓말, 소문, 시간이 흘러 달라진 것, 나중에 밝혀진 사정은 모순이 아니다.
+장면은 이야기 순서대로 놓였다. 인물의 거짓말, 소문, 시간이 흘러 달라진 것, 나중에 밝혀진 사정은 모순이 아니다.
 첫 줄에 YES 또는 NO만 써라.
 
 {scenes}"""
@@ -33,12 +34,23 @@ PADDING = ("장터는 아침부터 붐볐다. 소금 장수와 포목 장수가 
 
 
 def ask(model, prompt):
+    # --safe-mode keeps the caller's CLAUDE.md, memory, hooks and MCP servers out
+    # of the question; --tools "" alone removes only the built-in tools.
     done = subprocess.run(
-        ["claude", "-p", "--model", model, "--tools", "", "--no-session-persistence", prompt],
+        ["claude", "-p", "--model", model, "--tools", "", "--safe-mode", "--no-session-persistence", prompt],
         capture_output=True, text=True, timeout=240,
     )
-    first = done.stdout.strip().splitlines()[0].upper() if done.stdout.strip() else ""
-    return "YES" in first
+    if done.returncode != 0:
+        raise RuntimeError(f"exit {done.returncode}: {done.stderr.strip()[-200:]}")
+    # A failed or off-format reply is an error, not a NO: counting it as NO
+    # would lower recall for reasons that have nothing to do with the model.
+    first = done.stdout.strip().splitlines()[0] if done.stdout.strip() else ""
+    word = first.strip(" *#`>-").upper()
+    if word.startswith("YES"):
+        return True
+    if word.startswith("NO"):
+        return False
+    raise ValueError(f"unparsed reply: {first[:80]!r}")
 
 
 def scenes_of(case, mode, rng):
@@ -97,14 +109,17 @@ def main():
         except Exception as err:
             return {"run": run, "id": case["id"], "type": case["type"], "truth": case["contradiction"], "error": str(err)}
 
+    started = time.monotonic()
     with futures.ThreadPoolExecutor(max_workers=4) as pool:
         rows = list(pool.map(work, jobs))
+    took = time.monotonic() - started
     pathlib.Path(target).write_text(json.dumps(rows, ensure_ascii=False, indent=0), encoding="utf-8")
     good = [r for r in rows if "said" in r]
     tp = sum(r["truth"] and r["said"] for r in good)
     fp = sum(not r["truth"] and r["said"] for r in good)
     fn = sum(r["truth"] and not r["said"] for r in good)
-    print(f"{mode}: n={len(good)} errors={len(rows) - len(good)} precision={tp / max(tp + fp, 1):.2f} recall={tp / max(tp + fn, 1):.2f}")
+    timeouts = sum("timed out" in r.get("error", "") for r in rows)
+    print(f"{mode}: calls={len(rows)} n={len(good)} errors={len(rows) - len(good)} timeouts={timeouts} seconds={took:.0f} precision={tp / max(tp + fp, 1):.2f} recall={tp / max(tp + fn, 1):.2f}")
 
 
 if __name__ == "__main__":
