@@ -59,3 +59,31 @@ func TestRestoreProjectDetails_episodeRange(t *testing.T) {
 		})
 	}
 }
+
+func TestRestoreProjectDetails_submissionRule(t *testing.T) {
+	ctx := context.Background()
+	restore := func(meta mdmeta.ProjectMeta) BuildResult {
+		t.Helper()
+		pr, _ := setupRepos(t)
+		p, err := pr.Create(ctx, 1, project.NewInput{Title: "가져온 작품", Genres: []string{}, LengthTarget: "short", DefaultPOV: "first"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		res := BuildResult{Project: p}
+		if err := RestoreProjectDetails(ctx, pr, 2, mdmeta.Metadata{Project: &meta}, &res); err != nil {
+			t.Fatalf("RestoreProjectDetails: %v", err)
+		}
+		return res
+	}
+	res := restore(mdmeta.ProjectMeta{SubmissionMinEpisodes: 7, SubmissionTotalMin: 30000, SubmissionTotalMax: 50000, SubmissionNeedsSynopsis: true})
+	if got := res.Project; got.SubmissionMinEpisodes != 7 || got.SubmissionTotalMin != 30000 || got.SubmissionTotalMax != 50000 || !got.SubmissionNeedsSynopsis {
+		t.Fatalf("rule = %+v", got)
+	}
+	res = restore(mdmeta.ProjectMeta{SubmissionTotalMin: 50000, SubmissionTotalMax: 30000, SubmissionNeedsSynopsis: true})
+	if !slices.Contains(res.Warnings, WarnProjectFieldSkipped+":submission_rule") {
+		t.Fatalf("a rule whose minimum passes its maximum was not skipped: %v", res.Warnings)
+	}
+	if got := res.Project; got.SubmissionTotalMin != 0 || got.SubmissionTotalMax != 0 || !got.SubmissionNeedsSynopsis {
+		t.Fatalf("skipped rule left %+v; the synopsis flag should still come back", got)
+	}
+}

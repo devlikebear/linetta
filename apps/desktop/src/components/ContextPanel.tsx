@@ -13,6 +13,7 @@ import { lengthRuleOf, validLengthRule } from "../lib/charCountPresets";
 import { localeForLanguage, useI18n } from "../lib/i18n";
 import type { EpisodeStatusCounts } from "../hooks/useFirstLeaf";
 import { StatsSection } from "./StatsSection";
+import { SubmissionCheck } from "./SubmissionCheck";
 import { DirectionSection } from "./DirectionSection";
 import { useEngineEvent } from "../hooks/useEngineEvent";
 import type { McpChangedPayload } from "../hooks/useMcpChanges";
@@ -48,6 +49,8 @@ interface Props {
    *  (story-assist Phase 2). Omitted entirely when the caller has not
    *  wired it, the same optional-prop convention onAutoMention follows. */
   onOpenContinuity?: () => void;
+  /** Opens a scene: a short episode in the submission check leads there. */
+  onOpenScene?: (nodeId: string) => void;
 }
 
 const KIND_META: Record<EntityKind, { color: string; Icon: typeof User }> = {
@@ -88,7 +91,7 @@ function storeDirectionCollapsed(collapsed: boolean) {
   }
 }
 
-export function ContextPanel({ project, node, charCount, todayChars = null, episodeStock = null, statsRefreshKey = null, typewriter, onToggleTypewriter, saveStatus, mentionedEntities, onMentionClick, onAutoMention, autoMentionBusy, autoMentionFound = 0, onOpenThread, onProjectChanged, onProjectTitleChange, tourTarget, onOpenContinuity }: Readonly<Props>) {
+export function ContextPanel({ project, node, charCount, todayChars = null, episodeStock = null, statsRefreshKey = null, typewriter, onToggleTypewriter, saveStatus, mentionedEntities, onMentionClick, onAutoMention, autoMentionBusy, autoMentionFound = 0, onOpenThread, onProjectChanged, onProjectTitleChange, tourTarget, onOpenContinuity, onOpenScene }: Readonly<Props>) {
   const { language, t } = useI18n();
   const locale = localeForLanguage(language);
   const target = TARGET_WORDS[project.length_target] ?? 90000;
@@ -361,6 +364,12 @@ export function ContextPanel({ project, node, charCount, todayChars = null, epis
               <option value="without_spaces">{t("workspace.charCountWithoutSpaces")}</option>
             </select>
           </label>
+          <SubmissionCheck
+            project={project}
+            refreshKey={statsRefreshKey}
+            onProjectChanged={onProjectChanged}
+            onOpenScene={onOpenScene}
+          />
           <div className="toggles">
             <button type="button" className="toggle-row" onClick={onToggleTypewriter}>
               <span className="lbl">

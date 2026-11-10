@@ -43,6 +43,11 @@ type ProjectMeta struct {
 	EpisodeCharMin    int      `yaml:"episode_char_min,omitempty" json:"episode_char_min,omitempty"`
 	EpisodeCharMax    int      `yaml:"episode_char_max,omitempty" json:"episode_char_max,omitempty"`
 	CharCountBasis    string   `yaml:"char_count_basis,omitempty" json:"char_count_basis,omitempty"`
+
+	SubmissionMinEpisodes   int  `yaml:"submission_min_episodes,omitempty" json:"submission_min_episodes,omitempty"`
+	SubmissionTotalMin      int  `yaml:"submission_total_min,omitempty" json:"submission_total_min,omitempty"`
+	SubmissionTotalMax      int  `yaml:"submission_total_max,omitempty" json:"submission_total_max,omitempty"`
+	SubmissionNeedsSynopsis bool `yaml:"submission_needs_synopsis,omitempty" json:"submission_needs_synopsis,omitempty"`
 }
 
 // Node is one manuscript node in export document order (the same pre-order

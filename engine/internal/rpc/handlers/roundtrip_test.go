@@ -84,13 +84,16 @@ func TestExportImportRoundTripCompleteness(t *testing.T) {
 		t.Fatalf("create project: %v", err)
 	}
 	if _, err := src.projects.Update(ctx, now, project.UpdateInput{
-		ID:                p.ID,
-		StyleNotes:        ptrutil.To("건조한 문체"),
-		Synopsis:          ptrutil.To("주인공이 잃어버린 도시를 찾는 이야기."),
-		Outline:           ptrutil.To("1부: 출발\n2부: 귀환"),
-		EpisodeCharTarget: ptrutil.To(4200),
-		EpisodeCharMin:    ptrutil.To(4000),
-		EpisodeCharMax:    ptrutil.To(4500),
+		ID:                      p.ID,
+		StyleNotes:              ptrutil.To("건조한 문체"),
+		Synopsis:                ptrutil.To("주인공이 잃어버린 도시를 찾는 이야기."),
+		Outline:                 ptrutil.To("1부: 출발\n2부: 귀환"),
+		EpisodeCharTarget:       ptrutil.To(4200),
+		EpisodeCharMin:          ptrutil.To(4000),
+		SubmissionMinEpisodes:   ptrutil.To(7),
+		SubmissionTotalMin:      ptrutil.To(30000),
+		SubmissionNeedsSynopsis: ptrutil.To(true),
+		EpisodeCharMax:          ptrutil.To(4500),
 	}); err != nil {
 		t.Fatalf("update project: %v", err)
 	}
@@ -234,6 +237,10 @@ func TestExportImportRoundTripCompleteness(t *testing.T) {
 	}
 	if got.EpisodeCharMin != 4000 || got.EpisodeCharMax != 4500 {
 		t.Errorf("episode char range = %d..%d, want 4000..4500", got.EpisodeCharMin, got.EpisodeCharMax)
+	}
+	if got.SubmissionMinEpisodes != 7 || got.SubmissionTotalMin != 30000 || got.SubmissionTotalMax != 0 || !got.SubmissionNeedsSynopsis {
+		t.Errorf("submission rule = %d eps, %d..%d, synopsis %v; want 7, 30000..0, true",
+			got.SubmissionMinEpisodes, got.SubmissionTotalMin, got.SubmissionTotalMax, got.SubmissionNeedsSynopsis)
 	}
 
 	nodes, err := dst.nodes.ListByProject(ctx, result.ProjectID)

@@ -325,6 +325,11 @@ func buildMetadata(p project.Project, ents []entity.Entity, rels []relationship.
 		EpisodeCharMin:    p.EpisodeCharMin,
 		EpisodeCharMax:    p.EpisodeCharMax,
 		CharCountBasis:    p.CharCountBasis,
+
+		SubmissionMinEpisodes:   p.SubmissionMinEpisodes,
+		SubmissionTotalMin:      p.SubmissionTotalMin,
+		SubmissionTotalMax:      p.SubmissionTotalMax,
+		SubmissionNeedsSynopsis: p.SubmissionNeedsSynopsis,
 	}
 	entityNames := map[string]string{}
 	for _, e := range ents {

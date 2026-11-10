@@ -1074,6 +1074,15 @@ details.sec[open] > summary { margin-bottom: 10px; }
 .episode-rule-offer { margin-top: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--accent-tint); font-size: 12px; color: var(--ink-soft); }
 .episode-rule-offer p { margin: 0; line-height: 1.5; }
 .episode-rule-offer-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.submission-check { margin-top: 10px; font-size: 12px; color: var(--ink-soft); }
+.submission-check > summary { cursor: pointer; font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
+.submission-check .episode-bounds-meta { flex-wrap: wrap; gap: 4px 10px; }
+.submission-check .char-basis-row { justify-content: flex-start; }
+.submission-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; line-height: 1.5; }
+.submission-list li.is-short { color: var(--warn); }
+.submission-list li.is-long, .submission-list .is-long { color: var(--muted-2); }
+.submission-list li.is-met { color: var(--ink-soft); }
+.submission-episode { margin: 0 4px 0 0; padding: 0; font: inherit; color: inherit; background: none; border: 0; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 
 .toggles { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
 .toggle-row {

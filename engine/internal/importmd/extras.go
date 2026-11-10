@@ -80,6 +80,18 @@ func RestoreProjectDetails(ctx context.Context, pr *project.Repo, now int64, met
 	if charcount.Valid(pm.CharCountBasis) {
 		in.CharCountBasis = ptrutil.To(pm.CharCountBasis)
 	}
+	if pm.SubmissionMinEpisodes != 0 || pm.SubmissionTotalMin != 0 || pm.SubmissionTotalMax != 0 {
+		if project.ValidSubmissionRule(pm.SubmissionMinEpisodes, pm.SubmissionTotalMin, pm.SubmissionTotalMax) {
+			in.SubmissionMinEpisodes = ptrutil.To(pm.SubmissionMinEpisodes)
+			in.SubmissionTotalMin = ptrutil.To(pm.SubmissionTotalMin)
+			in.SubmissionTotalMax = ptrutil.To(pm.SubmissionTotalMax)
+		} else {
+			res.Warnings = append(res.Warnings, WarnProjectFieldSkipped+":submission_rule")
+		}
+	}
+	if pm.SubmissionNeedsSynopsis {
+		in.SubmissionNeedsSynopsis = ptrutil.To(true)
+	}
 	updated, err := pr.Update(ctx, now, in)
 	if err != nil {
 		return err
