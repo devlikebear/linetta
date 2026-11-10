@@ -22,6 +22,9 @@ var (
 	ErrInvalidOutlinePreset     = errors.New("invalid outline_preset")
 	ErrInvalidEpisodeCharTarget = errors.New("invalid episode_char_target")
 	ErrInvalidCharCountBasis    = errors.New("invalid char_count_basis")
+	// ErrInvalidEpisodeCharRange: the minimum, target and maximum an update
+	// leaves do not fit together (see charcount.ValidEpisodeRange).
+	ErrInvalidEpisodeCharRange = errors.New("invalid episode length range")
 )
 
 // Repo persists Projects (and the auto-created first leaf node) in SQLite.
@@ -52,6 +55,11 @@ func (r *Repo) Create(ctx context.Context, now int64, in NewInput) (Project, err
 		return Project{}, ErrInvalidOutlinePreset
 	}
 
+	episodeMin, episodeTarget := 0, DefaultEpisodeCharTarget
+	if outlinePreset == OutlinePresetWebNovel {
+		episodeMin, episodeTarget = DefaultWebnovelEpisodeCharMin, DefaultWebnovelEpisodeCharTarget
+	}
+
 	projectID := uuid.NewString()
 	nodeID := uuid.NewString()
 	genresJSON, err := json.Marshal(in.Genres)
@@ -67,10 +75,10 @@ func (r *Repo) Create(ctx context.Context, now int64, in NewInput) (Project, err
 
 	if _, err := tx.ExecContext(ctx, `
 INSERT INTO projects (id, title, genres, length_target, default_pov, style_notes, outline,
-                      outline_preset, word_count, last_opened_node_id, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, '', '', ?, 0, ?, ?, ?)`,
+                      outline_preset, episode_char_min, episode_char_target, word_count, last_opened_node_id, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, '', '', ?, ?, ?, 0, ?, ?, ?)`,
 		projectID, in.Title, string(genresJSON), in.LengthTarget, in.DefaultPOV,
-		outlinePreset, nodeID, now, now); err != nil {
+		outlinePreset, episodeMin, episodeTarget, nodeID, now, now); err != nil {
 		return Project{}, err
 	}
 	// Empty Tiptap doc: single empty paragraph.
@@ -227,6 +235,18 @@ func (r *Repo) Update(ctx context.Context, now int64, in UpdateInput) (Project, 
 		}
 		cur.EpisodeCharTarget = *in.EpisodeCharTarget
 	}
+	if in.EpisodeCharMin != nil {
+		cur.EpisodeCharMin = *in.EpisodeCharMin
+	}
+	if in.EpisodeCharMax != nil {
+		cur.EpisodeCharMax = *in.EpisodeCharMax
+	}
+	// Checked on the values the update leaves, so a preset can move all three
+	// at once without an in-between state being refused.
+	if (in.EpisodeCharTarget != nil || in.EpisodeCharMin != nil || in.EpisodeCharMax != nil) &&
+		!charcount.ValidEpisodeRange(cur.EpisodeCharMin, cur.EpisodeCharTarget, cur.EpisodeCharMax) {
+		return Project{}, ErrInvalidEpisodeCharRange
+	}
 	recount := false
 	if in.CharCountBasis != nil {
 		if !charcount.Valid(*in.CharCountBasis) {
@@ -264,8 +284,8 @@ func (r *Repo) Update(ctx context.Context, now int64, in UpdateInput) (Project, 
 		return Project{}, err
 	}
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE projects SET title = ?, genres = ?, length_target = ?, default_pov = ?, style_notes = ?, outline = ?, outline_preset = ?, episode_char_target = ?, char_count_basis = ?, synopsis = ?, updated_at = ? WHERE id = ?`,
-		cur.Title, string(genresJSON), cur.LengthTarget, cur.DefaultPOV, cur.StyleNotes, cur.Outline, cur.OutlinePreset, cur.EpisodeCharTarget, cur.CharCountBasis, cur.Synopsis, now, in.ID); err != nil {
+		`UPDATE projects SET title = ?, genres = ?, length_target = ?, default_pov = ?, style_notes = ?, outline = ?, outline_preset = ?, episode_char_target = ?, episode_char_min = ?, episode_char_max = ?, char_count_basis = ?, synopsis = ?, updated_at = ? WHERE id = ?`,
+		cur.Title, string(genresJSON), cur.LengthTarget, cur.DefaultPOV, cur.StyleNotes, cur.Outline, cur.OutlinePreset, cur.EpisodeCharTarget, cur.EpisodeCharMin, cur.EpisodeCharMax, cur.CharCountBasis, cur.Synopsis, now, in.ID); err != nil {
 		return Project{}, err
 	}
 	if recount {
@@ -280,7 +300,7 @@ func (r *Repo) Update(ctx context.Context, now int64, in UpdateInput) (Project, 
 }
 
 const baseSelect = `
-SELECT id, title, genres, length_target, default_pov, style_notes, outline, outline_preset, episode_char_target, char_count_basis, synopsis,
+SELECT id, title, genres, length_target, default_pov, style_notes, outline, outline_preset, episode_char_target, episode_char_min, episode_char_max, char_count_basis, synopsis,
        word_count, last_opened_node_id, created_at, updated_at, archived_at
 FROM projects`
 
@@ -297,7 +317,7 @@ func scan(row scanner) (Project, error) {
 		archivedAt sql.NullInt64
 	)
 	if err := row.Scan(&p.ID, &p.Title, &genresJSON, &p.LengthTarget, &p.DefaultPOV,
-		&p.StyleNotes, &p.Outline, &p.OutlinePreset, &p.EpisodeCharTarget, &p.CharCountBasis, &p.Synopsis, &p.WordCount, &lastNode, &p.CreatedAt, &p.UpdatedAt, &archivedAt); err != nil {
+		&p.StyleNotes, &p.Outline, &p.OutlinePreset, &p.EpisodeCharTarget, &p.EpisodeCharMin, &p.EpisodeCharMax, &p.CharCountBasis, &p.Synopsis, &p.WordCount, &lastNode, &p.CreatedAt, &p.UpdatedAt, &archivedAt); err != nil {
 		return Project{}, err
 	}
 	if err := json.Unmarshal([]byte(genresJSON), &p.Genres); err != nil {

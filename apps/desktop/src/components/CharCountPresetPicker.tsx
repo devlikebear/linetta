@@ -18,7 +18,7 @@ interface Props {
   onProjectChanged?: (project: Project) => void;
 }
 
-/** Applies a length preset — a count basis and an episode target together —
+/** Applies a length preset — a count basis, an episode target and its bounds together —
  *  to the open work, and saves the work's current rule as the writer's own
  *  (#239). Saved presets live in the app settings, shared across works. */
 export function CharCountPresetPicker({ project, onProjectChanged }: Readonly<Props>) {
@@ -49,12 +49,16 @@ export function CharCountPresetPicker({ project, onProjectChanged }: Readonly<Pr
   const selected = matchingPresetKey(rule, userPresets, preferred);
   const selectedUserId = selected.startsWith("user:") ? selected.slice("user:".length) : null;
 
-  const optionLabel = (name: string, r: LengthRule) =>
-    t("charPreset.option", {
-      name,
-      basis: t(charCountBasisLabelKey(r.char_count_basis)),
-      count: r.episode_char_target.toLocaleString(localeForLanguage(language)),
-    });
+  const optionLabel = (name: string, r: LengthRule) => {
+    const n = (v: number) => v.toLocaleString(localeForLanguage(language));
+    const basis = t(charCountBasisLabelKey(r.char_count_basis));
+    if (r.episode_char_min > 0 && r.episode_char_max > 0) {
+      return t("charPreset.optionRange", { name, basis, min: n(r.episode_char_min), max: n(r.episode_char_max) });
+    }
+    if (r.episode_char_min > 0) return t("charPreset.optionMin", { name, basis, min: n(r.episode_char_min) });
+    if (r.episode_char_max > 0) return t("charPreset.optionMax", { name, basis, max: n(r.episode_char_max) });
+    return t("charPreset.option", { name, basis, count: n(r.episode_char_target) });
+  };
 
   /** Runs work with the picker busy; false if it failed. */
   const run = async (work: () => Promise<void>): Promise<boolean> => {
@@ -80,6 +84,8 @@ export function CharCountPresetPicker({ project, onProjectChanged }: Readonly<Pr
         id: project.id,
         char_count_basis: next.char_count_basis,
         episode_char_target: next.episode_char_target,
+        episode_char_min: next.episode_char_min,
+        episode_char_max: next.episode_char_max,
       });
       onProjectChanged?.(updated);
     });
@@ -119,13 +125,13 @@ export function CharCountPresetPicker({ project, onProjectChanged }: Readonly<Pr
           <option value="" disabled>{t("charPreset.custom")}</option>
           <optgroup label={t("charPreset.builtinGroup")}>
             {BUILTIN_CHAR_COUNT_PRESETS.map((p) => (
-              <option key={p.id} value={`builtin:${p.id}`}>{optionLabel(t(p.nameKey), p)}</option>
+              <option key={p.id} value={`builtin:${p.id}`}>{optionLabel(t(p.nameKey), lengthRuleOf(p))}</option>
             ))}
           </optgroup>
           {userPresets.length > 0 && (
             <optgroup label={t("charPreset.userGroup")}>
               {userPresets.map((p) => (
-                <option key={p.id} value={`user:${p.id}`}>{optionLabel(p.name, p)}</option>
+                <option key={p.id} value={`user:${p.id}`}>{optionLabel(p.name, lengthRuleOf(p))}</option>
               ))}
             </optgroup>
           )}

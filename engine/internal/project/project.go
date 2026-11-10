@@ -16,6 +16,12 @@ const (
 	OutlinePresetWebNovel = "webnovel"
 
 	DefaultEpisodeCharTarget = 5000
+
+	// A new web novel starts on the length Korean serial sites and contests
+	// ask for: at least 5,000 characters with spaces, aiming a little past it
+	// so an agent told "about the target" does not land under the minimum.
+	DefaultWebnovelEpisodeCharMin    = 5000
+	DefaultWebnovelEpisodeCharTarget = 5300
 )
 
 func ValidLengthTarget(v string) bool {
@@ -57,6 +63,10 @@ type Project struct {
 	Outline           string   `json:"outline"`
 	OutlinePreset     string   `json:"outline_preset"`
 	EpisodeCharTarget int      `json:"episode_char_target"`
+	// EpisodeCharMin and EpisodeCharMax bound an episode's length under the
+	// work's basis; 0 means no bound. EpisodeCharTarget lies between them.
+	EpisodeCharMin int `json:"episode_char_min"`
+	EpisodeCharMax int `json:"episode_char_max"`
 	// CharCountBasis is how the work counts characters: charcount.WithSpaces
 	// or charcount.WithoutSpaces. WordCount and every scene's count follow it.
 	CharCountBasis   string  `json:"char_count_basis"`
@@ -95,6 +105,8 @@ type UpdateInput struct {
 	Outline           *string   `json:"outline,omitempty"`
 	OutlinePreset     *string   `json:"outline_preset,omitempty"`
 	EpisodeCharTarget *int      `json:"episode_char_target,omitempty"`
+	EpisodeCharMin    *int      `json:"episode_char_min,omitempty"`
+	EpisodeCharMax    *int      `json:"episode_char_max,omitempty"`
 	CharCountBasis    *string   `json:"char_count_basis,omitempty"`
 	Synopsis          *string   `json:"synopsis,omitempty"`
 }

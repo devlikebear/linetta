@@ -40,6 +40,8 @@ type ProjectMeta struct {
 	Synopsis          string   `yaml:"synopsis,omitempty" json:"synopsis,omitempty"`
 	Outline           string   `yaml:"outline,omitempty" json:"outline,omitempty"`
 	EpisodeCharTarget int      `yaml:"episode_char_target,omitempty" json:"episode_char_target,omitempty"`
+	EpisodeCharMin    int      `yaml:"episode_char_min,omitempty" json:"episode_char_min,omitempty"`
+	EpisodeCharMax    int      `yaml:"episode_char_max,omitempty" json:"episode_char_max,omitempty"`
 	CharCountBasis    string   `yaml:"char_count_basis,omitempty" json:"char_count_basis,omitempty"`
 }
 

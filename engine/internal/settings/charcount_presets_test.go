@@ -24,7 +24,7 @@ func TestCharCountPresets_setPersistsAndReloads(t *testing.T) {
 
 	presets := []CharCountPreset{
 		{ID: "a", Name: "  내 공모전  ", CharCountBasis: "without_spaces", EpisodeCharTarget: 4000},
-		{ID: "b", Name: "연재처", CharCountBasis: "with_spaces", EpisodeCharTarget: 5500},
+		{ID: "b", Name: "연재처", CharCountBasis: "with_spaces", EpisodeCharMin: 5000, EpisodeCharTarget: 5500, EpisodeCharMax: 6000},
 	}
 	got, err := s.Set(ctx, Patch{CharCountPresets: &presets})
 	if err != nil {
@@ -32,7 +32,7 @@ func TestCharCountPresets_setPersistsAndReloads(t *testing.T) {
 	}
 	want := []CharCountPreset{
 		{ID: "a", Name: "내 공모전", CharCountBasis: "without_spaces", EpisodeCharTarget: 4000},
-		{ID: "b", Name: "연재처", CharCountBasis: "with_spaces", EpisodeCharTarget: 5500},
+		{ID: "b", Name: "연재처", CharCountBasis: "with_spaces", EpisodeCharMin: 5000, EpisodeCharTarget: 5500, EpisodeCharMax: 6000},
 	}
 	if !reflect.DeepEqual(got.CharCountPresets, want) {
 		t.Fatalf("Set returned %v, want %v", got.CharCountPresets, want)
@@ -74,14 +74,17 @@ func TestCharCountPresets_setRefusesInvalidList(t *testing.T) {
 		tooMany[i].ID = strings.Repeat("x", i+1)
 	}
 	cases := map[string][]CharCountPreset{
-		"no id":         {{Name: "이름", CharCountBasis: "with_spaces", EpisodeCharTarget: 5000}},
-		"blank name":    {{ID: "a", Name: "   ", CharCountBasis: "with_spaces", EpisodeCharTarget: 5000}},
-		"long name":     {{ID: "a", Name: strings.Repeat("가", MaxCharCountPresetNameRunes+1), CharCountBasis: "with_spaces", EpisodeCharTarget: 5000}},
-		"unknown basis": {{ID: "a", Name: "이름", CharCountBasis: "bytes", EpisodeCharTarget: 5000}},
-		"zero target":   {{ID: "a", Name: "이름", CharCountBasis: "with_spaces", EpisodeCharTarget: 0}},
-		"huge target":   {{ID: "a", Name: "이름", CharCountBasis: "with_spaces", EpisodeCharTarget: MaxCharCountPresetTarget + 1}},
-		"duplicate ids": {ok, ok},
-		"too many":      tooMany,
+		"no id":            {{Name: "이름", CharCountBasis: "with_spaces", EpisodeCharTarget: 5000}},
+		"blank name":       {{ID: "a", Name: "   ", CharCountBasis: "with_spaces", EpisodeCharTarget: 5000}},
+		"long name":        {{ID: "a", Name: strings.Repeat("가", MaxCharCountPresetNameRunes+1), CharCountBasis: "with_spaces", EpisodeCharTarget: 5000}},
+		"unknown basis":    {{ID: "a", Name: "이름", CharCountBasis: "bytes", EpisodeCharTarget: 5000}},
+		"zero target":      {{ID: "a", Name: "이름", CharCountBasis: "with_spaces", EpisodeCharTarget: 0}},
+		"huge target":      {{ID: "a", Name: "이름", CharCountBasis: "with_spaces", EpisodeCharTarget: MaxCharCountPresetTarget + 1}},
+		"min past target":  {{ID: "a", Name: "이름", CharCountBasis: "with_spaces", EpisodeCharMin: 6000, EpisodeCharTarget: 5000}},
+		"max under target": {{ID: "a", Name: "이름", CharCountBasis: "with_spaces", EpisodeCharTarget: 5000, EpisodeCharMax: 4000}},
+		"negative min":     {{ID: "a", Name: "이름", CharCountBasis: "with_spaces", EpisodeCharMin: -1, EpisodeCharTarget: 5000}},
+		"duplicate ids":    {ok, ok},
+		"too many":         tooMany,
 	}
 	for name, list := range cases {
 		if _, err := s.Set(ctx, Patch{CharCountPresets: &list}); err == nil {

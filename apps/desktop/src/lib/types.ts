@@ -13,6 +13,10 @@ export interface Project {
   outline: string;
   outline_preset?: OutlinePreset;
   episode_char_target: number;
+  /** The shortest and longest an episode may run under the work's basis; 0 or
+   *  absent (an older engine) means no bound. */
+  episode_char_min?: number;
+  episode_char_max?: number;
   /** How the work counts characters; scenes' and the work's word_count follow it. */
   char_count_basis?: CharCountBasis;
   synopsis: string;
@@ -29,6 +33,8 @@ export interface UpdateProjectInput {
   outline?: string;
   outline_preset?: OutlinePreset;
   episode_char_target?: number;
+  episode_char_min?: number;
+  episode_char_max?: number;
   char_count_basis?: CharCountBasis;
   synopsis?: string;
   style_notes?: string;
@@ -886,12 +892,15 @@ export type PalettePreference = "hanji" | "paper" | "bone" | "press";
 export type PlatformProfileId = "plain" | "munpia" | "series" | "joara";
 
 /** A saved length rule applied to a work in one step: the basis a site or
- *  contest counts in and one episode's length under it. */
+ *  contest counts in, one episode's target length under it, and the bounds
+ *  ("5,000자 이상", "4,500~5,500자"; 0 or absent = none). */
 export interface CharCountPreset {
   id: string;
   name: string;
   char_count_basis: CharCountBasis;
   episode_char_target: number;
+  episode_char_min?: number;
+  episode_char_max?: number;
 }
 
 /** One switchable tool group's share of the budget: how many tools it adds

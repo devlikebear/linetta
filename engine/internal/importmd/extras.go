@@ -62,6 +62,21 @@ func RestoreProjectDetails(ctx context.Context, pr *project.Repo, now int64, met
 	if pm.EpisodeCharTarget > 0 {
 		in.EpisodeCharTarget = ptrutil.To(pm.EpisodeCharTarget)
 	}
+	// A file from before the bounds existed has neither, and the work comes
+	// back with none, as it was. Bounds that do not fit the target are
+	// skipped like any other bad field rather than failing the import.
+	if pm.EpisodeCharMin != 0 || pm.EpisodeCharMax != 0 {
+		target := res.Project.EpisodeCharTarget
+		if pm.EpisodeCharTarget > 0 {
+			target = pm.EpisodeCharTarget
+		}
+		if charcount.ValidEpisodeRange(pm.EpisodeCharMin, target, pm.EpisodeCharMax) {
+			in.EpisodeCharMin = ptrutil.To(pm.EpisodeCharMin)
+			in.EpisodeCharMax = ptrutil.To(pm.EpisodeCharMax)
+		} else {
+			res.Warnings = append(res.Warnings, WarnProjectFieldSkipped+":episode_char_range")
+		}
+	}
 	if charcount.Valid(pm.CharCountBasis) {
 		in.CharCountBasis = ptrutil.To(pm.CharCountBasis)
 	}

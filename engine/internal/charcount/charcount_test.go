@@ -43,3 +43,25 @@ func TestUnknownBasisCountsWithSpaces(t *testing.T) {
 		t.Fatal("Valid accepts exactly the two bases")
 	}
 }
+
+func TestValidEpisodeRange(t *testing.T) {
+	for _, tc := range []struct {
+		min, target, max int
+		want             bool
+	}{
+		{0, 5000, 0, true},
+		{5000, 5000, 0, true},
+		{5000, 5300, 0, true},
+		{4500, 5000, 5500, true},
+		{0, 5500, 5500, true},
+		{5000, 4999, 0, false},
+		{0, 5501, 5500, false},
+		{6000, 6000, 5000, false},
+		{0, 0, 0, false},
+		{-1, 5000, 0, false},
+	} {
+		if got := ValidEpisodeRange(tc.min, tc.target, tc.max); got != tc.want {
+			t.Errorf("ValidEpisodeRange(%d, %d, %d) = %v, want %v", tc.min, tc.target, tc.max, got, tc.want)
+		}
+	}
+}

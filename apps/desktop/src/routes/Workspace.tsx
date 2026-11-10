@@ -2205,6 +2205,8 @@ export function Workspace() {
           canUndoRepair={Boolean(outlineUndoSnapshot)}
           outlinePresetId={outlinePresetId}
           episodeCharTarget={episodeCharTarget}
+          episodeCharMin={load?.project.episode_char_min ?? 0}
+          episodeCharMax={load?.project.episode_char_max ?? 0}
           onOutlinePresetChange={handleOutlinePresetChange}
           tourTarget="workspace-outline"
           onOpenForecasts={() => {

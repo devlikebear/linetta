@@ -248,6 +248,24 @@
   background: var(--t-teal);
 }
 
+/* Under the work's minimum: the episode is not ready for a site or contest. */
+.episode-meter-fill.is-short {
+  background: var(--warn);
+}
+
+/* Past the maximum: worth knowing, rarely a problem, so it stays quiet. */
+.episode-meter-fill.is-long {
+  background: var(--muted-2);
+}
+
+.episode-delta {
+  margin-left: 4px;
+}
+
+.episode-progress.is-short .episode-delta {
+  color: var(--warn);
+}
+
 /* The picture that stands for a node (illustration Phase 4). */
 .representative-thumb {
   width: 18px;
