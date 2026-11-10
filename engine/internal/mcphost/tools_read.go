@@ -11,7 +11,9 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
+	"github.com/devlikebear/linetta/engine/internal/charcount"
 	"github.com/devlikebear/linetta/engine/internal/entity"
+	"github.com/devlikebear/linetta/engine/internal/episode"
 	"github.com/devlikebear/linetta/engine/internal/export"
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/illustref"
@@ -88,14 +90,24 @@ type outlineRow struct {
 	Status          string `json:"status"`
 	WordCount       int    `json:"word_count"`
 	HasFreshSummary bool   `json:"has_fresh_summary"`
+	// On an episode's row, in a work that bounds episode length: the
+	// episode's scenes added up, and where that stands against the bounds
+	// (charcount.JudgeEpisode).
+	EpisodeChars *int   `json:"episode_chars,omitempty"`
+	LengthState  string `json:"length_state,omitempty"`
+	LengthDelta  int    `json:"length_delta,omitempty"`
 }
 
 type getOutlineOutput struct {
-	ProjectID  string       `json:"project_id"`
-	Title      string       `json:"title"`
-	Outline    []outlineRow `json:"outline"`
-	Total      int          `json:"total"`
-	NextCursor string       `json:"next_cursor,omitempty"`
+	ProjectID string `json:"project_id"`
+	Title     string `json:"title"`
+	// The work's episode length bounds, in its character count basis; the
+	// rows' length_state is judged against them.
+	EpisodeCharMin int          `json:"episode_char_min,omitempty"`
+	EpisodeCharMax int          `json:"episode_char_max,omitempty"`
+	Outline        []outlineRow `json:"outline"`
+	Total          int          `json:"total"`
+	NextCursor     string       `json:"next_cursor,omitempty"`
 }
 
 // ---------- linetta_get_story_context ----------
@@ -344,7 +356,8 @@ func (d ToolDeps) registerReadTools(s *mcp.Server, groups ToolGroups) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_get_outline",
 		Description: "Return the work's outline tree: parts, chapters, and scenes with their node ids, " +
-			"status, and word counts. Use it to locate the scene you need to read or write.",
+			"status, and word counts. Use it to locate the scene you need to read or write. An episode row's " +
+			"length_state short/long: under/over the work's episode_char_min/max by length_delta.",
 	}, record(d, "linetta_get_outline", d.getOutline))
 
 	mcp.AddTool(s, &mcp.Tool{
@@ -543,8 +556,37 @@ func (d ToolDeps) getOutline(ctx context.Context, _ *mcp.CallToolRequest, in get
 	if err != nil {
 		return toolErr("could not read the outline: %v", err), getOutlineOutput{}, nil
 	}
-	page, next, total := pageRows(outlineRows(all), in.Cursor, pageMaxRunes)
-	return nil, getOutlineOutput{ProjectID: p.ID, Title: p.Title, Outline: page, Total: total, NextCursor: next}, nil
+	rows := outlineRows(all)
+	if p.EpisodeCharMin > 0 || p.EpisodeCharMax > 0 {
+		judgeEpisodeRows(rows, all, p)
+	}
+	page, next, total := pageRows(rows, in.Cursor, pageMaxRunes)
+	return nil, getOutlineOutput{ProjectID: p.ID, Title: p.Title, EpisodeCharMin: p.EpisodeCharMin,
+		EpisodeCharMax: p.EpisodeCharMax, Outline: page, Total: total, NextCursor: next}, nil
+}
+
+// judgeEpisodeRows fills in each episode row's length. A work with no
+// episode structure is one story, not an episode, and is left alone.
+func judgeEpisodeRows(rows []outlineRow, all []node.Node, p project.Project) {
+	eps := episode.FromNodes(all, p.OutlinePreset)
+	if len(eps) == 1 && eps[0].Whole {
+		return
+	}
+	counts := episode.WordCounts(all)
+	byID := make(map[string]int, len(eps))
+	for _, ep := range eps {
+		byID[ep.NodeID] = episode.Chars(ep, counts)
+	}
+	for i := range rows {
+		chars, ok := byID[rows[i].NodeID]
+		if !ok {
+			continue
+		}
+		judged := charcount.JudgeEpisode(chars, p.EpisodeCharMin, p.EpisodeCharMax)
+		rows[i].EpisodeChars = &chars
+		rows[i].LengthState = judged.State
+		rows[i].LengthDelta = judged.Delta
+	}
 }
 
 func entityMatches(e entity.Entity, query string) bool {

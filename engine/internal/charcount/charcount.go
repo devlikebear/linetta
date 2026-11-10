@@ -6,6 +6,7 @@ package charcount
 
 import (
 	"encoding/json"
+	"strconv"
 	"unicode"
 )
 
@@ -101,4 +102,57 @@ func ValidEpisodeRange(min, target, max int) bool {
 		return false
 	}
 	return true
+}
+
+// Episode length states, the same four the desktop gauge shows
+// (apps/desktop/src/lib/episodeLength.ts).
+const (
+	// LengthShort is an episode under the work's minimum.
+	LengthShort = "short"
+	// LengthOK is an episode within the bounds the work sets.
+	LengthOK = "ok"
+	// LengthLong is an episode over the work's maximum.
+	LengthLong = "long"
+	// LengthProgress is an episode in a work with no minimum: it is only on
+	// its way to the target, and nothing says it is too short.
+	LengthProgress = "progress"
+)
+
+// EpisodeLength is where an episode of some length stands against the
+// work's rule.
+type EpisodeLength struct {
+	State string `json:"state"`
+	// Delta is how far under the minimum (negative) or over the maximum
+	// (positive) the episode is; 0 otherwise.
+	Delta int `json:"delta,omitempty"`
+}
+
+// JudgeEpisode judges an episode of chars characters. Reaching a bound
+// exactly is within it. episodeLength.test.ts holds the same cases, so the
+// gauge and the agent's warnings agree.
+func JudgeEpisode(chars, min, max int) EpisodeLength {
+	if max > 0 && chars > max {
+		return EpisodeLength{State: LengthLong, Delta: chars - max}
+	}
+	if min > 0 {
+		if chars < min {
+			return EpisodeLength{State: LengthShort, Delta: chars - min}
+		}
+		return EpisodeLength{State: LengthOK}
+	}
+	return EpisodeLength{State: LengthProgress}
+}
+
+// Group writes n with thousands separators ("5,300"), the way briefs and
+// warnings show lengths.
+func Group(n int) string {
+	sign := ""
+	if n < 0 {
+		sign, n = "-", -n
+	}
+	s := strconv.Itoa(n)
+	for i := len(s) - 3; i > 0; i -= 3 {
+		s = s[:i] + "," + s[i:]
+	}
+	return sign + s
 }
