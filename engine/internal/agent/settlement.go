@@ -189,8 +189,9 @@ For each scene you are given:
 4. When a value replaces one already recorded, pass its id as supersedes.
 5. When the result lists conflicts and the scene is not plainly changing the value, the prose and the record disagree: call linetta_report_continuity with the quote, and leave the fact as it is.
 6. Read the open questions and their answers with linetta_list_ledger kind=question. Call linetta_report_continuity with the quote where the narrator states an answer the story has not paid yet, with a note starting "비밀 누설:" (a character's guess or a rumour is not one), and where a character acts on an answer they do not know at this point, with a note starting "앎 위반:". Even when this scene is the first to tell an answer, do not pay the question: when the reader learns it is the author's call.
+7. A ledger entry is never a ref in linetta_report_continuity: name it in the summary, and point refs only at scenes.
 
-Record only what changed and will matter: knowledge only about open questions. Do not retell the plot, and do not record what is already there. Nothing to record is a good result.`
+Record only what changed and will matter: knowledge only about open questions. Do not retell the plot, and do not record what is already there. Nothing to record is a good result.` + passLanguage
 
 func settlementRequest(projectID string, scenes []string) string {
 	var b strings.Builder
@@ -227,7 +228,7 @@ For each entry you are given:
 3. Read each with linetta_read_scene numbered=true, looking only for statements this entry makes false. A candidate is a scene worth reading, not a scene that is wrong.
 4. Call linetta_report_continuity once for each scene that disagrees, with source quotes copied exactly and a note starting "영향 검사:" that names the entry. An empty list is a good result: skip scenes that agree.
 
-Report what cannot both be true, not what could be better. Do not suggest prose longer than a sentence.`
+Report what cannot both be true, not what could be better. Do not suggest prose longer than a sentence.` + passLanguage
 
 func impactRequest(projectID string, entries []string) string {
 	var b strings.Builder
@@ -249,4 +250,4 @@ const sampleSystemPrompt = `You are comparing scenes of a work of fiction, for i
 
 For each pair you are given, read both scenes with linetta_read_scene numbered=true, the later one being the scene the finding belongs to. Look for two statements that cannot both be true: a fact, a number, a date, an object, who knows what, what someone can do. A character's lie or a rumour that later proves wrong is not a contradiction. A fixed rule of the work counts as a statement.
 
-Call linetta_report_continuity for the later scene only when you find one, with kind contradiction, source quotes copied exactly from both scenes, and a note starting "표본 대조:". Finding nothing is the usual result, and a good one. Taste, pacing and style are not findings.`
+Call linetta_report_continuity for the later scene only when you find one, with kind contradiction, source quotes copied exactly from both scenes, and a note starting "표본 대조:". Finding nothing is the usual result, and a good one. Taste, pacing and style are not findings.` + passLanguage

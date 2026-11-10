@@ -118,6 +118,8 @@ func SaveLedgerEntry(repo *ledger.Repo, now Clock) rpc.Handler {
 			{&e.Attribute, in.Attribute}, {&e.Strength, in.Strength},
 			{&e.PlantedNodeID, in.PlantedNodeID}, {&e.ValidToNodeID, in.ValidToNodeID},
 			{&e.Answer, in.Answer}, {&e.About, in.About},
+			{&e.Status, in.Status}, {&e.Reach, in.Reach}, {&e.PlantedQuote, in.PlantedQuote},
+			{&e.DueNodeID, in.DueNodeID}, {&e.PaidNodeID, in.PaidNodeID}, {&e.PaidQuote, in.PaidQuote},
 		} {
 			if f.from != nil {
 				*f.to = *f.from

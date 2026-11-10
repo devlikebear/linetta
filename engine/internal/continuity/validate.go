@@ -126,6 +126,11 @@ func validateOne(add func(idx int, format string, args ...any), num int, obs Obs
 	}
 }
 
+// ledgerRefHint follows a ref that names nothing in the work. The passes that
+// read the ledger reach for its entry ids here, and a ledger entry is not a
+// ref: measured on a real model (2026-11-09), it cost 7 of 29 pass calls.
+const ledgerRefHint = ". A ledger entry (an id from linetta_list_ledger) is not a ref: name it in the summary, or point at the scene that set it with type scene"
+
 func validateRef(add func(idx int, format string, args ...any), num, refIdx int, ref Ref, lookup RefLookup) {
 	idx := num - 1
 	if !ValidRefType(ref.Type) {
@@ -139,12 +144,12 @@ func validateRef(add func(idx int, format string, args ...any), num, refIdx int,
 	switch ref.Type {
 	case RefTypeEntity:
 		if lookup == nil || !lookup.HasEntity(ref.ID) {
-			add(idx, "observation %d ref %d: entity %q not found in this work; check it with linetta_list_characters",
+			add(idx, "observation %d ref %d: entity %q not found in this work; check it with linetta_list_characters"+ledgerRefHint,
 				num, refIdx, ref.ID)
 		}
 	case RefTypeFact:
 		if lookup == nil || !lookup.HasFact(ref.ID) {
-			add(idx, "observation %d ref %d: fact %q not found in this work; check it with linetta_get_fact_cards",
+			add(idx, "observation %d ref %d: fact %q not found in this work; check it with linetta_get_fact_cards"+ledgerRefHint,
 				num, refIdx, ref.ID)
 		}
 	case RefTypeBeat:
