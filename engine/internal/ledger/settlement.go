@@ -2,10 +2,13 @@ package ledger
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 
+	"github.com/devlikebear/linetta/engine/internal/manuscript"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/store"
 )
@@ -63,24 +66,41 @@ func (r *Settlements) Version(ctx context.Context, nodeID string) (int, error) {
 
 // Record keeps how the pass over one scene at version ended. A done already on
 // record for the same version is not overwritten by a later pass that did not
-// finish: the scene stays settled.
+// finish: the scene stays settled. The hash of the prose is kept only when the
+// scene is still at version: if it moved on during the pass, the words the
+// pass read are gone and only the version can say what was settled.
 func (r *Settlements) Record(ctx context.Context, projectID, nodeID string, version int, outcome string, now int64) error {
 	if !ValidSettlementOutcome(outcome) {
 		return fmt.Errorf("ledger: unknown settlement outcome %q", outcome)
 	}
+	hash := ""
+	if n, err := r.nodes.Get(ctx, nodeID); err == nil && n.ContentVersion == version {
+		hash = proseHash(n.ContentDoc)
+	}
 	_, err := r.s.DB().ExecContext(ctx, `
-INSERT INTO scene_settlements (node_id, project_id, content_version, outcome, settled_at)
-VALUES (?, ?, ?, ?, ?)
+INSERT INTO scene_settlements (node_id, project_id, content_version, outcome, settled_at, text_hash)
+VALUES (?, ?, ?, ?, ?, ?)
 ON CONFLICT(node_id) DO UPDATE SET
   project_id = excluded.project_id,
   content_version = excluded.content_version,
   outcome = excluded.outcome,
-  settled_at = excluded.settled_at
+  settled_at = excluded.settled_at,
+  text_hash = excluded.text_hash
 WHERE NOT (scene_settlements.outcome = 'done'
            AND scene_settlements.content_version = excluded.content_version
            AND excluded.outcome <> 'done')`,
-		nodeID, projectID, version, outcome, now)
+		nodeID, projectID, version, outcome, now, hash)
 	return err
+}
+
+// proseHash identifies a scene's words, not its document: relinking a name as
+// a mention changes the document but reads the same, so it hashes the same.
+func proseHash(doc *string) string {
+	if doc == nil {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(manuscript.DocToPlainText(*doc)))
+	return hex.EncodeToString(sum[:])
 }
 
 // Settled is the last outcome on record for nodeID, and the version it was for.
@@ -95,7 +115,9 @@ func (r *Settlements) Settled(ctx context.Context, nodeID string) (outcome strin
 
 // Pending lists, in story order, the scenes before beforeNodeID that have
 // prose, were written or changed since settlement was switched on, and whose
-// current version was never settled done. An empty beforeNodeID, or one that
+// current words were never settled done. A scene whose version moved on but
+// whose words read the same as when it was settled (its names relinked as
+// mentions, say) is not waiting. An empty beforeNodeID, or one that
 // is not in the work, asks about the whole work. Nothing is pending while
 // settlement is off.
 func (r *Settlements) Pending(ctx context.Context, projectID, beforeNodeID string) ([]string, error) {
@@ -128,7 +150,7 @@ func (r *Settlements) Pending(ctx context.Context, projectID, beforeNodeID strin
 		if n.WordCount == 0 || n.UpdatedAt < since {
 			continue
 		}
-		if v, ok := done[n.ID]; ok && v == n.ContentVersion {
+		if d, ok := done[n.ID]; ok && (d.version == n.ContentVersion || (d.hash != "" && d.hash == proseHash(n.ContentDoc))) {
 			continue
 		}
 		out = append(out, n.ID)
@@ -136,22 +158,28 @@ func (r *Settlements) Pending(ctx context.Context, projectID, beforeNodeID strin
 	return out, nil
 }
 
-// doneVersions maps each scene settled done to the version it was settled at.
-func (r *Settlements) doneVersions(ctx context.Context, projectID string) (map[string]int, error) {
+type settledAt struct {
+	version int
+	hash    string
+}
+
+// doneVersions maps each scene settled done to the version and words it was
+// settled at.
+func (r *Settlements) doneVersions(ctx context.Context, projectID string) (map[string]settledAt, error) {
 	rows, err := r.s.DB().QueryContext(ctx,
-		`SELECT node_id, content_version FROM scene_settlements WHERE project_id = ? AND outcome = 'done'`, projectID)
+		`SELECT node_id, content_version, text_hash FROM scene_settlements WHERE project_id = ? AND outcome = 'done'`, projectID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	out := map[string]int{}
+	out := map[string]settledAt{}
 	for rows.Next() {
 		var id string
-		var v int
-		if err := rows.Scan(&id, &v); err != nil {
+		var d settledAt
+		if err := rows.Scan(&id, &d.version, &d.hash); err != nil {
 			return nil, err
 		}
-		out[id] = v
+		out[id] = d
 	}
 	return out, rows.Err()
 }
