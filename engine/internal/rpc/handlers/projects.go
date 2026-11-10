@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/devlikebear/linetta/engine/internal/charcount"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
@@ -112,6 +113,43 @@ func SubmissionCheck(projects *project.Repo, nodes *node.Repo) rpc.Handler {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
 		return json.Marshal(submission.Check(all, proj))
+	}
+}
+
+// ManuscriptPagesResult is a work's rough length in 200-character manuscript
+// sheets (episode-length Phase 4).
+type ManuscriptPagesResult struct {
+	Lines int `json:"lines"`
+	Pages int `json:"pages"`
+}
+
+// ManuscriptPages returns a handler for projects.manuscript_pages: every
+// scene's manuscript lines added up, then turned into sheets, so scenes run
+// on from one another the way a submitted manuscript does.
+func ManuscriptPages(projects *project.Repo, nodes *node.Repo) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p idParam
+		if err := json.Unmarshal(params, &p); err != nil || p.ID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id required"}
+		}
+		proj, err := projects.Get(ctx, p.ID)
+		if errors.Is(err, project.ErrNotFound) {
+			return nil, rpc.NotFound(rpc.ReasonProjectNotFound, "project not found")
+		}
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		all, err := nodes.ListByProject(ctx, proj.ID)
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		lines := 0
+		for _, n := range all {
+			if n.Kind == node.KindLeaf && n.ContentDoc != nil {
+				lines += charcount.ManuscriptLines([]byte(*n.ContentDoc))
+			}
+		}
+		return json.Marshal(ManuscriptPagesResult{Lines: lines, Pages: charcount.ManuscriptPages(lines)})
 	}
 }
 

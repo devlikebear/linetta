@@ -2,6 +2,7 @@ import { ScenePlanField } from "./ScenePlanField";
 import { useEffect, useRef, useState } from "react";
 import type { CharCountBasis, NodeRow, Project, Entity, EntityKind } from "../lib/types";
 import { charCountBasisOf } from "../lib/charCount";
+import { ManuscriptPages } from "./ManuscriptPages";
 import { changesContinuity } from "../lib/agentTools";
 import { projects as projectsApi, continuity as continuityApi } from "../lib/rpc";
 import { PlotPanel } from "./PlotPanel";
@@ -318,6 +319,9 @@ export function ContextPanel({ project, node, charCount, todayChars = null, epis
                 <span>{pct}% / {Math.round(target / 1000)}k</span>
               )}
             </div>
+            {!isWebnovelProject && (
+              <ManuscriptPages projectId={project.id} refreshKey={`${statsRefreshKey ?? ""}:${project.word_count}`} />
+            )}
             {isWebnovelProject && (
               <div className="progress-meta episode-bounds-meta" data-testid="episode-bounds">
                 <span className="episode-target-meta">
