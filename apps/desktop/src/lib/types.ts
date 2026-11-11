@@ -2244,3 +2244,9 @@ export interface SubmissionReport {
   has_synopsis: boolean;
   ready: boolean;
 }
+
+/** A work's rough length in 200-character manuscript sheets (projects.manuscript_pages). */
+export interface ManuscriptPages {
+  lines: number;
+  pages: number;
+}

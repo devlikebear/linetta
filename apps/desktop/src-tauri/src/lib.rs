@@ -145,6 +145,7 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
     "projects.duplicate",
     "projects.get",
     "projects.list",
+    "projects.manuscript_pages",
     "projects.restore",
     "projects.submission_check",
     "projects.update",
