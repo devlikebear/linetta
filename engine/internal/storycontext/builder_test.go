@@ -17,6 +17,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/ptrutil"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
 
@@ -39,7 +40,7 @@ type ctxFixture struct {
 // engineapp does, so entity mentions land the way they do in the real app.
 func newCtxFixture(t *testing.T) *ctxFixture {
 	t.Helper()
-	s, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "test.db"))
+	s, err := storetest.Open(context.Background(), filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}

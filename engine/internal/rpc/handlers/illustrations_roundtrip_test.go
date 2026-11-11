@@ -20,7 +20,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
-	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 )
 
 type galleryImages struct{ repo *illustration.Repo }
@@ -46,7 +46,7 @@ type pictureLibrary struct {
 
 func openPictureLibrary(t *testing.T, name string) pictureLibrary {
 	t.Helper()
-	st, err := store.Open(context.Background(), filepath.Join(t.TempDir(), name))
+	st, err := storetest.Open(context.Background(), filepath.Join(t.TempDir(), name))
 	if err != nil {
 		t.Fatal(err)
 	}

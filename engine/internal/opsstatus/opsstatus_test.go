@@ -6,12 +6,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 )
 
 func newTestRepo(t *testing.T) *Repo {
 	t.Helper()
-	st, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "library.db"))
+	st, err := storetest.Open(context.Background(), filepath.Join(t.TempDir(), "library.db"))
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}

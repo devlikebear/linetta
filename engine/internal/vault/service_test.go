@@ -20,6 +20,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 	"github.com/devlikebear/linetta/engine/internal/vaultbundle"
 )
 
@@ -41,7 +42,7 @@ type device struct {
 func newDevice(t *testing.T, site *fakeSite) *device {
 	t.Helper()
 	home := t.TempDir()
-	st, err := store.Open(context.Background(), filepath.Join(home, "library.db"))
+	st, err := storetest.Open(context.Background(), filepath.Join(home, "library.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

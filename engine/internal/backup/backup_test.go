@@ -12,6 +12,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/backup"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 )
 
 // firstRunTimeout bounds the scheduler's immediate run, a real VACUUM INTO
@@ -22,7 +23,7 @@ func openSeededStore(t *testing.T) (*store.Store, string) {
 	t.Helper()
 	home := t.TempDir()
 	dbPath := filepath.Join(home, "library.db")
-	s, err := store.Open(context.Background(), dbPath)
+	s, err := storetest.Open(context.Background(), dbPath)
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}

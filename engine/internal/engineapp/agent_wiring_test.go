@@ -13,7 +13,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/agent"
 	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/mcphost"
-	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 )
 
 // The five agent.* registrations, the agent_available capability flag, and
@@ -269,7 +269,7 @@ func TestProductionAgentDepsCarryEveryCollaborator(t *testing.T) {
 // cut conversation carries replay_start, and it is not the conversation's first.
 func TestAgentHistory_marksWhereTheReplayBegins(t *testing.T) {
 	ctx := context.Background()
-	st, err := store.Open(ctx, t.TempDir()+"/test.db")
+	st, err := storetest.Open(ctx, t.TempDir()+"/test.db")
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}

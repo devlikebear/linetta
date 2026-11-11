@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/devlikebear/linetta/engine/internal/companion"
-	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 )
 
 // newTranscript opens a real on-disk store so the test exercises the actual
@@ -20,7 +20,7 @@ import (
 func newTranscript(t *testing.T) *transcript {
 	t.Helper()
 	ctx := context.Background()
-	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
+	st, err := storetest.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}

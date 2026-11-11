@@ -22,6 +22,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/thread"
 
 	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 )
 
 type forecastFix struct {
@@ -41,7 +42,7 @@ type forecastFix struct {
 func newForecastHandlerFixture(t *testing.T) forecastFix {
 	t.Helper()
 	ctx := context.Background()
-	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
+	st, err := storetest.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}

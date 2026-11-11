@@ -9,6 +9,7 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 )
 
 // seedHistory opens a real on-disk store under t.TempDir() and creates one
@@ -17,7 +18,7 @@ import (
 func seedHistory(t *testing.T) (context.Context, *History, *store.Store, string) {
 	t.Helper()
 	ctx := context.Background()
-	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
+	st, err := storetest.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}

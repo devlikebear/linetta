@@ -17,7 +17,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/ptrutil"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
-	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
 
@@ -34,7 +34,7 @@ type library struct {
 
 func openLibrary(t *testing.T, name string) library {
 	t.Helper()
-	st, err := store.Open(context.Background(), filepath.Join(t.TempDir(), name))
+	st, err := storetest.Open(context.Background(), filepath.Join(t.TempDir(), name))
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}

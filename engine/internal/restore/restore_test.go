@@ -25,6 +25,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 	"github.com/devlikebear/linetta/engine/internal/storyops"
 	"github.com/devlikebear/linetta/engine/internal/style"
 	"github.com/devlikebear/linetta/engine/internal/thread"
@@ -36,7 +37,7 @@ import (
 func TestMergeProjectFromBackup(t *testing.T) {
 	ctx := context.Background()
 	home := t.TempDir()
-	st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+	st, err := storetest.Open(ctx, filepath.Join(home, "library.db"))
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}
@@ -265,7 +266,7 @@ func TestMergeVisualsAndOlderBackup(t *testing.T) {
 		t.Run(fmt.Sprint(old), func(t *testing.T) {
 			ctx := context.Background()
 			home := t.TempDir()
-			st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+			st, err := storetest.Open(ctx, filepath.Join(home, "library.db"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -299,7 +300,7 @@ func TestMergeVisualsAndOlderBackup(t *testing.T) {
 			if _, err := st.DB().ExecContext(ctx, "VACUUM INTO ?", backupPath); err != nil {
 				t.Fatal(err)
 			}
-			live, err := store.Open(ctx, filepath.Join(home, "live.db"))
+			live, err := storetest.Open(ctx, filepath.Join(home, "live.db"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -357,7 +358,7 @@ func TestMergeProjectCopiesStyleRules(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			ctx := context.Background()
 			home := t.TempDir()
-			st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+			st, err := storetest.Open(ctx, filepath.Join(home, "library.db"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -380,7 +381,7 @@ func TestMergeProjectCopiesStyleRules(t *testing.T) {
 			if _, err := st.DB().ExecContext(ctx, "VACUUM INTO ?", backupPath); err != nil {
 				t.Fatal(err)
 			}
-			live, err := store.Open(ctx, filepath.Join(home, "live.db"))
+			live, err := storetest.Open(ctx, filepath.Join(home, "live.db"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -412,7 +413,7 @@ func TestMergeProjectCopiesStyleRules(t *testing.T) {
 func TestMergeProjectCopiesDirection(t *testing.T) {
 	ctx := context.Background()
 	home := t.TempDir()
-	st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+	st, err := storetest.Open(ctx, filepath.Join(home, "library.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -444,7 +445,7 @@ func TestMergeProjectCopiesDirection(t *testing.T) {
 	if _, err := st.DB().ExecContext(ctx, "VACUUM INTO ?", backupPath); err != nil {
 		t.Fatal(err)
 	}
-	live, err := store.Open(ctx, filepath.Join(home, "live.db"))
+	live, err := storetest.Open(ctx, filepath.Join(home, "live.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -499,7 +500,7 @@ func TestMergeProjectCopiesDirection(t *testing.T) {
 func TestMergeProjectCopiesContinuity(t *testing.T) {
 	ctx := context.Background()
 	home := t.TempDir()
-	st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+	st, err := storetest.Open(ctx, filepath.Join(home, "library.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -581,7 +582,7 @@ func TestMergeProjectCopiesContinuity(t *testing.T) {
 	if _, err := st.DB().ExecContext(ctx, "VACUUM INTO ?", backupPath); err != nil {
 		t.Fatal(err)
 	}
-	live, err := store.Open(ctx, filepath.Join(home, "live.db"))
+	live, err := storetest.Open(ctx, filepath.Join(home, "live.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -656,7 +657,7 @@ func TestMergeProjectCopiesContinuity(t *testing.T) {
 func TestMergeProjectExcludesStoryProposals(t *testing.T) {
 	ctx := context.Background()
 	home := t.TempDir()
-	st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+	st, err := storetest.Open(ctx, filepath.Join(home, "library.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -692,7 +693,7 @@ func TestMergeProjectExcludesStoryProposals(t *testing.T) {
 	if _, err := st.DB().ExecContext(ctx, "VACUUM INTO ?", backupPath); err != nil {
 		t.Fatal(err)
 	}
-	live, err := store.Open(ctx, filepath.Join(home, "live.db"))
+	live, err := storetest.Open(ctx, filepath.Join(home, "live.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -728,7 +729,7 @@ func TestMergeProjectExcludesStoryProposals(t *testing.T) {
 func TestMergeProjectExcludesForecasts(t *testing.T) {
 	ctx := context.Background()
 	home := t.TempDir()
-	st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+	st, err := storetest.Open(ctx, filepath.Join(home, "library.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -767,7 +768,7 @@ func TestMergeProjectExcludesForecasts(t *testing.T) {
 	if _, err := st.DB().ExecContext(ctx, "VACUUM INTO ?", backupPath); err != nil {
 		t.Fatal(err)
 	}
-	live, err := store.Open(ctx, filepath.Join(home, "live.db"))
+	live, err := storetest.Open(ctx, filepath.Join(home, "live.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -790,7 +791,7 @@ func TestMergeProjectExcludesForecasts(t *testing.T) {
 func TestMergeProjectKeepsPinnedLedgerEntries(t *testing.T) {
 	ctx := context.Background()
 	home := t.TempDir()
-	st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+	st, err := storetest.Open(ctx, filepath.Join(home, "library.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -812,7 +813,7 @@ func TestMergeProjectKeepsPinnedLedgerEntries(t *testing.T) {
 	if _, err := st.DB().ExecContext(ctx, "VACUUM INTO ?", backupPath); err != nil {
 		t.Fatal(err)
 	}
-	live, err := store.Open(ctx, filepath.Join(home, "live.db"))
+	live, err := storetest.Open(ctx, filepath.Join(home, "live.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -833,7 +834,7 @@ func TestMergeProjectKeepsPinnedLedgerEntries(t *testing.T) {
 func TestMergeProjectRemapsWhatAFactPointsAt(t *testing.T) {
 	ctx := context.Background()
 	home := t.TempDir()
-	st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+	st, err := storetest.Open(ctx, filepath.Join(home, "library.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -860,7 +861,7 @@ func TestMergeProjectRemapsWhatAFactPointsAt(t *testing.T) {
 	if _, err := st.DB().ExecContext(ctx, "VACUUM INTO ?", backupPath); err != nil {
 		t.Fatal(err)
 	}
-	live, err := store.Open(ctx, filepath.Join(home, "live.db"))
+	live, err := storetest.Open(ctx, filepath.Join(home, "live.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -881,7 +882,7 @@ func TestMergeProjectRemapsWhatAFactPointsAt(t *testing.T) {
 func TestMergeProjectKeepsAnswersAndWhatAKnowsFactIsAbout(t *testing.T) {
 	ctx := context.Background()
 	home := t.TempDir()
-	st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+	st, err := storetest.Open(ctx, filepath.Join(home, "library.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -905,7 +906,7 @@ func TestMergeProjectKeepsAnswersAndWhatAKnowsFactIsAbout(t *testing.T) {
 	if _, err := st.DB().ExecContext(ctx, "VACUUM INTO ?", backupPath); err != nil {
 		t.Fatal(err)
 	}
-	live, err := store.Open(ctx, filepath.Join(home, "live.db"))
+	live, err := storetest.Open(ctx, filepath.Join(home, "live.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -936,7 +937,7 @@ func TestMergeProjectKeepsAnswersAndWhatAKnowsFactIsAbout(t *testing.T) {
 func TestMergeProjectCopiesSceneSettlements(t *testing.T) {
 	ctx := context.Background()
 	home := t.TempDir()
-	st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+	st, err := storetest.Open(ctx, filepath.Join(home, "library.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -967,7 +968,7 @@ func TestMergeProjectCopiesSceneSettlements(t *testing.T) {
 	if _, err := st.DB().ExecContext(ctx, "VACUUM INTO ?", backupPath); err != nil {
 		t.Fatal(err)
 	}
-	live, err := store.Open(ctx, filepath.Join(home, "live.db"))
+	live, err := storetest.Open(ctx, filepath.Join(home, "live.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
