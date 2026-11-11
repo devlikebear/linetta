@@ -53,6 +53,10 @@ vi.mock("./StatsSection", () => ({
   StatsSection: () => <div data-testid="stats-section" />,
 }));
 
+vi.mock("./ManuscriptPages", () => ({
+  ManuscriptPages: ({ projectId }: { projectId: string }) => <div data-testid="manuscript-pages" data-project-id={projectId} />,
+}));
+
 vi.mock("./DirectionSection", () => ({
   DirectionSection: ({
     projectId, nodeId, collapsed, onToggleCollapsed,
@@ -130,6 +134,13 @@ function renderContextPanel(props: Partial<ComponentProps<typeof ContextPanel>> 
 describe("ContextPanel", () => {
   const webnovel: Project = { ...project, outline_preset: "webnovel" };
   const saved = { id: "mine", name: "내 공모전", char_count_basis: "without_spaces" as const, episode_char_target: 3500 };
+
+  it("shows manuscript sheets on a work that is not a web novel, and not on a web novel", () => {
+    renderContextPanel();
+    expect(screen.getByTestId("manuscript-pages").getAttribute("data-project-id")).toBe("project-1");
+    cleanupAndRender({ project: webnovel });
+    expect(screen.queryByTestId("manuscript-pages")).toBeNull();
+  });
 
   it("offers length presets only on a webnovel work", () => {
     renderContextPanel();

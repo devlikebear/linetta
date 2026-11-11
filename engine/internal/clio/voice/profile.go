@@ -39,8 +39,8 @@ type ContextProfile struct {
 	Endings     map[string]float64 `json:"endings"`
 	Top         []EndingShare      `json:"top"`
 	PoliteShare float64            `json:"polite_share"`
-	// MixedShare is the share of posts with both a polite and a plain segment
-	// ending. Plain means a segment with a Hangul ending that is not polite.
+	// MixedShare is the share of posts with both a polite and a plain segment,
+	// as classified by Register.
 	MixedShare float64  `json:"mixed_share"`
 	Examples   []string `json:"examples"`
 }
@@ -80,13 +80,10 @@ func buildContext(key string, posts []post.Post) ContextProfile {
 		}
 		var hasPolite, hasPlain bool
 		for _, s := range Segments(p.Body) {
-			e := Ending(s)
-			if e == "" {
-				continue
-			}
-			if IsPolite(e) {
+			switch Register(s) {
+			case 1:
 				hasPolite = true
-			} else {
+			case -1:
 				hasPlain = true
 			}
 		}

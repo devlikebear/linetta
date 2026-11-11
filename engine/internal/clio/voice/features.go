@@ -6,6 +6,7 @@ package voice
 import (
 	"regexp"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -82,6 +83,23 @@ func Segments(post string) []string {
 	return out
 }
 
+// SegmentSpans returns the rune offsets [start, end) of each segment Segments
+// returns, in the same order and after the same whitespace trim.
+func SegmentSpans(post string) [][2]int {
+	var out [][2]int
+	for _, loc := range segmentRe.FindAllStringIndex(post, -1) {
+		raw := post[loc[0]:loc[1]]
+		if !hangulRe.MatchString(raw) {
+			continue
+		}
+		lead := len(raw) - len(strings.TrimLeftFunc(raw, unicode.IsSpace))
+		trimmed := strings.TrimSpace(raw)
+		start := utf8.RuneCountInString(post[:loc[0]+lead])
+		out = append(out, [2]int{start, start + utf8.RuneCountInString(trimmed)})
+	}
+	return out
+}
+
 // Ending is the last two Hangul letters of a segment, or "" with fewer than two.
 func Ending(seg string) string {
 	l := hangulRe.FindAllString(seg, -1)
@@ -99,6 +117,34 @@ func IsPolite(ending string) bool {
 		}
 	}
 	return false
+}
+
+// plainFinal are last syllables that end a 반말 sentence. A segment whose
+// ending is neither polite nor one of these (a noun phrase such as "새로 생긴
+// 것들", a list item) has no register.
+const plainFinal = "다냐자라네야어아지게래까군걸해돼봐줘써와거니든임음함"
+
+// listMarker opens a list item; list items carry no register.
+var listMarker = regexp.MustCompile(`^\s*(?:[-·•*▶→]|\d+[.)])`)
+
+// Register classifies a segment: 1 for 존댓말, -1 for 반말, 0 when it has no
+// register (no Hangul ending, a noun-phrase ending, or a list item).
+func Register(seg string) int {
+	if listMarker.MatchString(seg) {
+		return 0
+	}
+	e := Ending(seg)
+	if e == "" {
+		return 0
+	}
+	if IsPolite(e) {
+		return 1
+	}
+	last, _ := utf8.DecodeLastRuneInString(e)
+	if strings.ContainsRune(plainFinal, last) {
+		return -1
+	}
+	return 0
 }
 
 // Features counts one post. Rounding is left to callers.

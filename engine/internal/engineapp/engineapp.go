@@ -503,6 +503,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("projects.update", handlers.UpdateProject(projects, clock))
 	s.Handle("projects.clear_synopsis", handlers.ClearProjectSynopsis(projects, clock))
 	s.Handle("projects.submission_check", handlers.SubmissionCheck(projects, nodes))
+	s.Handle("projects.manuscript_pages", handlers.ManuscriptPages(projects, nodes))
 	s.Handle("nodes.get", handlers.GetNode(nodes))
 	s.Handle("nodes.update_content", handlers.UpdateNodeContent(nodes, clock, summ.Enqueue))
 	s.Handle("stats.today", handlers.TodayStats(writingStats))
