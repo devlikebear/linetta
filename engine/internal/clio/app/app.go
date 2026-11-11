@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/devlikebear/linetta/engine/internal/clio/draft"
 	"github.com/devlikebear/linetta/engine/internal/clio/handlers"
 	cliomigrations "github.com/devlikebear/linetta/engine/internal/clio/migrations"
 	"github.com/devlikebear/linetta/engine/internal/clio/post"
@@ -61,10 +62,18 @@ func Open(ctx context.Context, opts Options) (*App, error) {
 	posts := post.NewRepo(st)
 	a.server.Handle("ping", handlers.Ping)
 	a.server.Handle("posts.import_preview", handlers.ImportPreview())
-	a.server.Handle("posts.import", handlers.Import(posts))
+	voiceCache := handlers.NewVoiceCache(posts)
+	a.server.Handle("posts.import", voiceCache.InvalidateAfter(handlers.Import(posts)))
 	a.server.Handle("posts.list", handlers.ListPosts(posts))
 	a.server.Handle("posts.counts", handlers.CountPosts(posts))
 	a.server.Handle("voice.profile", handlers.VoiceProfile(posts))
+	drafts := draft.NewRepo(st)
+	a.server.Handle("drafts.create", handlers.CreateDraft(drafts))
+	a.server.Handle("drafts.get", handlers.GetDraft(drafts))
+	a.server.Handle("drafts.list", handlers.ListDrafts(drafts))
+	a.server.Handle("drafts.update", handlers.UpdateDraft(drafts))
+	a.server.Handle("drafts.delete", handlers.DeleteDraft(drafts))
+	a.server.Handle("check.run", handlers.RunCheck(voiceCache))
 	return a, nil
 }
 
