@@ -131,6 +131,43 @@ func TestElapsedJumpAgainstAnotherMeasureConflicts(t *testing.T) {
 	}
 }
 
+// A scene rewritten from "석 달" to "삼 년" replaces its own count, and the
+// settlement pass has been seen replacing an earlier scene's. Neither turns the
+// comparison off: the new count still answers to the scenes before it. Found by
+// the 2026-11-11 synthetic run.
+func TestReplacingAnElapsedCountStillComparesIt(t *testing.T) {
+	f := newTimeFixture(t, 8)
+	ev := f.event(t, 0, "등대지기 실종", nil)
+	first := f.elapsed(t, 1, 2, ev, 90, "석 달")
+	stale := f.elapsed(t, 2, 6, ev, 95, "아흔닷새")
+	rewritten := f.elapsed(t, 3, 6, ev, 1095, "삼 년")
+	if err := f.repo.Supersede(f.ctx, 4, stale.ID, rewritten); err != nil {
+		t.Fatal(err)
+	}
+	got, previous := f.compare(t, rewritten)
+	if len(got) != 0 || previous == nil || previous.EntryID != first.ID || previous.JumpDays != 1005 {
+		t.Fatalf("replacing its own count: conflicts %+v previous %+v", got, previous)
+	}
+
+	f.date(t, 5, 2, 100)
+	f.date(t, 5, 6, 112)
+	if got, _ := f.compare(t, rewritten); len(got) != 1 || !strings.Contains(got[0].Reason, "1,005일 늘었습니다") {
+		t.Fatalf("with both dates known: %+v", got)
+	}
+
+	g := newTimeFixture(t, 8)
+	ev = g.event(t, 0, "등대지기 실종", nil)
+	first = g.elapsed(t, 1, 2, ev, 90, "석 달")
+	earlier := g.elapsed(t, 2, 4, ev, 95, "아흔닷새")
+	later := g.elapsed(t, 3, 6, ev, 1095, "삼 년")
+	if err := g.repo.Supersede(g.ctx, 4, earlier.ID, later); err != nil {
+		t.Fatal(err)
+	}
+	if _, previous := g.compare(t, later); previous == nil || previous.EntryID != first.ID || previous.JumpDays != 1005 {
+		t.Fatalf("replacing an earlier scene's count: previous %+v", previous)
+	}
+}
+
 // Another event with a known date is a measure too.
 func TestElapsedFlowCanBeMeasuredFromAnotherEvent(t *testing.T) {
 	f := newTimeFixture(t, 8)

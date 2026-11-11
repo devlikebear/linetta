@@ -171,11 +171,11 @@ func (v timeView) compare(e Entry) ([]Conflict, *Previous) {
 	var prior *Entry
 	for i := range v.entries {
 		o := v.entries[i]
-		if o.ID == e.ID || !same(o) {
+		// The count e replaced is skipped, not taken as leave to skip the
+		// comparison: a scene rewritten from "석 달" to "삼 년" still has the
+		// scenes before it to answer to.
+		if o.ID == e.ID || !same(o) || o.SupersededBy == e.ID {
 			continue
-		}
-		if o.SupersededBy == e.ID {
-			return nil, nil
 		}
 		at := t.plantedAt(o)
 		if !measured(o) || at < 0 || at > cur || (at == cur && o.CreatedAt > e.CreatedAt) || !t.ordered(o, cur) {

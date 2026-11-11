@@ -76,10 +76,12 @@ TEMPLATES = [
 # date in days, and how long since the event each scene says. The contradiction
 # is #346's: three months, then three years when twelve days have passed by the
 # calendar the story keeps. The other moves on by as much as the story does.
+# The narrator says both: said by a character, the later one would be a mistake
+# or a lie, which the prompt and the ledger's soft facts both let stand.
 ELAPSED = [
     (True, "{b} 실종", [100, 112], "90", "1095",
      "장이 선 지 백 일째 되는 날이었다. {b}가 실종된 지 석 달이 지났다. {a}는 {place}에서 소식을 기다렸다.",
-     "열이틀 뒤 장이 다시 섰다. {a}는 {place}에서 {b}가 사라진 지 삼 년이 흘렀다고 중얼거렸다."),
+     "열이틀 뒤 장이 다시 섰다. {b}가 사라진 지 삼 년이 흘렀다. {a}는 {place}에서 여전히 소식을 기다렸다."),
     (False, "{b} 실종", [100, 190], "90", "180",
      "장이 선 지 백 일째 되는 날이었다. {b}가 실종된 지 석 달이 지났다. {a}는 {place}에서 소식을 기다렸다.",
      "다시 석 달이 흘렀다. {b}가 사라진 지 반년, {a}는 {place}를 떠나기로 했다."),
