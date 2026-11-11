@@ -12,29 +12,60 @@ concurrency:
   group: ci-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# `make ci` (plus `make audit`) is the verification contract; these jobs run
+# its parts side by side instead of one after another, so a run takes as long
+# as its slowest part — the Go suite under -race — rather than the sum.
+#
+# Every part runs on Linux. Windows is a shipped target whose debug build,
+# checkout, and platform-specific engine paths are not exercised anywhere
+# else (the release workflow only builds Windows in release mode), so it runs
+# the Go suite and the app build too. The static checks and the dependency
+# audit are platform-independent and run once.
 jobs:
-  test:
-    name: Test (${{ matrix.name }})
+  go:
+    name: Go (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Linux carries the dependency audit; it is platform-independent and
-          # there is no reason to pay for it twice.
           - name: Linux
             os: ubuntu-latest
-            audit: true
             go_test_flags: -race
-          # Windows is a shipped target whose debug build, checkout, and
-          # platform-specific engine paths are not exercised anywhere else:
-          # the release workflow only builds Windows in release mode.
           # No race detector here: Linux already runs the suite under it, and
           # a race is not platform-specific (see test-go in the Makefile).
           - name: Windows
             os: windows-latest
-            audit: false
             go_test_flags: ""
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: engine/go.mod
+          cache-dependency-path: engine/go.sum
+
+      - name: Test the engine
+        run: make test-go GO_TEST_FLAGS="${{ matrix.go_test_flags }}"
+
+  app:
+    name: App (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-latest
+          - name: Windows
+            os: windows-latest
 
     defaults:
       run:
@@ -54,6 +85,7 @@ jobs:
             librsvg2-dev \
             patchelf
 
+      # The Tauri build script compiles the Go engine it embeds.
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
@@ -85,15 +117,60 @@ jobs:
           workspaces: apps/desktop/src-tauri
           key: ${{ matrix.os }}
 
-      - name: Install security scanners
-        if: matrix.audit
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          cargo install cargo-audit --locked
+      - name: Test the desktop app
+        run: make test-desktop test-tauri
 
-      - name: Verify
-        run: make ci GO_TEST_FLAGS="${{ matrix.go_test_flags }}"
+  checks:
+    name: Static checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: engine/go.mod
+          cache-dependency-path: engine/go.sum
+
+      - name: Validate
+        run: make validate
+
+  audit:
+    name: Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: engine/go.mod
+          cache-dependency-path: engine/go.sum
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.3.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 25
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      # A prebuilt cargo-audit: `cargo install` compiled it from source on
+      # every run, about two and a half minutes.
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
 
       - name: Audit dependencies
-        if: matrix.audit
         run: make audit

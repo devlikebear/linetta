@@ -1,4 +1,4 @@
-.PHONY: help dev clio-dev test-clio site-dev site-build site-check test validate-mcp-bridge-targets test-go test-desktop test-tauri test-mobile-engine test-mas-engine test-cryptokit audit audit-go audit-desktop audit-rust validate-actions-runtime validate-distribution build-engine build-mcp-bridge build-mobile-engine-ios build-mobile-engine-android mobile-ios-init mobile-android-init build-mobile-ios-sim smoke-mobile-ios-sim dev-mobile-ios build-mobile-android-debug build-mobile-android-release-smoke patch-mobile-android-signing build-desktop release-macos-local build-mas-local release-mas-local bump-version ci
+.PHONY: help dev clio-dev test-clio site-dev site-build site-check test validate-mcp-bridge-targets test-go test-desktop test-tauri test-mobile-engine test-mas-engine test-cryptokit audit audit-go audit-desktop audit-rust validate-actions-runtime validate-distribution build-engine build-mcp-bridge build-mobile-engine-ios build-mobile-engine-android mobile-ios-init mobile-android-init build-mobile-ios-sim smoke-mobile-ios-sim dev-mobile-ios build-mobile-android-debug build-mobile-android-release-smoke patch-mobile-android-signing build-desktop release-macos-local build-mas-local release-mas-local bump-version ci validate
 
 GO_TEST_FLAGS ?= -race
 
@@ -27,7 +27,9 @@ site-check: ## Type-check the marketing site and build it
 
 test: test-go test-desktop test-tauri ## Run all local verification
 
-ci: validate-actions-runtime validate-distribution validate-mcp-bridge-targets test ## Run the CI verification contract
+ci: validate test ## Run the CI verification contract (CI runs its parts as parallel jobs)
+
+validate: validate-actions-runtime validate-distribution validate-mcp-bridge-targets ## Run the static repository checks
 
 audit: audit-go audit-desktop audit-rust ## Check reachable and locked dependency vulnerabilities
 
