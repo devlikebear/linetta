@@ -214,6 +214,41 @@ describe("OutlinePanel", () => {
     expect(onSetStatus).toHaveBeenCalledWith(scene, "published");
   });
 
+  it("toggles a scene's flashback mark from the popup menu and badges it", async () => {
+    const user = userEvent.setup();
+    const onSetFlashback = vi.fn();
+
+    const { rerender } = renderOutline({ onSetFlashback });
+    fireEvent.contextMenu(await screen.findByRole("button", { name: /씬 1/ }));
+    const toggle = screen.getByRole("menuitemcheckbox", { name: /회상/ });
+    expect(toggle).toHaveAttribute("aria-checked", "false");
+    await user.click(toggle);
+    expect(onSetFlashback).toHaveBeenCalledWith(scene, true);
+    expect(screen.queryByText("회상", { selector: ".sc-flashback" })).toBeNull();
+
+    const marked = { ...scene, flashback: true };
+    rerender(
+      <I18nProvider>
+        <OutlinePanel
+          tree={[{ ...chapter, children: [marked] }]}
+          currentId="scene-1"
+          collapsed={false}
+          onToggleCollapse={vi.fn()}
+          onSelect={vi.fn()}
+          onSetFlashback={onSetFlashback}
+        />
+      </I18nProvider>,
+    );
+    expect(screen.getByText("회상", { selector: ".sc-flashback" })).toBeInTheDocument();
+    fireEvent.contextMenu(screen.getByRole("button", { name: /씬 1/ }));
+    await user.click(screen.getByRole("menuitemcheckbox", { name: /회상/ }));
+    expect(onSetFlashback).toHaveBeenLastCalledWith(marked, false);
+
+    // A container cannot be a flashback: the engine refuses it, so no menu offers it.
+    fireEvent.contextMenu(screen.getByText("1장"));
+    expect(screen.queryByRole("menuitemcheckbox", { name: /회상/ })).toBeNull();
+  });
+
   it("opens part and container maintenance actions from the popup menu", async () => {
     const user = userEvent.setup();
     const onCreatePart = vi.fn();

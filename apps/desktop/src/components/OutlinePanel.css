@@ -277,3 +277,15 @@
   vertical-align: middle;
   margin-left: 4px;
 }
+
+/* A flashback scene (longform Phase 8): its facts hold there only. */
+.tree-scene .sc-flashback {
+  flex: none;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.outline-menu .outline-menu-check { margin-left: auto; }

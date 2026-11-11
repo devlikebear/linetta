@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   setArc: vi.fn(),
   setPinned: vi.fn(),
   knowsAt: vi.fn(),
+  storyTime: vi.fn(),
   relinkWork: vi.fn(),
   duplicate: vi.fn(),
 }));
@@ -17,7 +18,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@tauri-apps/api/event", () => ({ listen: () => Promise.resolve(() => undefined) }));
 vi.mock("../lib/rpc", () => ({
   settings: { get: vi.fn().mockResolvedValue({ language: "en" }) },
-  ledger: { list: mocks.list, save: mocks.save, remove: mocks.remove, setArc: mocks.setArc, setPinned: mocks.setPinned, knowsAt: mocks.knowsAt },
+  ledger: { list: mocks.list, save: mocks.save, remove: mocks.remove, setArc: mocks.setArc, setPinned: mocks.setPinned, knowsAt: mocks.knowsAt, storyTime: mocks.storyTime },
   mentions: { relinkWork: mocks.relinkWork },
   projects: { duplicate: mocks.duplicate },
 }));
@@ -206,6 +207,92 @@ describe("LedgerSection", () => {
 
       fireEvent.change(screen.getByLabelText("Scene"), { target: { value: "n2" } });
       await waitFor(() => expect(mocks.knowsAt).toHaveBeenCalledWith("p", "n2"));
+    });
+  });
+  describe("story time (longform Phase 8)", () => {
+    const event = entry({ id: "ev", kind: "timeline", subject: "", body: "등대지기 실종", planted_node_id: "n1", value_num: 10 });
+    const count = entry({ id: "el", kind: "timeline", subject: "등대지기 실종", attribute: "경과", body: "석 달", about: "ev" });
+
+    it("adds an elapsed count about an event, in days, at the open scene", async () => {
+      mocks.list.mockResolvedValue({ entries: [event, count, entry({ id: "d", kind: "timeline", attribute: "작중 날짜", body: "봄" })], parts: [], labels: { n1: "1화", n3: "3화" } });
+      await renderSection("n3");
+      fireEvent.change(await screen.findByLabelText("Kind"), { target: { value: "timeline" } });
+      fireEvent.change(screen.getByLabelText("Attribute"), { target: { value: "경과" } });
+      const picker = screen.getByLabelText("Event") as HTMLSelectElement;
+      // Events only: an elapsed count is never something to count from.
+      expect([...picker.options].map((o) => o.value)).toEqual(["", "ev", "d"]);
+      expect(screen.getByText(/A month is 30 days, a year 365/).textContent).toContain("Recorded in 3화.");
+      fireEvent.change(screen.getByLabelText("Entry"), { target: { value: "석 달" } });
+      fireEvent.change(screen.getByLabelText("Days"), { target: { value: "90" } });
+      const add = screen.getByRole("button", { name: "Add" });
+      expect(add).toBeDisabled();
+      fireEvent.change(picker, { target: { value: "ev" } });
+      fireEvent.click(add);
+      await waitFor(() => expect(mocks.save).toHaveBeenCalledWith({
+        project_id: "p", kind: "timeline", body: "석 달", attribute: "경과", planted_node_id: "n3", value_num: 90,
+        about: "ev", subject: "등대지기 실종",
+      }));
+    });
+
+    it("keeps a plain entry plain", async () => {
+      await renderSection("n3");
+      fireEvent.change(await screen.findByLabelText("Kind"), { target: { value: "timeline" } });
+      fireEvent.change(screen.getByLabelText("Entry"), { target: { value: "등대지기 실종" } });
+      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+      await waitFor(() => expect(mocks.save).toHaveBeenCalledWith({ project_id: "p", kind: "timeline", body: "등대지기 실종" }));
+    });
+
+    it("lays out each event by scene, marking a conflict, a jump and a flashback scene", async () => {
+      mocks.list.mockResolvedValue({ entries: [event], parts: [], labels: {} });
+      const fact = (id: string, node: string, body: string, days?: number) =>
+        entry({ id, kind: "timeline", subject: "등대지기 실종", attribute: "경과", body, about: "ev", planted_node_id: node, value_num: days });
+      mocks.storyTime.mockResolvedValue({
+        scenes: [{ node_id: "n1", label: "1화" }, { node_id: "n2", label: "2화" }, { node_id: "n3", label: "3화" },
+          { node_id: "n5", label: "5화", flashback: true }, { node_id: "n7", label: "7화" }],
+        clocks: { n3: 100 },
+        events: [{
+          event, subject: "등대지기 실종",
+          facts: [
+            { entry: fact("a", "n3", "석 달", 90), conflicts: [] },
+            { entry: fact("b", "n5", "사흘", 3), conflicts: [] },
+            { entry: fact("c", "n7", "삼 년", 1095), conflicts: [], previous: { entry_id: "a", value_num: 90, delta: 1005, jump_days: 1005, scenes_between: 4 } },
+          ],
+        }],
+        ages: [{
+          subject: "하람",
+          facts: [
+            { entry: entry({ id: "g1", kind: "decision", subject: "하람", attribute: "나이", body: "열일곱", planted_node_id: "n1", value_num: 17 }), conflicts: [] },
+            { entry: entry({ id: "g2", kind: "decision", subject: "하람", attribute: "나이", body: "열다섯", planted_node_id: "n3", value_num: 15 }),
+              conflicts: [{ entry_id: "g1", body: "열일곱", reason: "하람는 1화에서 이미 17살이었는데 3화에서는 15살입니다" }] },
+          ],
+        }],
+      });
+      await renderSection();
+      await screen.findByText("Story time");
+      expect(mocks.storyTime).not.toHaveBeenCalled();
+      const details = document.querySelector(".time-table") as HTMLDetailsElement;
+      details.open = true;
+      fireEvent(details, new Event("toggle"));
+      await waitFor(() => expect(mocks.storyTime).toHaveBeenCalledWith("p"));
+
+      const times = await waitFor(() => {
+        const table = details.querySelector("table");
+        expect(table?.querySelectorAll("tbody tr").length).toBe(4);
+        return table as HTMLTableElement;
+      });
+      // 2화 recorded nothing and is left out; 5화 is marked a flashback.
+      expect([...times.querySelectorAll("thead th")].map((th) => th.textContent)).toEqual(["Event", "1화", "3화", "5화flashback", "7화"]);
+      const eventRow = [...times.querySelectorAll("tbody tr")].find((r) => r.querySelector("th")?.textContent?.startsWith("등대지기 실종"));
+      expect(eventRow?.querySelector("th")?.textContent).toContain("on day 10");
+      const cells = [...(eventRow?.querySelectorAll("td") ?? [])];
+      expect(cells.map((c) => c.getAttribute("data-time"))).toEqual(["none", "ok", "ok", "jump"]);
+      expect(cells[3].textContent).toContain("+1,005 days");
+      const rows = [...times.querySelectorAll("tbody tr")];
+      // The clock row, the event, the ages heading, then each person's ages.
+      expect(rows.map((r) => r.querySelector("th")?.textContent)).toEqual(["Story date", "등대지기 실종on day 10", "Age", "하람"]);
+      const ageCells = [...rows[3].querySelectorAll("td")];
+      expect(ageCells.map((c) => c.getAttribute("data-time"))).toEqual(["ok", "conflict", "none", "none"]);
+      expect(ageCells[1].textContent).toContain("이미 17살");
     });
   });
 });
