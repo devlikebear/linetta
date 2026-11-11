@@ -836,7 +836,7 @@ func TestMergeProjectKeepsPinnedLedgerEntries(t *testing.T) {
 func TestMergeProjectKeepsFlashbackScenes(t *testing.T) {
 	ctx := context.Background()
 	home := t.TempDir()
-	st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+	st, err := storetest.Open(ctx, filepath.Join(home, "library.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -860,7 +860,7 @@ func TestMergeProjectKeepsFlashbackScenes(t *testing.T) {
 	for name, into := range map[string]*store.Store{"restore": nil, "duplicate": st} {
 		live := into
 		if live == nil {
-			if live, err = store.Open(ctx, filepath.Join(home, "live.db")); err != nil {
+			if live, err = storetest.Open(ctx, filepath.Join(home, "live.db")); err != nil {
 				t.Fatal(err)
 			}
 			defer live.Close()
