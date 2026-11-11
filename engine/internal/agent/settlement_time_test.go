@@ -15,7 +15,8 @@ import (
 // reports time that runs wrong under its own prefix.
 func TestSettlementPromptCoversElapsedTime(t *testing.T) {
 	for _, want := range []string{"경과", "나이", "kind=timeline", "about its id", "value_num the days since it",
-		"only when it is not there", "jump_days", "scenes_between", "시간 모순:", "Record one 경과 an event a scene"} {
+		"only when it is not there", "jump_days", "scenes_between", "시간 모순:", "Record one 경과 an event a scene",
+		"A 경과 from another scene is never replaced"} {
 		if !strings.Contains(settlementSystemPrompt, want) {
 			t.Errorf("settlement prompt lacks %q", want)
 		}
