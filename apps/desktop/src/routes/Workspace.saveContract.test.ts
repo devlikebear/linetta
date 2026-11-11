@@ -10,6 +10,19 @@ const workspace = () => readSource("routes/Workspace.tsx");
  * these assertions watch the source directly rather than rendering it.
  */
 describe("Workspace save contract", () => {
+  it("refreshes only the work's total after a scene save, so the sidebar total follows the prose", async () => {
+    const src = await workspace();
+
+    const start = src.indexOf("const refreshWorkTotal = useCallback(");
+    expect(start).toBeGreaterThan(-1);
+    const body = src.slice(start, src.indexOf("}, []);", start));
+    expect(body).toContain("projects.get(targetProjectId)");
+    expect(body).toContain("project: { ...prev.project, word_count: fresh.word_count }");
+
+    const effect = src.slice(src.indexOf("if (saveCompletedAt === null || !load?.project.id) return;"));
+    expect(effect.slice(0, 200)).toContain("void refreshWorkTotal(load.project.id);");
+  });
+
   it("saveNow's catch block never calls setError (#105)", async () => {
     const src = await workspace();
 
