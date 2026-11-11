@@ -243,6 +243,8 @@ export interface NodeRow {
   content_version?: number;
   /** What the scene is meant to do; writing it does not overwrite this. */
   plan?: string;
+  /** A flashback scene: its facts hold there only and story-order checks skip it. */
+  flashback?: boolean;
   created_at: number;
   updated_at: number;
 }
@@ -1630,6 +1632,7 @@ export interface KnowsScene {
   node_id: string;
   label: string;
   parent_label?: string;
+  flashback?: boolean;
 }
 /** A question still open at the scene with an answer written down. The answer
  *  itself is not sent: the table is about who knows it. */
@@ -1653,6 +1656,28 @@ export interface KnowsAt {
   node_id: string;
   secrets: KnowsSecret[];
   rows: KnowsRow[];
+}
+/** One elapsed count (or one age in years) and what the comparison says of it. */
+export interface TimeFact {
+  entry: LedgerEntry;
+  conflicts: { entry_id: string; body: string; reason: string }[];
+  /** The count before it in story order. jump_days comes only when neither
+   *  scene's story date is known: the engine reports the jump, not a conflict. */
+  previous?: { entry_id: string; value_num: number; delta: number; jump_days?: number; scenes_between?: number };
+}
+/** One event's counts, or one person's age (no event). */
+export interface TimeRow {
+  event?: LedgerEntry;
+  subject: string;
+  facts: TimeFact[];
+}
+/** ledger.story_time: a work's elapsed times laid out by scene (longform Phase 8). */
+export interface StoryTime {
+  scenes: KnowsScene[];
+  /** Scene id → story date in days, where the scene's own facts give one. */
+  clocks: Record<string, number>;
+  events: TimeRow[];
+  ages: TimeRow[];
 }
 export interface PartArc {
   node_id: string;

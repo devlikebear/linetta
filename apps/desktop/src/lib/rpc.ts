@@ -4,7 +4,7 @@ import type { WorksGalleryPage } from "./types";
 import type { ManuscriptPages, SubmissionReport } from "./types";
 import type { FocusState, SceneIntent, SceneIntentState } from "./types";
 import type { ContinuityCheck, ContinuityObservation, ContinuityOpenCounts, ContinuityStatus } from "./types";
-import type { KnowsAt, LedgerEntry, LedgerKind, LedgerState, LedgerStatus, PartArc, PendingSettlement } from "./types";
+import type { KnowsAt, LedgerEntry, LedgerKind, LedgerState, LedgerStatus, PartArc, PendingSettlement, StoryTime } from "./types";
 import type {
   AcceptSuggestionsResult,
   ExtractionEstimate,
@@ -286,6 +286,9 @@ export const nodes = {
   moveDown: (id: string) => rpcCall<{ ok: true }>("nodes.move_down", { id }),
   setStatus: (id: string, status: NodeStatus) =>
     rpcCall<{ ok: true }>("nodes.set_status", { id, status }),
+  /** Marks a scene as a flashback, or not. Containers are refused. */
+  setFlashback: (id: string, flashback: boolean) =>
+    rpcCall<{ ok: true }>("nodes.set_flashback", { id, flashback }),
 };
 
 export const stats = {
@@ -793,7 +796,10 @@ export const ledger = {
   /** Scenes whose current prose the settlement pass has not recorded yet. */
   pendingSettlement: (projectId: string) =>
     rpcCall<PendingSettlement>("ledger.pending_settlement", { project_id: projectId }),
-  save: (entry: { id?: string; project_id?: string; kind?: LedgerKind; reach?: LedgerEntry["reach"]; subject?: string; body?: string; status?: LedgerStatus; answer?: string }) =>
+  save: (entry: {
+    id?: string; project_id?: string; kind?: LedgerKind; reach?: LedgerEntry["reach"]; subject?: string; body?: string;
+    status?: LedgerStatus; answer?: string; attribute?: string; about?: string; value_num?: number; planted_node_id?: string;
+  }) =>
     rpcCall<LedgerEntry>("ledger.save", entry),
   remove: (id: string) => rpcCall<{ ok: boolean }>("ledger.delete", { id }),
   setPinned: (id: string, pinned: boolean) =>
@@ -801,6 +807,8 @@ export const ledger = {
   /** The work's scenes, and at the chosen one who knows which open secret. */
   knowsAt: (projectId: string, nodeId?: string) =>
     rpcCall<KnowsAt>("ledger.knows_at", { project_id: projectId, node_id: nodeId ?? "" }),
+  /** Each event's elapsed counts and each age, scene by scene, with conflicts and jumps. */
+  storyTime: (projectId: string) => rpcCall<StoryTime>("ledger.story_time", { project_id: projectId }),
   setArc: (arc: PartArc) => rpcCall<PartArc>("ledger.set_arc", {
     node_id: arc.node_id, role: arc.role, goal: arc.goal, tension: arc.tension,
   }),

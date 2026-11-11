@@ -11,7 +11,11 @@
 .ledger-where { border: 0; background: none; padding: 0; font: inherit; font-size: 11px; color: var(--ink-soft); }
 button.ledger-where { cursor: pointer; text-decoration: underline; }
 .ledger-actions { margin-left: auto; display: flex; gap: 4px; }
-.ledger-add { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: 6px; margin-top: 8px; }
+.ledger-add { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.ledger-add > select { flex: 0 1 auto; width: auto; max-width: 100%; }
+.ledger-add > input { flex: 1 1 120px; width: auto; }
+.ledger-add > input.ledger-amount { flex: 0 1 88px; }
+.ledger-add-hint { margin-top: 4px; }
 .ledger-section .style-hint { margin: 0 0 8px; font-size: 12px; color: var(--ink-soft); }
 
 .ledger-list li.is-pinned { border-left: 2px solid var(--accent, var(--ink)); padding-left: 8px; }
@@ -33,3 +37,17 @@ button.ledger-where { cursor: pointer; text-decoration: underline; }
 .knows-table td[data-knows="none"] { color: var(--ink-soft); }
 .knows-reader th, .knows-reader td { background: var(--paper-soft, transparent); }
 .knows-table td .ledger-where { display: block; }
+.time-table th[data-flashback="yes"] { color: var(--ink-soft); }
+.time-flashback { display: inline-block; margin-left: 4px; padding: 0 4px; border: 1px solid var(--line); border-radius: 3px; font-size: 10px; font-weight: 400; color: var(--ink-soft); }
+.time-table td[data-time="conflict"] { color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); font-weight: 600; }
+.time-table td[data-time="jump"] { color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.time-table td[data-time="uncompared"] { color: var(--ink-soft); }
+.time-value, .time-note { display: block; }
+.time-num { margin-left: 4px; font-variant-numeric: tabular-nums; }
+.time-note { font-size: 11px; font-weight: 400; }
+.time-ages th { padding-top: 10px; font-weight: 600; }
+.time-table th { white-space: nowrap; }
+.time-table th .ledger-where { display: block; }
+.time-table td { min-width: 56px; }
+.time-table td .time-value { white-space: nowrap; }
+.time-table td .time-note { min-width: 140px; max-width: 200px; }

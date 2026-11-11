@@ -855,6 +855,20 @@ export function Workspace() {
     [refreshTreeKeepNode, showToast, t],
   );
 
+  const handleSetFlashback = useCallback(
+    async (target: TreeNode, flashback: boolean) => {
+      const current = loadRef.current;
+      if (!current) return;
+      try {
+        await nodes.setFlashback(target.id, flashback);
+        await refreshTreeKeepNode(current.node.id);
+      } catch (e) {
+        showToast(t("workspace.toast.flashbackFailed", { error: String(e) }));
+      }
+    },
+    [refreshTreeKeepNode, showToast, t],
+  );
+
   const handleDeleteSceneFromOutline = useCallback(
     async (target: TreeNode) => {
       const current = loadRef.current;
@@ -2212,6 +2226,7 @@ export function Workspace() {
           onMoveNode={handleMoveNodeTo}
           onDeleteNode={handleDeleteSceneFromOutline}
           onSetStatus={handleSetNodeStatus}
+          onSetFlashback={handleSetFlashback}
           onPublish={publishAvailable ? (node) => { void openPublish(node.id); } : undefined}
           publishStates={publishStates}
           representatives={representatives}

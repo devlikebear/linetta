@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
-import { AlertTriangle, ChevronLeft, Compass, Copy, FilePlus2, FolderPlus, Globe, Layers, MoreHorizontal, Pencil, Stethoscope, Trash2, ArrowUp, ArrowDown } from "lucide-react";
+import { AlertTriangle, Check, ChevronLeft, History, Compass, Copy, FilePlus2, FolderPlus, Globe, Layers, MoreHorizontal, Pencil, Stethoscope, Trash2, ArrowUp, ArrowDown } from "lucide-react";
 import type { TreeNode } from "../hooks/useFirstLeaf";
 import { flatten, sumLeafChars } from "../hooks/useFirstLeaf";
 import type { NodeStatus, PublishEpisodeState } from "../lib/types";
@@ -43,6 +43,8 @@ interface Props {
   onMoveNode?: (node: TreeNode, parentId: string | null, ordinal: number) => void;
   onDeleteNode?: (node: TreeNode) => void;
   onSetStatus?: (node: TreeNode, status: NodeStatus) => void;
+  /** Marks a scene as a flashback, or not (longform Phase 8). Scenes only. */
+  onSetFlashback?: (node: TreeNode, flashback: boolean) => void;
   /** Opens the publish dialog for the node's episode. Absent on builds that
    *  cannot publish. */
   onPublish?: (node: TreeNode) => void;
@@ -96,6 +98,7 @@ export function OutlinePanel({
   onMoveNode,
   onDeleteNode,
   onSetStatus,
+  onSetFlashback,
   onPublish,
   publishStates,
   representatives,
@@ -139,7 +142,7 @@ export function OutlinePanel({
         onDeleteNode ||
         onSetStatus ||
         canPublish(node) ||
-        (node.kind === "leaf" && (onMoveSceneUp || onMoveSceneDown || onDeleteScene)),
+        (node.kind === "leaf" && (onMoveSceneUp || onMoveSceneDown || onDeleteScene || onSetFlashback)),
     );
 
   useEffect(() => {
@@ -417,6 +420,22 @@ export function OutlinePanel({
           {canPublish(menu.node) && (
             <button type="button" role="menuitem" onClick={() => runAction(onPublish)} data-testid="outline-menu-publish">
               <Globe size={13} /> {t("workspace.publishEpisode")}
+            </button>
+          )}
+          {onSetFlashback && menu.node.kind === "leaf" && (
+            <button
+              type="button"
+              role="menuitemcheckbox"
+              aria-checked={menu.node.flashback ?? false}
+              title={t("workspace.flashbackHint")}
+              onClick={() => {
+                const node = menu.node;
+                setMenu(null);
+                onSetFlashback(node, !(node.flashback ?? false));
+              }}
+            >
+              <History size={13} /> {t("workspace.flashback")}
+              {menu.node.flashback && <Check size={13} className="outline-menu-check" />}
             </button>
           )}
           {onSetStatus && (
@@ -716,6 +735,9 @@ function RailNode({
           >
             <StatusDot status={node.status} />
             <span className="sc-label">{label}</span>
+            {node.flashback && (
+              <span className="sc-flashback" title={t("workspace.flashbackHint")}>{t("workspace.flashbackBadge")}</span>
+            )}
             <span className="sc-title">{node.title}</span>
             {representativeThumb}
             {publishBadge}

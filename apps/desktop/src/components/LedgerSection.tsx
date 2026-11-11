@@ -6,6 +6,7 @@ import type { LedgerEntry, LedgerKind, LedgerState, LedgerStatus, PartArc } from
 import { useI18n } from "../lib/i18n";
 import { rpcErrorMessage } from "../lib/rpcMessage";
 import { KnowsTable } from "./KnowsTable";
+import { TimeTable } from "./TimeTable";
 import "./LedgerSection.css";
 
 /** The work's account of itself: what the story owes the reader, what has been
@@ -26,6 +27,26 @@ type Tab = "owed" | "settled" | "closed" | "cut";
 const OWED: LedgerKind[] = ["promise", "gag", "question"];
 const ADDABLE: LedgerKind[] = ["promise", "gag", "question", "decision", "number", "timeline", "knowledge"];
 
+/** The engine's attribute names (internal/ledger). They are stored as written,
+ *  so the panel sends these and only translates what it shows. */
+const ATTR_DATE = "작중 날짜";
+const ATTR_ELAPSED = "경과";
+const ATTR_AGE = "나이";
+
+/** Which counted attributes a new fact of each kind can carry. An elapsed
+ *  count is a timeline fact; an age belongs to a person, whatever the kind. */
+function attributesFor(kind: LedgerKind): string[] {
+  if (kind === "timeline") return [ATTR_DATE, ATTR_ELAPSED];
+  if (kind === "decision" || kind === "number" || kind === "knowledge") return [ATTR_AGE];
+  return [];
+}
+
+/** An event an elapsed count can point at: a timeline entry that is not
+ *  itself a count. Matches the engine's ErrAboutNotEvent rule. */
+function isEvent(e: LedgerEntry): boolean {
+  return e.kind === "timeline" && e.attribute !== ATTR_ELAPSED;
+}
+
 /** Matches the engine's briefPinnedRunes. Past it a pin may not reach the brief. */
 const PINNED_BUDGET_RUNES = 3000;
 
@@ -33,6 +54,12 @@ const PINNED_BUDGET_RUNES = 3000;
  *  (longform Phase 7): a pinned question's answer is the writer's alone. */
 function pinnable(e: LedgerEntry): boolean {
   return tabOf(e) === "settled" || (e.kind === "question" && e.status === "open");
+}
+
+function attrKey(a: string): "ledger.attr.date" | "ledger.attr.elapsed" | "ledger.attr.age" {
+  if (a === ATTR_DATE) return "ledger.attr.date";
+  if (a === ATTR_ELAPSED) return "ledger.attr.elapsed";
+  return "ledger.attr.age";
 }
 
 function tabOf(e: LedgerEntry): Tab {
@@ -47,6 +74,10 @@ export function LedgerSection({ projectId, onOpenNode, nodeId }: Readonly<Props>
   const [tab, setTab] = useState<Tab>("owed");
   const [kind, setKind] = useState<LedgerKind>("promise");
   const [body, setBody] = useState("");
+  const [attribute, setAttribute] = useState("");
+  const [about, setAbout] = useState("");
+  const [subject, setSubject] = useState("");
+  const [amount, setAmount] = useState("");
   const [error, setError] = useState<unknown>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -87,9 +118,28 @@ export function LedgerSection({ projectId, onOpenNode, nodeId }: Readonly<Props>
   }, [state]);
   const owedCount = useMemo(() => (state?.entries ?? []).filter((e) => tabOf(e) === "owed").length, [state]);
 
+  const events = useMemo(() => (state?.entries ?? []).filter(isEvent), [state]);
+  const attrs = attributesFor(kind);
+  const attr = attrs.includes(attribute) ? attribute : "";
+  const counted = attr !== "";
+  const value = amount.trim() === "" ? undefined : Number(amount);
+  const valueOk = value === undefined || Number.isFinite(value);
+  // A count is compared only where it was recorded, so it needs the open scene.
+  const addBlocked = body.trim() === "" || !valueOk || (counted && !nodeId)
+    || (attr === ATTR_ELAPSED && about === "") || (attr === ATTR_AGE && subject.trim() === "");
+
   const add = () => run(async () => {
-    await ledgerApi.save({ project_id: projectId, kind, body: body.trim() });
+    const event = events.find((e) => e.id === about);
+    await ledgerApi.save({
+      project_id: projectId,
+      kind,
+      body: body.trim(),
+      ...(counted ? { attribute: attr, planted_node_id: nodeId, ...(value === undefined ? {} : { value_num: value }) } : {}),
+      ...(attr === ATTR_ELAPSED && event ? { about: event.id, subject: event.subject || event.body } : {}),
+      ...(attr === ATTR_AGE ? { subject: subject.trim() } : {}),
+    });
     setBody("");
+    setAmount("");
   });
   const setStatus = (e: LedgerEntry, status: LedgerStatus) =>
     run(() => ledgerApi.save({ id: e.id, status }));
@@ -209,22 +259,66 @@ export function LedgerSection({ projectId, onOpenNode, nodeId }: Readonly<Props>
         <select aria-label={t("ledger.addKind")} value={kind} onChange={(e) => setKind(e.target.value as LedgerKind)}>
           {ADDABLE.map((k) => <option key={k} value={k}>{t(`ledger.kind.${k}`)}</option>)}
         </select>
+        {attrs.length > 0 && (
+          <select aria-label={t("ledger.addAttribute")} value={attr} onChange={(e) => setAttribute(e.target.value)}>
+            <option value="">{t("ledger.attr.none")}</option>
+            {attrs.map((a) => <option key={a} value={a}>{t(attrKey(a))}</option>)}
+          </select>
+        )}
+        {attr === ATTR_ELAPSED && (
+          <select aria-label={t("ledger.addEvent")} value={about} onChange={(e) => setAbout(e.target.value)}>
+            <option value="">{t("ledger.pickEvent")}</option>
+            {events.map((e) => (
+              <option key={e.id} value={e.id}>
+                {[e.subject, e.body].filter(Boolean).join(" — ")}
+                {e.planted_node_id && state?.labels[e.planted_node_id] ? ` (${state.labels[e.planted_node_id]})` : ""}
+              </option>
+            ))}
+          </select>
+        )}
+        {attr === ATTR_AGE && (
+          <input
+            aria-label={t("ledger.addPerson")}
+            placeholder={t("ledger.addPerson")}
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+          />
+        )}
+        {counted && (
+          <input
+            aria-label={t(attr === ATTR_AGE ? "ledger.addYears" : "ledger.addDays")}
+            placeholder={t(attr === ATTR_AGE ? "ledger.addYears" : "ledger.addDays")}
+            inputMode="decimal"
+            className="ledger-amount"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+          />
+        )}
         <input
           aria-label={t("ledger.addBody")}
           placeholder={t("ledger.addBody")}
           value={body}
           onChange={(e) => setBody(e.target.value)}
         />
-        <button type="button" className="btn accent sm" disabled={body.trim() === ""} onClick={() => void add()}>
+        <button type="button" className="btn accent sm" disabled={addBlocked} onClick={() => void add()}>
           {t("ledger.add")}
         </button>
       </div>
+      {counted && (
+        <p className="style-hint ledger-add-hint">
+          {attr === ATTR_AGE ? t("ledger.yearsHint") : t("ledger.daysHint")}
+          {" "}
+          {!nodeId ? t("ledger.countNeedsScene") : state?.labels[nodeId] ? t("ledger.countAt", { label: state.labels[nodeId] }) : t("ledger.countAtOpen")}
+          {attr === ATTR_ELAPSED && events.length === 0 && ` ${t("ledger.noEvents")}`}
+        </p>
+      )}
       <div className="ledger-tools">
         <button type="button" className="btn ghost sm" onClick={() => void relink()}>{t("ledger.relink")}</button>
         <button type="button" className="btn ghost sm" onClick={() => void duplicate()}>{t("ledger.duplicate")}</button>
         {notice && <span className="style-hint" role="status">{notice}</span>}
       </div>
       <KnowsTable projectId={projectId} nodeId={nodeId} version={state} onOpenNode={onOpenNode} />
+      <TimeTable projectId={projectId} version={state} onOpenNode={onOpenNode} />
     </details>
   );
 }
