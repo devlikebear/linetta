@@ -2,7 +2,7 @@ module github.com/devlikebear/linetta/engine
 
 go 1.26.10
 
-toolchain go1.27.3
+toolchain go1.27.4
 
 require (
 	github.com/devlikebear/tars v0.67.1-0.20261101061631-554b3afcec14
