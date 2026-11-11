@@ -171,6 +171,45 @@ func TestSetStatusHandler_rejectsInvalidStatus(t *testing.T) {
 	}
 }
 
+// The flashback mark is read back on the node itself, and only a scene takes one.
+func TestSetFlashbackHandler(t *testing.T) {
+	f := newNodeFixture(t)
+	ctx := context.Background()
+	h := SetNodeFlashback(f.nodes)
+	if _, err := h(ctx, json.RawMessage(`{"id":"`+f.nID+`","flashback":true}`)); err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	res, err := GetNode(f.nodes)(ctx, json.RawMessage(`{"id":"`+f.nID+`"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var n struct {
+		Flashback bool `json:"flashback"`
+	}
+	if err := json.Unmarshal(res, &n); err != nil || !n.Flashback {
+		t.Fatalf("nodes.get = %s, %v", res, err)
+	}
+	if _, err := h(ctx, json.RawMessage(`{"id":"`+f.nID+`","flashback":false}`)); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := f.nodes.Get(ctx, f.nID); got.Flashback {
+		t.Fatal("unmarked scene is still a flashback")
+	}
+	part, err := f.nodes.CreateRoot(ctx, f.pID, node.KindContainer, "1부", "", 2000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, params := range map[string]string{
+		"a part":       `{"id":"` + part.ID + `","flashback":true}`,
+		"no flashback": `{"id":"` + f.nID + `"}`,
+	} {
+		var methodErr *rpc.MethodError
+		if _, err := h(ctx, json.RawMessage(params)); !errors.As(err, &methodErr) || methodErr.Code != rpc.CodeInvalidParams {
+			t.Errorf("%s: err = %v, want invalid params", name, err)
+		}
+	}
+}
+
 func TestDeleteHandler(t *testing.T) {
 	f := newNodeFixture(t)
 	// Create a second leaf so the project still has a node after the delete.

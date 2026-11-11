@@ -19,6 +19,12 @@ type Previous struct {
 	EntryID  string  `json:"entry_id"`
 	ValueNum float64 `json:"value_num"`
 	Delta    float64 `json:"delta"`
+	// JumpDays is how many days an elapsed time or an age grew since Previous
+	// when neither scene's story date is known, and ScenesBetween how many
+	// scenes on it was. The engine does not judge such a jump: the prose may
+	// say the time passed. The settlement pass reads it and decides.
+	JumpDays      float64 `json:"jump_days,omitempty"`
+	ScenesBetween int     `json:"scenes_between,omitempty"`
 }
 
 // Conflicts compares a fact with what the ledger holds for the same subject and
@@ -28,10 +34,18 @@ type Previous struct {
 // What a person knows piles up, so a knows fact is compared only when it names
 // the question it is about: then the last one before it, about the same
 // question, says what it may not say.
+//
+// An elapsed time is compared only with others from the same event, and an age
+// in years with the same person's: see elapsedConflicts. An elapsed time with
+// no event is kept and not compared. A scene marked a flashback is left out of
+// every comparison in story order.
 func (r *Repo) Conflicts(ctx context.Context, e Entry) ([]Conflict, *Previous, error) {
 	if e.Attribute == AttributeKnows && e.About != "" {
 		conflicts, err := r.knowsConflicts(ctx, e)
 		return conflicts, nil, err
+	}
+	if e.Attribute == AttributeElapsed || (e.Attribute == AttributeAge && e.ValueNum != nil) {
+		return r.elapsedConflicts(ctx, e)
 	}
 	if e.Attribute == "" || e.Attribute == AttributeKnows {
 		return nil, nil, nil
@@ -57,7 +71,7 @@ func (r *Repo) Conflicts(ctx context.Context, e Entry) ([]Conflict, *Previous, e
 		if other.ID == e.ID || other.Subject != e.Subject || other.Attribute != e.Attribute || other.SupersededBy != "" {
 			continue
 		}
-		if other.ValueNum != nil && e.ValueNum != nil && t.plantedAt(other) <= cur &&
+		if other.ValueNum != nil && e.ValueNum != nil && t.plantedAt(other) <= cur && t.ordered(other, cur) &&
 			(prior == nil || t.plantedAt(other) >= t.plantedAt(*prior)) {
 			prior = &entries[i]
 		}
@@ -109,7 +123,7 @@ func (r *Repo) knowsConflicts(ctx context.Context, e Entry) ([]Conflict, error) 
 			return nil, nil
 		}
 		at := t.plantedAt(other)
-		if other.SupersededBy != "" || at > cur || (at == cur && other.CreatedAt > e.CreatedAt) {
+		if other.SupersededBy != "" || at > cur || (at == cur && other.CreatedAt > e.CreatedAt) || !t.ordered(other, cur) {
 			continue
 		}
 		if prior == nil || t.storyOrder(other, *prior) >= 0 {

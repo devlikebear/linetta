@@ -36,8 +36,11 @@ type Node struct {
 	SummaryForVersion int     `json:"summary_for_version"`
 	SummaryWritten    bool    `json:"summary_written"` // written by an agent or an import, not derived; see SummaryUsable
 	Plan              string  `json:"plan"`            // what the scene is meant to do; survives the scene being written
-	CreatedAt         int64   `json:"created_at"`
-	UpdatedAt         int64   `json:"updated_at"`
+	// Flashback marks a scene set earlier in story time than the scenes around
+	// it. The ledger leaves it out of comparisons in story order.
+	Flashback bool  `json:"flashback"`
+	CreatedAt int64 `json:"created_at"`
+	UpdatedAt int64 `json:"updated_at"`
 }
 
 // SummaryFresh reports whether Summary describes the node as it is now.

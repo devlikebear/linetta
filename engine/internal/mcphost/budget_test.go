@@ -302,9 +302,12 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	// 103B for the two fields every entry in a listing or an edit now shows,
 	// the rest for their input descriptions, which tell an agent that only a
 	// question has an answer, the prose keeps it until it is revealed, and a
-	// knows fact about a question says 1 or 0.
-	if ledgerTools > 6950 {
-		t.Errorf("the ledger tools cost %dB, want <= 6950B", ledgerTools)
+	// knows fact about a question says 1 or 0. Phase 8's elapsed time took
+	// them to 7,014B: jump_days and scenes_between on the previous value an
+	// edit returns, 경과 and 나이 among the attributes, the unit of each count,
+	// and about pointing an elapsed time at its event.
+	if ledgerTools > 7050 {
+		t.Errorf("the ledger tools cost %dB, want <= 7050B", ledgerTools)
 	}
 	// The three inbox tools measured 3,790B: list 1,621B, accept 1,331B,
 	// reject 838B.

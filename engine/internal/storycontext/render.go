@@ -644,6 +644,16 @@ func renderLedger(l LedgerBrief, lang string) string {
 	}
 	section(langPick(lang, "## 작품 규칙", "## Rules of This Work", "## 作品の規則"), l.Pinned)
 	section(langPick(lang, "## 현재 상태", "## Current State", "## 現在の状態"), l.State)
+	if len(l.Time) > 0 {
+		b.WriteString(langPick(lang,
+			"## 작중 시간\n같은 사건으로부터의 경과는 줄지 않고, 회차 사이에 흐른 만큼만 는다. 시간을 건너뛰면 본문이 그렇다고 말한다.\n",
+			"## Story Time\nTime since an event never shrinks, and grows only by what passes between scenes. A jump in time is one the prose says.\n",
+			"## 作中の時間\n同じ出来事からの経過は減らず、話の間に流れた分だけ増える。時間を飛ばすなら本文がそう言う。\n"))
+		for _, line := range l.Time {
+			b.WriteString("- " + line + "\n")
+		}
+		b.WriteString("\n")
+	}
 	if len(l.Secrets) > 0 || len(l.Knows) > 0 {
 		b.WriteString(langPick(lang,
 			"## 비밀과 앎\n서술자는 작가만 아는 답을 밝히지 않는다. 인물은 모르는 답으로 움직이지 않는다.\n",

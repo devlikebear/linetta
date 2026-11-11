@@ -77,6 +77,9 @@ func (r *Repo) ContextLedger(ctx context.Context, projectID, nodeID string) (sto
 		return out, err
 	}
 	out.State, out.Omitted = t.stateLines(entries, nodeID, cur)
+	var timeOmitted int
+	out.Time, timeOmitted = t.timeLines(entries, nodeID, cur)
+	out.Omitted += timeOmitted
 	known, err := r.knowsAt(ctx, t, cur, projectID, nil)
 	if err != nil {
 		return out, err

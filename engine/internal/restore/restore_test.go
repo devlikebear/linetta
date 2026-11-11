@@ -831,6 +831,60 @@ func TestMergeProjectKeepsPinnedLedgerEntries(t *testing.T) {
 	}
 }
 
+// A flashback mark is the story's order, not the prose: a restored or copied
+// work keeps it.
+func TestMergeProjectKeepsFlashbackScenes(t *testing.T) {
+	ctx := context.Background()
+	home := t.TempDir()
+	st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	nodes := node.NewRepo(st)
+	p, err := project.NewRepo(st).Create(ctx, 1, project.NewInput{Title: "Flashback", LengthTarget: "short", DefaultPOV: "first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scene, err := nodes.CreateRoot(ctx, p.ID, node.KindLeaf, "회상", "", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := nodes.SetFlashback(ctx, scene.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	backupPath := filepath.Join(home, "backup.db")
+	if _, err := st.DB().ExecContext(ctx, "VACUUM INTO ?", backupPath); err != nil {
+		t.Fatal(err)
+	}
+	for name, into := range map[string]*store.Store{"restore": nil, "duplicate": st} {
+		live := into
+		if live == nil {
+			if live, err = store.Open(ctx, filepath.Join(home, "live.db")); err != nil {
+				t.Fatal(err)
+			}
+			defer live.Close()
+		}
+		merged, err := MergeProject(ctx, live, backupPath, home, p.ID, " copy", time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := node.NewRepo(live).ListByProject(ctx, merged.ProjectID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		marked := 0
+		for _, n := range got {
+			if n.Label == "회상" && n.Flashback {
+				marked++
+			}
+		}
+		if marked != 1 {
+			t.Fatalf("%s: nodes = %+v", name, got)
+		}
+	}
+}
+
 func TestMergeProjectRemapsWhatAFactPointsAt(t *testing.T) {
 	ctx := context.Background()
 	home := t.TempDir()

@@ -774,6 +774,33 @@ func TestRepo_RestoreOutline_restoresSnapshotAndRemovesRepairCreatedNodes(t *tes
 	}
 }
 
+// Undoing a delete brings a flashback back as one.
+func TestRepo_RestoreOutline_keepsAFlashback(t *testing.T) {
+	s, p := newStoreAndProject(t)
+	r := NewRepo(s)
+	ctx := context.Background()
+	scene, err := r.CreateSibling(ctx, *p.LastOpenedNodeID, "leaf", "회상", "", 2000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.SetFlashback(ctx, scene.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := r.ListByProject(ctx, p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Delete(ctx, scene.ID, 3000); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.RestoreOutline(ctx, p.ID, snapshot, 4000); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := r.Get(ctx, scene.ID); err != nil || !got.Flashback {
+		t.Fatalf("restored = %+v, %v", got, err)
+	}
+}
+
 func TestRepo_RestoreOutline_keepsTheProseIndexInStep(t *testing.T) {
 	s, p := newStoreAndProject(t)
 	r := NewRepo(s)

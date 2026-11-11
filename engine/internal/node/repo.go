@@ -16,12 +16,13 @@ import (
 var ErrNotFound = errors.New("node not found")
 
 var (
-	ErrInvalidKind         = errors.New("invalid node kind")
-	ErrInvalidStatus       = errors.New("invalid node status")
-	ErrContentOnContainer  = errors.New("cannot update content for a container node")
-	ErrContentConflict     = errors.New("node content changed since it was loaded")
-	ErrNodeProjectMismatch = errors.New("node does not belong to project")
-	ErrInvalidMove         = errors.New("invalid node move")
+	ErrInvalidKind          = errors.New("invalid node kind")
+	ErrInvalidStatus        = errors.New("invalid node status")
+	ErrContentOnContainer   = errors.New("cannot update content for a container node")
+	ErrContentConflict      = errors.New("node content changed since it was loaded")
+	ErrNodeProjectMismatch  = errors.New("node does not belong to project")
+	ErrInvalidMove          = errors.New("invalid node move")
+	ErrFlashbackOnContainer = errors.New("only a scene can be marked a flashback")
 )
 
 // MentionResyncer is called after a successful UpdateContent. Typical impl:
@@ -248,7 +249,7 @@ func (r *Repo) SetLastOpened(ctx context.Context, projectID, nodeID string, now 
 const baseSelect = `
 SELECT id, project_id, parent_id, ordinal, kind, label, title,
        content_doc, status, word_count, summary, content_version,
-       summary_for_version, summary_written, plan, created_at, updated_at
+       summary_for_version, summary_written, plan, flashback, created_at, updated_at
 FROM nodes`
 
 type scanner interface{ Scan(...any) error }
@@ -261,7 +262,7 @@ func scan(row scanner) (Node, error) {
 	)
 	if err := row.Scan(&n.ID, &n.ProjectID, &parentID, &n.Ordinal, &n.Kind, &n.Label, &n.Title,
 		&contentDoc, &n.Status, &n.WordCount, &n.Summary, &n.ContentVersion,
-		&n.SummaryForVersion, &n.SummaryWritten, &n.Plan, &n.CreatedAt, &n.UpdatedAt); err != nil {
+		&n.SummaryForVersion, &n.SummaryWritten, &n.Plan, &n.Flashback, &n.CreatedAt, &n.UpdatedAt); err != nil {
 		return Node{}, err
 	}
 	if parentID.Valid {
@@ -512,6 +513,21 @@ func (r *Repo) SetPlan(ctx context.Context, id, plan string) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+// SetFlashback marks a scene as set earlier in story time, or clears the mark.
+// Like a plan, the mark is about the story's order, not the prose, so it leaves
+// the version and updated_at alone.
+func (r *Repo) SetFlashback(ctx context.Context, id string, flashback bool) error {
+	n, err := r.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if n.Kind != KindLeaf {
+		return ErrFlashbackOnContainer
+	}
+	_, err = r.s.DB().ExecContext(ctx, `UPDATE nodes SET flashback = ? WHERE id = ?`, flashback, id)
+	return err
 }
 
 // SetStatus updates the workflow status for a node.
@@ -992,11 +1008,11 @@ func (r *Repo) RestoreOutline(ctx context.Context, projectID string, snapshot []
 		if _, err := tx.ExecContext(ctx, `
 INSERT INTO nodes (id, project_id, parent_id, ordinal, kind, label, title,
                    content_doc, status, word_count, summary, content_version,
-                   summary_for_version, summary_written, plan, created_at, updated_at)
-VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                   summary_for_version, summary_written, plan, flashback, created_at, updated_at)
+VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			n.ID, n.ProjectID, n.Ordinal, n.Kind, n.Label, n.Title, contentDoc,
 			n.Status, wordCount, n.Summary, n.ContentVersion, n.SummaryForVersion,
-			n.SummaryWritten, n.Plan, n.CreatedAt, now); err != nil {
+			n.SummaryWritten, n.Plan, n.Flashback, n.CreatedAt, now); err != nil {
 			return err
 		}
 	}
