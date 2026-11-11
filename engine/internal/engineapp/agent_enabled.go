@@ -247,6 +247,10 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 		MemoryToolsEnabled:       deps.settings.MemoryToolsEnabled,
 		SkillToolsEnabled:        deps.settings.SkillToolsEnabled,
 		ReviewToolsEnabled:       deps.settings.ReviewToolsEnabled,
+		// Off until the trial provider exists to say which turns run on
+		// Linetta's own key. Wired rather than left nil so the production
+		// wiring test keeps holding every Deps field to a real value.
+		TrialToolsEnabled: func() bool { return false },
 		Undo: func(ctx context.Context, batchID, snapshotID string) (string, string, error) {
 			if batchID != "" {
 				return "", "", deps.story.UndoApply(ctx, batchID, deps.clock)

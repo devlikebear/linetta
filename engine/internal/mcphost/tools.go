@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -211,12 +212,27 @@ func (d ToolDeps) notifyChanged(projectID, tool string, nodeIDs []string, batchI
 // agent rebuilds when the resolved groups differ from the cached session's.
 // Neither needs an engine restart.
 func (d ToolDeps) Register(s *mcp.Server, mode string, groups ToolGroups) {
+	groups = groups.normalized()
 	d.registerReadTools(s, groups)
 	if groups.History {
 		d.registerHistoryTools(s)
 	}
 	if mode == settings.MCPModeFull {
 		d.registerWriteTools(s, groups)
+	}
+	if groups.Trial {
+		// Removed after the fact rather than skipped at each AddTool: the
+		// registrars are written around the groups, and threading an
+		// allowlist through every one of them would let the next tool added
+		// to a registrar slip past it. Removing a name that was never
+		// registered is a no-op.
+		var out []string
+		for _, n := range slices.Concat(ReadToolNames, WriteToolNames) {
+			if !slices.Contains(TrialToolNames, n) {
+				out = append(out, n)
+			}
+		}
+		s.RemoveTools(out...)
 	}
 }
 

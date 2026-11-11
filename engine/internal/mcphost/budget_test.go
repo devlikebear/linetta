@@ -395,3 +395,84 @@ func nameFor(mode string, g ToolGroups) string {
 	}
 	return s
 }
+
+// The trial set is an allowlist, so it has to name real tools — a typo would
+// silently shrink the trial by a tool nobody notices is missing — and it has
+// to be what a real tools/list serves, with or without the history group the
+// built-in agent always asks for.
+func TestTrialServesExactlyTheAllowlist(t *testing.T) {
+	all := slices.Concat(ReadToolNames, WriteToolNames)
+	for _, n := range TrialToolNames {
+		if !slices.Contains(all, n) {
+			t.Errorf("TrialToolNames names %q, which is in neither ReadToolNames nor WriteToolNames", n)
+		}
+	}
+	want := slices.Sorted(slices.Values(TrialToolNames))
+	for _, groups := range []ToolGroups{
+		{Trial: true, Memory: true, Skills: true, Review: true, History: true},
+		{Trial: true, Memory: true, Skills: true, Review: true},
+	} {
+		served := slices.Sorted(slices.Values(registeredToolNamesOf(t, ToolDeps{}, settings.MCPModeFull, groups)))
+		if !slices.Equal(served, want) {
+			t.Errorf("%+v: a trial server serves\n  %v\nwant\n  %v", groups, served, want)
+		}
+		if listed := slices.Sorted(slices.Values(ToolNames(settings.MCPModeFull, groups))); !slices.Equal(listed, want) {
+			t.Errorf("%+v: ToolNames says\n  %v\nwant\n  %v", groups, listed, want)
+		}
+	}
+	// Plus linetta_ask_writer, which the agent appends: twenty in all.
+	if len(TrialToolNames) != 19 {
+		t.Errorf("the trial has %d registered tools, want 19 (20 with linetta_ask_writer)", len(TrialToolNames))
+	}
+}
+
+// With Review off the trial loses its continuity tools too: the allowlist
+// narrows what the groups allow, it never adds back what they removed.
+func TestTrialIsNarrowedByTheGroups(t *testing.T) {
+	served := registeredToolNamesOf(t, ToolDeps{}, settings.MCPModeFull, ToolGroups{Trial: true})
+	for _, n := range ReviewToolNames {
+		if slices.Contains(served, n) {
+			t.Errorf("%q is served on a trial with the review group off", n)
+		}
+	}
+	if !slices.Contains(served, "linetta_get_story_context") {
+		t.Error("a trial with the review group off lost a manuscript tool")
+	}
+}
+
+// History is outside the trial even though the built-in agent always asks for
+// it, and a trial in read_only mode is a trial's read tools — not a way back
+// to the full read set.
+func TestTrialDropsHistoryAndRespectsReadOnly(t *testing.T) {
+	ro := registeredToolNamesOf(t, ToolDeps{}, settings.MCPModeReadOnly, ToolGroups{Trial: true, Review: true, History: true})
+	for _, n := range ro {
+		if !slices.Contains(TrialToolNames, n) || slices.Contains(WriteToolNames, n) {
+			t.Errorf("read_only trial serves %q", n)
+		}
+	}
+	for _, n := range HistoryToolNames {
+		if slices.Contains(ro, n) {
+			t.Errorf("trial serves history tool %q", n)
+		}
+	}
+}
+
+// What the trial's schemas weigh is the trial's per-request bill. Measured at
+// 32,164B of tools/list JSON when the trial was cut (2026-11-11); the ceiling
+// is that plus 10%, so a description that quietly regrows trips it before it
+// raises every trial request's cost by much.
+func TestTrialToolSchemasStayUnderTheirCeiling(t *testing.T) {
+	const trialSchemaCeiling = 35400
+	sizes := toolSchemaBytes()
+	if len(sizes) == 0 {
+		t.Fatal("could not measure tool schema bytes")
+	}
+	sum := 0
+	for _, n := range TrialToolNames {
+		sum += sizes[n]
+	}
+	t.Logf("trial tool schemas: %dB", sum)
+	if sum > trialSchemaCeiling {
+		t.Errorf("the trial's %d tools weigh %dB, want <= %dB", len(TrialToolNames), sum, trialSchemaCeiling)
+	}
+}

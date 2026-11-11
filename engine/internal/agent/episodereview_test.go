@@ -151,3 +151,38 @@ func TestEpisodeReview_coversOnlyTheLastScenesOfALongTurn(t *testing.T) {
 		t.Fatalf("written = %v", written)
 	}
 }
+
+// A trial turn runs no background pass, even with the review switched on and
+// its tool in the turn: the trial's provider calls are Linetta's to pay for.
+func TestEpisodeReview_doesNotRunOnATrialTurn(t *testing.T) {
+	rec := &recorder{}
+	var writes atomic.Int32
+	c := &episodeClient{turn: writingTurn("n1"), entered: make(chan struct{})}
+	st := openStoreForAgentTests(t)
+	svc := New(Deps{
+		Providers:            fakeProviders{client: c},
+		History:              companion.NewHistoryRepo(st.DB()),
+		Scope:                fakeScope{titles: map[string]string{"p1": "제목"}},
+		Register:             episodeTools(&writes),
+		Notify:               rec.notify,
+		Language:             func() string { return "ko" },
+		EpisodeReviewEnabled: func() bool { return true },
+		TrialToolsEnabled:    func() bool { return true },
+		Clock:                func() int64 { return 1700000000000 },
+	})
+	t.Cleanup(func() { _ = svc.Close() })
+	if _, err := svc.Run(context.Background(), RunRequest{ProjectID: "p1", Prompt: "go"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	waitFor(t, "the run to end", func() bool { return rec.has("agent.done") })
+	waitIdle(t, svc)
+	if err := svc.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if writes.Load() != 1 {
+		t.Fatalf("the trial turn wrote %d scenes, want 1", writes.Load())
+	}
+	if len(c.requests) != 0 {
+		t.Fatalf("a trial turn was reviewed: %v", c.requests)
+	}
+}

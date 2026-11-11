@@ -101,6 +101,14 @@ func noteChangedFact(changed *[]string, name, args, result string) {
 // it never blocks the turn. Each runs only if this turn holds the tool it records
 // with.
 func (s *Service) maybeEpisodeReview(ctx context.Context, st loopState) {
+	if st.groups.trial {
+		// A trial turn is paid for out of Linetta's own key, and every pass
+		// below is one more provider call the writer did not ask for. The
+		// trial's tool cut already removes what settlement and the impact
+		// review record with; the episode review's linetta_report_continuity
+		// stays in the trial for the turn's own use, so it is stopped here.
+		return
+	}
 	var scenes, entries []string
 	if st.written != nil {
 		scenes = *st.written

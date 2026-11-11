@@ -1144,3 +1144,71 @@ func appendTurns(t *testing.T, svc *Service, ctx context.Context, projectID, tex
 		}
 	}
 }
+
+// The catch-all for every group combination, the trial included: whatever a
+// prompt line says, every tool it names is one this turn's server holds. A
+// line added later that names a tool some combination lacks fails here
+// rather than sending the agent after a tool it was never given.
+func TestSystemPrompt_namesOnlyToolsTheTurnHolds(t *testing.T) {
+	skills := []agentskills.Skill{writerSkill("dialogue-rhythm", "rhythm")}
+	for _, memory := range []bool{true, false} {
+		for _, skill := range []bool{true, false} {
+			for _, review := range []bool{true, false} {
+				for _, visualOff := range []bool{true, false} {
+					for _, trial := range []bool{false, true} {
+						g := toolGroups{memory: memory, skills: skill, review: review, disableVisualWrites: visualOff}
+						g = g.withTrial(func() bool { return trial })
+						got := systemPrompt("en", doc(agentmemory.ScopeWriterProfile, "writes at night"),
+							emptyDoc(agentmemory.ScopeWorkNotes), skills, g)
+						for _, name := range toolNamePattern.FindAllString(got, -1) {
+							if !g.offers(name) {
+								t.Errorf("%+v: the prompt names %s, which this turn does not hold", g, name)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+// A trial keeps the agent's job — read the brief, revise a selection, ask the
+// writer — and loses the lines about what it no longer holds.
+func TestSystemPrompt_trialKeepsTheManuscriptLinesAndDropsTheRest(t *testing.T) {
+	g := allToolGroups().withTrial(func() bool { return true })
+	got := systemPrompt("en", doc(agentmemory.ScopeWriterProfile, "writes at night"),
+		emptyDoc(agentmemory.ScopeWorkNotes), []agentskills.Skill{writerSkill("dialogue-rhythm", "rhythm")}, g)
+	for _, want := range []string{"linetta_get_story_context", "linetta_revise_scene", "<selection>", "linetta_ask_writer",
+		"linetta_create_checkpoint", "linetta_report_continuity", "linetta_list_characters"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("a trial prompt lost %q", want)
+		}
+	}
+	for _, gone := range []string{"linetta_get_character_visuals", "linetta_edit_ledger", "linetta_edit_memory",
+		"linetta_edit_skill", "linetta_save_forecast", "dialogue-rhythm", "purpose=import_extraction"} {
+		if strings.Contains(got, gone) {
+			t.Errorf("a trial prompt still carries %q", gone)
+		}
+	}
+	// The memory documents stay: they are content, and a trial writer may
+	// already have a line in them.
+	if !strings.Contains(got, "writes at night") {
+		t.Error("a trial prompt dropped the writer's memory document")
+	}
+}
+
+// Off unless the trial provider says otherwise: an unwired func must leave
+// the writer with the whole product.
+func TestWithTrial_nilOrFalseChangesNothing(t *testing.T) {
+	g := allToolGroups()
+	if got := g.withTrial(nil); got != g {
+		t.Errorf("withTrial(nil) = %+v, want %+v", got, g)
+	}
+	if got := g.withTrial(func() bool { return false }); got != g {
+		t.Errorf("withTrial(false) = %+v, want %+v", got, g)
+	}
+	on := g.withTrial(func() bool { return true })
+	if !on.trial || on.memory || on.skills || !on.disableVisualWrites || !on.review {
+		t.Errorf("withTrial(true) = %+v, want trial with memory, skills and visual writes off and review kept", on)
+	}
+}

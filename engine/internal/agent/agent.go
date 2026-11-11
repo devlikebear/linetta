@@ -141,6 +141,13 @@ type Deps struct {
 	// Read the same way and for the same reason as MemoryToolsEnabled and
 	// SkillToolsEnabled above — a nil func means enabled.
 	ReviewToolsEnabled func() bool
+	// TrialToolsEnabled reports whether this turn runs on the trial
+	// provider's key, which cuts the tool set to mcphost.TrialToolNames plus
+	// linetta_ask_writer and turns the background passes off. Read once per
+	// turn alongside the switches above. Unlike them a nil func means OFF:
+	// the trial is the exception the trial provider opts into, and an unwired
+	// collaborator must leave the writer with the whole product.
+	TrialToolsEnabled func() bool
 	// Undo reverts what the agent last did. Exactly one of batchID, snapshotID
 	// is expected to be non-empty — the caller (agent.undo's RPC handler)
 	// validates that before this is reached. A batch id must be bound to the

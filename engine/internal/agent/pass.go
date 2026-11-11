@@ -107,7 +107,8 @@ func (s *Service) StartSampleCheck(ctx context.Context, projectID, request strin
 	if err != nil {
 		return err
 	}
-	groups := resolveToolGroups(s.deps.MemoryToolsEnabled, s.deps.SkillToolsEnabled, s.deps.ReviewToolsEnabled)
+	groups := resolveToolGroups(s.deps.MemoryToolsEnabled, s.deps.SkillToolsEnabled, s.deps.ReviewToolsEnabled).
+		withTrial(s.deps.TrialToolsEnabled)
 	tools, err := s.session(ctx, groups)
 	if err != nil {
 		return err
