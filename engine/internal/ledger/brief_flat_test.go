@@ -69,7 +69,7 @@ func TestBriefKeepsPromisesInAWorkWithNoParts(t *testing.T) {
 // reaches the brief.
 func TestBriefKeepsStoryTimeInAWorkWithNoParts(t *testing.T) {
 	ctx := context.Background()
-	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
+	st, err := storetest.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
