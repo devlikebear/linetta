@@ -101,6 +101,9 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 	if s.deps.VisualWriteToolsDisabled != nil {
 		groups.disableVisualWrites = s.deps.VisualWriteToolsDisabled()
 	}
+	// Last, because a trial overrides the writer's switches rather than
+	// combining with them.
+	groups = groups.withTrial(s.deps.TrialToolsEnabled)
 	tools, err := s.session(ctx, groups)
 	if err != nil {
 		return "", err

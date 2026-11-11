@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"unicode/utf8"
@@ -19,6 +20,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/devlikebear/linetta/engine/internal/mcphost"
+	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/tars/pkg/llm"
 )
 
@@ -66,7 +68,25 @@ func (g toolGroups) hostGroups() mcphost.ToolGroups {
 		Memory: g.memory, Skills: g.skills, Review: g.review,
 		DisableVisualWrites: g.disableVisualWrites,
 		History:             true,
+		Trial:               g.trial,
 	}
+}
+
+// offers reports whether the turn these groups build holds every one of
+// names. It is how the prompt decides whether a line may name a tool: the
+// answer comes from mcphost.ToolNames — the same description of the tool set
+// that TestToolNamesMatchesWhatTheServerActuallyServes pins to a real
+// tools/list — plus the one tool the loop appends itself. Full mode always:
+// the built-in agent registers the full set whatever settings.MCPMode says.
+func (g toolGroups) offers(names ...string) bool {
+	held := mcphost.ToolNames(settings.MCPModeFull, g.hostGroups())
+	held = append(held, askWriterTool)
+	for _, n := range names {
+		if !slices.Contains(held, n) {
+			return false
+		}
+	}
+	return true
 }
 
 // toolSession is one connected client/server pair. Normally one per engine:

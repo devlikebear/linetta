@@ -37,6 +37,56 @@ type ToolGroups struct {
 	// the writer pasted and said in passing, so only the built-in agent, whose
 	// conversation it is, gets these tools. An external client never does.
 	History bool
+	// Trial cuts the set down to TrialToolNames. It is not a writer's switch:
+	// the trial provider sets it for a turn paid for out of Linetta's own key,
+	// where every request carries the tool schemas and a short work makes
+	// those schemas most of the bill. ToolGroupsFrom never sets it, so an
+	// external client is never trimmed. See normalized for what it implies
+	// about the other groups.
+	Trial bool
+}
+
+// TrialToolNames is the whole tool set a Trial server registers. It is an
+// allowlist rather than one more group to subtract, because a trial is
+// defined by what it shows the writer — read, write and revise prose, check
+// style and continuity, undo — and a tool added to the product later must not
+// quietly join the trial bill. linetta_ask_writer is the agent's own tool,
+// appended by the agent rather than registered here, so the trial's twentieth
+// tool is not in this list.
+var TrialToolNames = []string{
+	"linetta_get_outline",
+	"linetta_get_story_context",
+	"linetta_read_scene",
+	"linetta_search_manuscript",
+	"linetta_list_characters",
+	"linetta_where_does_appear",
+	"linetta_get_plot",
+	"linetta_get_fact_cards",
+	"linetta_analyze_style",
+	"linetta_list_ledger",
+	"linetta_list_continuity",
+	"linetta_write_scene",
+	"linetta_write_summary",
+	"linetta_revise_scene",
+	"linetta_apply_story_ops",
+	"linetta_create_checkpoint",
+	"linetta_undo_last_change",
+	"linetta_propose_style_profile",
+	"linetta_report_continuity",
+}
+
+// normalized is the groups a server is actually built with. Trial turns off
+// the groups whose every tool falls outside TrialToolNames — memory, skills,
+// history, visual writes — rather than leaving them on and removing their
+// tools afterwards, because a group's switch reaches further than its tools:
+// with Skills on, linetta_get_story_context would still list skills the trial
+// agent has no linetta_read_skill to open. Review stays on: three of its tools
+// are in the trial, and the allowlist removes the rest.
+func (g ToolGroups) normalized() ToolGroups {
+	if g.Trial {
+		g.Memory, g.Skills, g.History, g.DisableVisualWrites = false, false, false, true
+	}
+	return g
 }
 
 // AllToolGroups is the default — every group on, which is the tool set a
@@ -92,6 +142,10 @@ var IllustrationWriteToolNames = []string{"linetta_request_illustration", "linet
 
 // excludedByGroups reports whether Register would omit a disabled group member.
 func excludedByGroups(name string, groups ToolGroups) bool {
+	groups = groups.normalized()
+	if groups.Trial && !slices.Contains(TrialToolNames, name) {
+		return true
+	}
 	if groups.DisableVisualWrites && (slices.Contains(VisualWriteToolNames, name) || slices.Contains(IllustrationWriteToolNames, name)) {
 		return true
 	}
@@ -116,11 +170,14 @@ func excludedByGroups(name string, groups ToolGroups) bool {
 // Settings pane's count is the count the agent gets, and cannot drift from it
 // the way a number typed into a marketing page does.
 func ToolNames(mode string, groups ToolGroups) []string {
-	names := make([]string, 0, len(ReadToolNames)+len(WriteToolNames))
+	names := make([]string, 0, len(ReadToolNames)+len(HistoryToolNames)+len(WriteToolNames))
 	for _, n := range ReadToolNames {
 		if !excludedByGroups(n, groups) {
 			names = append(names, n)
 		}
+	}
+	if groups.normalized().History {
+		names = append(names, HistoryToolNames...)
 	}
 	if mode == settings.MCPModeFull {
 		for _, n := range WriteToolNames {

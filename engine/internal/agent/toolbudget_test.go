@@ -401,3 +401,43 @@ func TestToolSession_aSecondReleaseIsReportedAndChangesNothing(t *testing.T) {
 		t.Error("the extra release reopened the session's closed flag")
 	}
 }
+
+// The trial switch rebuilds the session like any group switch, and a trial
+// turn is offered exactly the trial's twenty tools — the nineteen mcphost
+// registers plus linetta_ask_writer — through the real registrar.
+func TestRun_aTrialTurnIsOfferedTheTrialSetOnItsOwnSession(t *testing.T) {
+	rec := &recorder{}
+	c := &scriptedClient{responses: []llm.ChatResponse{textReply("ok")}}
+	svc, cfg, registrations := budgetService(t, c, rec)
+	setToolSwitches(t, cfg, true, true, true)
+	var trial atomic.Bool
+	svc.deps.TrialToolsEnabled = trial.Load
+
+	oneTurn(t, svc, rec)
+	full := len(c.options().Tools)
+	built := *registrations
+
+	trial.Store(true)
+	oneTurn(t, svc, rec)
+	if *registrations != built+1 {
+		t.Errorf("switching the trial on built %d tool servers in total, want %d", *registrations, built+1)
+	}
+	offered := offeredTools(c.options().Tools)
+	if len(offered) != len(mcphost.TrialToolNames)+1 || !offered[askWriterTool] {
+		t.Errorf("a trial turn was offered %d tools, want %d with %s", len(offered), len(mcphost.TrialToolNames)+1, askWriterTool)
+	}
+	for _, n := range mcphost.TrialToolNames {
+		if !offered[n] {
+			t.Errorf("a trial turn was not offered %s", n)
+		}
+	}
+	if len(offered) >= full {
+		t.Errorf("a trial turn was offered %d tools, no fewer than the full turn's %d", len(offered), full)
+	}
+
+	trial.Store(false)
+	oneTurn(t, svc, rec)
+	if got := len(c.options().Tools); got != full {
+		t.Errorf("after the trial the turn was offered %d tools, want the full %d back", got, full)
+	}
+}
