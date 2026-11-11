@@ -356,10 +356,25 @@ export function Workspace() {
     setTodayChars(null);
     void refreshTodayChars(load.project.id);
   }, [load?.project.id, refreshTodayChars]);
+  // A scene save moves the work's total too. Only word_count is taken from
+  // the engine, so a title or rule the writer is changing is not overwritten.
+  const refreshWorkTotal = useCallback(async (targetProjectId: string) => {
+    try {
+      const fresh = await projects.get(targetProjectId);
+      setLoad((prev) =>
+        prev && prev.project.id === fresh.id && prev.project.word_count !== fresh.word_count
+          ? { ...prev, project: { ...prev.project, word_count: fresh.word_count } }
+          : prev,
+      );
+    } catch {
+      /* benign; the total catches up when the work is opened again */
+    }
+  }, []);
   useEffect(() => {
     if (saveCompletedAt === null || !load?.project.id) return;
     void refreshTodayChars(load.project.id);
-  }, [saveCompletedAt, load?.project.id, refreshTodayChars]);
+    void refreshWorkTotal(load.project.id);
+  }, [saveCompletedAt, load?.project.id, refreshTodayChars, refreshWorkTotal]);
   useEffect(() => { setOutlineUndoSnapshot(null); }, [projectId]);
   // ForecastSheet's own projectId prop is load.project.id, which still
   // names the OLD project until the "Initial load" effect's async fetch
