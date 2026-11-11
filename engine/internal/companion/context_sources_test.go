@@ -8,6 +8,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 )
 
 // curatedFixture is the adapter's whole world: a store, a work to hang the
@@ -22,7 +23,7 @@ type curatedFixture struct {
 func newCuratedFixture(t *testing.T) (context.Context, *curatedFixture) {
 	t.Helper()
 	ctx := context.Background()
-	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
+	st, err := storetest.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}

@@ -11,6 +11,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 	"github.com/devlikebear/linetta/engine/internal/visual"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -31,7 +32,7 @@ func newSkillDeps(t *testing.T) (context.Context, ToolDeps, string, string) {
 func newSkillDepsWithStore(t *testing.T) (context.Context, ToolDeps, string, string, *store.Store) {
 	t.Helper()
 	ctx := context.Background()
-	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
+	st, err := storetest.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}

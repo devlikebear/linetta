@@ -16,7 +16,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/settings"
-	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 )
 
 // A real remote and two real clones: the point here is what git does, which a
@@ -47,7 +47,7 @@ func newClone(t *testing.T, remote, name string) *clone {
 	if err != nil {
 		t.Fatal(err)
 	}
-	st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+	st, err := storetest.Open(ctx, filepath.Join(home, "library.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

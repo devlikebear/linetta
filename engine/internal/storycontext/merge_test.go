@@ -12,7 +12,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/note"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
-	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
 
@@ -21,7 +21,7 @@ import (
 // provider-less installation.
 func newTestBuilder(t *testing.T) (*ContextBuilder, string) {
 	t.Helper()
-	s, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "test.db"))
+	s, err := storetest.Open(context.Background(), filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}

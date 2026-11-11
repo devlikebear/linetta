@@ -18,7 +18,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/opsstatus"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/settings"
-	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 )
 
 // recordingRunner stubs CmdRunner: it remembers every git invocation and
@@ -77,7 +77,7 @@ func newFixture(t *testing.T) (*Syncer, *recordingRunner, string, *opsstatus.Rep
 	}
 
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	storeDB, err := store.Open(context.Background(), dbPath)
+	storeDB, err := storetest.Open(context.Background(), dbPath)
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}

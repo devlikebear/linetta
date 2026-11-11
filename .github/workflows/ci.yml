@@ -5,6 +5,13 @@ on:
   push:
     branches: [main]
 
+# A new push to a pull request makes its earlier run moot, so cancel it rather
+# than let both hold runners for the full suite. Pushes to main each get their
+# own group (by commit) and always run to the end.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
     name: Test (${{ matrix.name }})
@@ -18,12 +25,16 @@ jobs:
           - name: Linux
             os: ubuntu-latest
             audit: true
+            go_test_flags: -race
           # Windows is a shipped target whose debug build, checkout, and
           # platform-specific engine paths are not exercised anywhere else:
           # the release workflow only builds Windows in release mode.
+          # No race detector here: Linux already runs the suite under it, and
+          # a race is not platform-specific (see test-go in the Makefile).
           - name: Windows
             os: windows-latest
             audit: false
+            go_test_flags: ""
 
     defaults:
       run:
@@ -81,7 +92,7 @@ jobs:
           cargo install cargo-audit --locked
 
       - name: Verify
-        run: make ci
+        run: make ci GO_TEST_FLAGS="${{ matrix.go_test_flags }}"
 
       - name: Audit dependencies
         if: matrix.audit

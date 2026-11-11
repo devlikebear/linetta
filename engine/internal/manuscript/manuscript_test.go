@@ -11,6 +11,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 )
 
 func TestIndexerUpsertQueryDelete(t *testing.T) {
@@ -299,7 +300,7 @@ func sceneAfter(t *testing.T, nr *node.Repo, afterID, label, text string) string
 
 func manuscriptFixture(t *testing.T) (*store.Store, project.Project, *node.Repo) {
 	t.Helper()
-	st, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "test.db"))
+	st, err := storetest.Open(context.Background(), filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}

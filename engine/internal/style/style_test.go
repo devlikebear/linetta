@@ -10,7 +10,7 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
-	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 )
 
 func scene(paragraphs ...string) []Scene {
@@ -130,7 +130,7 @@ func TestSentences(t *testing.T) {
 
 func openRepos(t *testing.T) (*Repo, *project.Repo, *node.Repo) {
 	t.Helper()
-	st, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "library.db"))
+	st, err := storetest.Open(context.Background(), filepath.Join(t.TempDir(), "library.db"))
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}

@@ -16,7 +16,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/illustration"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
-	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 	"github.com/devlikebear/linetta/engine/internal/visual"
 )
 
@@ -55,7 +55,7 @@ func reasonOfMethodError(t *testing.T, err error) (int, string) {
 
 func TestIllustrationHandlers(t *testing.T) {
 	ctx := context.Background()
-	s, err := store.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
+	s, err := storetest.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +170,7 @@ func TestImageProviderHandlers(t *testing.T) {
 
 func TestIllustrationsListShowsUsageAndDeleteRefusesAPictureInUse(t *testing.T) {
 	ctx := context.Background()
-	s, err := store.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
+	s, err := storetest.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -9,7 +9,7 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
-	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 )
 
 const webnovel = project.OutlinePresetWebNovel
@@ -228,7 +228,7 @@ func TestLastWritten_nothingWrittenYet(t *testing.T) {
 
 func TestLastWritten_readsTheStore(t *testing.T) {
 	ctx := context.Background()
-	s, err := store.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
+	s, err := storetest.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -272,7 +272,7 @@ func TestLastWritten_readsTheStore(t *testing.T) {
 
 func TestListAndResolve_readTheStore(t *testing.T) {
 	ctx := context.Background()
-	s, err := store.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
+	s, err := storetest.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

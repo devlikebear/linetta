@@ -15,7 +15,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
-	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 )
 
 // A merged work brings its gallery along: new ids, the scene each picture was
@@ -23,7 +23,7 @@ import (
 func TestMergeProjectCopiesIllustrations(t *testing.T) {
 	ctx := context.Background()
 	home := t.TempDir()
-	st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+	st, err := storetest.Open(ctx, filepath.Join(home, "library.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestMergeProjectCopiesIllustrations(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	live, err := store.Open(ctx, filepath.Join(home, "live.db"))
+	live, err := storetest.Open(ctx, filepath.Join(home, "live.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

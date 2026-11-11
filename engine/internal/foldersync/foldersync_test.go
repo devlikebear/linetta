@@ -15,7 +15,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/settings"
-	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 )
 
 func newFixture(t *testing.T) (*Syncer, *settings.Store, string) {
@@ -28,7 +28,7 @@ func newFixture(t *testing.T) (*Syncer, *settings.Store, string) {
 		t.Fatalf("settings.New: %v", err)
 	}
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	db, err := store.Open(context.Background(), dbPath)
+	db, err := storetest.Open(context.Background(), dbPath)
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}

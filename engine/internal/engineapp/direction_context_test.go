@@ -13,7 +13,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
-	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
 
@@ -30,7 +30,7 @@ import (
 // uses for the RPC handler's own version of this bug.
 func TestPlannedBranchFor_propagatesAStaleCheckFailureRatherThanReportingFresh(t *testing.T) {
 	ctx := context.Background()
-	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
+	st, err := storetest.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}

@@ -15,7 +15,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/proposals"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
-	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 	"github.com/devlikebear/linetta/engine/internal/storyops"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
@@ -54,7 +54,7 @@ type revertingSeed struct {
 func seedRevertingBatches(t *testing.T, home string) revertingSeed {
 	t.Helper()
 	ctx := context.Background()
-	st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+	st, err := storetest.Open(ctx, filepath.Join(home, "library.db"))
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}
@@ -177,7 +177,7 @@ func TestOpen_reconcilesRevertingItemsAtStartup(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	verify, err := store.Open(ctx, filepath.Join(home, "library.db"))
+	verify, err := storetest.Open(ctx, filepath.Join(home, "library.db"))
 	if err != nil {
 		t.Fatalf("store.Open (verify): %v", err)
 	}

@@ -12,13 +12,13 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
-	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 )
 
 func newEntityFixture(t *testing.T) (*entity.Repo, project.Project) {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := store.Open(context.Background(), dbPath)
+	s, err := storetest.Open(context.Background(), dbPath)
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestUpdateEntityHandler(t *testing.T) {
 func TestEntityScenesHandler(t *testing.T) {
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "t.db")
-	s, err := store.Open(ctx, dbPath)
+	s, err := storetest.Open(ctx, dbPath)
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestEntityScenesHandler(t *testing.T) {
 func TestEntityScenesHandler_noMentions(t *testing.T) {
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "t.db")
-	s, _ := store.Open(ctx, dbPath)
+	s, _ := storetest.Open(ctx, dbPath)
 	defer s.Close()
 	pr := project.NewRepo(s)
 	er := entity.NewRepo(s)
@@ -212,7 +212,7 @@ func TestEntityScenesHandler_noMentions(t *testing.T) {
 func TestEntityScenesHandler_emptyID(t *testing.T) {
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "t.db")
-	s, _ := store.Open(ctx, dbPath)
+	s, _ := storetest.Open(ctx, dbPath)
 	defer s.Close()
 	h := EntityScenes(mention.NewRepo(s), node.NewRepo(s))
 	params, _ := json.Marshal(map[string]any{"entity_id": ""})

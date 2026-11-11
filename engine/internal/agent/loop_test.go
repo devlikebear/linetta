@@ -18,6 +18,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/provider"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 	"github.com/devlikebear/tars/pkg/llm"
 )
 
@@ -189,7 +190,7 @@ func toolReply(name, args string) llm.ChatResponse {
 func openStoreForAgentTests(t *testing.T) *store.Store {
 	t.Helper()
 	ctx := context.Background()
-	st, err := store.Open(ctx, t.TempDir()+"/test.db")
+	st, err := storetest.Open(ctx, t.TempDir()+"/test.db")
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}

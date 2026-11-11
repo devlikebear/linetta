@@ -4,12 +4,12 @@ import (
 	"context"
 	"testing"
 
-	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 )
 
 func newActivityRepo(t *testing.T) *ActivityRepo {
 	t.Helper()
-	st, err := store.Open(context.Background(), t.TempDir()+"/test.db")
+	st, err := storetest.Open(context.Background(), t.TempDir()+"/test.db")
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}

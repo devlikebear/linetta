@@ -13,6 +13,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 )
 
 type continuityFix struct {
@@ -29,7 +30,7 @@ type continuityFix struct {
 
 func newContinuityHandlerFixture(t *testing.T) continuityFix {
 	t.Helper()
-	s, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "test.db"))
+	s, err := storetest.Open(context.Background(), filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}

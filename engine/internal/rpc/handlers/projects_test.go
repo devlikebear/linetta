@@ -13,7 +13,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
-	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
@@ -21,7 +21,7 @@ import (
 func newRepo(t *testing.T) *project.Repo {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := store.Open(context.Background(), dbPath)
+	s, err := storetest.Open(context.Background(), dbPath)
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}
@@ -53,7 +53,7 @@ func (r fakeSynopsisRefresher) RefreshNow(ctx context.Context, nodeID string) {
 func newProjectSynopsisFixture(t *testing.T) projectSynopsisFixture {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := store.Open(context.Background(), dbPath)
+	s, err := storetest.Open(context.Background(), dbPath)
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}

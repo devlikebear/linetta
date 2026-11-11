@@ -7,14 +7,14 @@ import (
 	"testing"
 
 	"github.com/devlikebear/linetta/engine/internal/opsstatus"
-	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 )
 
 func TestDiagnosticsVersion(t *testing.T) {
 	home := t.TempDir()
 	staleHome := t.TempDir()
 	t.Setenv("LINETTA_HOME", staleHome)
-	st, err := store.Open(context.Background(), filepath.Join(home, "library.db"))
+	st, err := storetest.Open(context.Background(), filepath.Join(home, "library.db"))
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestDiagnosticsVersion(t *testing.T) {
 func TestDiagnosticsReportsCompanionHistory(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("LINETTA_HOME", t.TempDir())
-	st, err := store.Open(context.Background(), filepath.Join(home, "library.db"))
+	st, err := storetest.Open(context.Background(), filepath.Join(home, "library.db"))
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestDiagnosticsReportsCompanionHistory(t *testing.T) {
 func TestDiagnosticsGetIncludesOpsStatus(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("LINETTA_HOME", t.TempDir())
-	st, err := store.Open(context.Background(), filepath.Join(home, "library.db"))
+	st, err := storetest.Open(context.Background(), filepath.Join(home, "library.db"))
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}

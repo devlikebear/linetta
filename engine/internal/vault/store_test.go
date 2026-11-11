@@ -20,7 +20,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/settings"
-	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 )
 
 func newDirStore(t *testing.T, folder, device string) dirStore {
@@ -111,7 +111,7 @@ func TestStoresKeepTheSameContract(t *testing.T) {
 func folderDevice(t *testing.T, folder, name string) *device {
 	t.Helper()
 	home := t.TempDir()
-	st, err := store.Open(context.Background(), filepath.Join(home, "library.db"))
+	st, err := storetest.Open(context.Background(), filepath.Join(home, "library.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -553,7 +553,7 @@ func gitDevice(t *testing.T, remote, name string) *device {
 	t.Helper()
 	ctx := context.Background()
 	home := t.TempDir()
-	st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+	st, err := storetest.Open(ctx, filepath.Join(home, "library.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

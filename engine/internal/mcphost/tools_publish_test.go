@@ -16,7 +16,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/publish"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/settings"
-	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 )
 
 type fakePublisher struct {
@@ -65,7 +65,7 @@ type publishFixture struct {
 func newPublishFixture(t *testing.T) *publishFixture {
 	t.Helper()
 	ctx := context.Background()
-	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
+	st, err := storetest.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
