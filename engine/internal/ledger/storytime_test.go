@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/devlikebear/linetta/engine/internal/node"
 )
 
 type timeFixture struct{ fixture }
@@ -391,25 +393,34 @@ func TestBriefTellsTheStoryTime(t *testing.T) {
 }
 
 // A synthetic work of a thousand episodes, each measuring time from its own
-// event: the section stays in its budget and says what it left out.
+// event: the section stays in its budget and says what it left out. The
+// outline and ledger are built in memory: written through the store, a
+// thousand scenes and two thousand entries ran past ten minutes on Windows CI.
 func TestBriefStoryTimeStaysInItsBudget(t *testing.T) {
-	f := newTimeFixture(t, 1000)
-	for i := range 1000 {
-		ev := f.event(t, i, fmt.Sprintf("사건 %d: %s", i, strings.Repeat("긴 이름 ", 4)), ptr(float64(i)))
-		f.elapsed(t, int64(i+2), i, ev, float64(i), strings.Repeat("오래 ", 10))
+	const episodes = 1000
+	part := "part"
+	nodes := []node.Node{{ID: part, Kind: node.KindContainer, Label: "1부"}}
+	var entries []Entry
+	for i := range episodes {
+		scene := fmt.Sprintf("s%d", i)
+		nodes = append(nodes, node.Node{ID: scene, ParentID: &part, Ordinal: i, Kind: node.KindLeaf, Label: fmt.Sprintf("%d화", i+1)})
+		ev := Entry{ID: fmt.Sprintf("ev%d", i), Kind: KindTimeline, Status: StatusOpen, Strength: StrengthHard,
+			Body: fmt.Sprintf("사건 %d: %s", i, strings.Repeat("긴 이름 ", 4)), ValueNum: ptr(float64(i)), PlantedNodeID: scene, CreatedAt: int64(2 * i)}
+		entries = append(entries, ev, Entry{ID: fmt.Sprintf("el%d", i), Kind: KindTimeline, Status: StatusOpen, Strength: StrengthHard,
+			Subject: ev.Body, Attribute: AttributeElapsed, Body: strings.Repeat("오래 ", 10), About: ev.ID,
+			ValueNum: ptr(float64(i)), PlantedNodeID: scene, CreatedAt: int64(2*i + 1)})
 	}
-	b, err := f.repo.ContextLedger(f.ctx, f.pid, f.scenes[999].ID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	tr := newTree(nodes)
+	last := fmt.Sprintf("s%d", episodes-1)
+	lines, omitted := tr.timeLines(entries, last, tr.index[last])
 	n := 0
-	for _, line := range b.Time {
+	for _, line := range lines {
 		n += utf8.RuneCountInString(line)
 	}
-	if n > briefTimeRunes || len(b.Time) < 2 {
-		t.Fatalf("%d lines ran to %d runes", len(b.Time), n)
+	if n > briefTimeRunes || len(lines) < 2 {
+		t.Fatalf("%d lines ran to %d runes", len(lines), n)
 	}
-	if b.Omitted < 1000-len(b.Time) {
-		t.Fatalf("omitted = %d with %d shown", b.Omitted, len(b.Time))
+	if omitted < episodes-len(lines) {
+		t.Fatalf("omitted = %d with %d shown", omitted, len(lines))
 	}
 }
