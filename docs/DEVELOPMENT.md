@@ -201,7 +201,11 @@ Write (`full` mode only):
   upload leaves the site's cover and the writer's choice as they were. All
   three are refused until the writer has connected an account in the app —
   there is deliberately no tool for that, since pairing is approved in the
-  writer's browser;
+  writer's browser. Each call then waits in `publish.Approvals` (#238): the
+  engine sends `publish.approvals_changed`, the app's `PublishApprovalDialog`
+  shows what would be sent, and only the renderer's `publish.approval_answer`
+  RPC lets it through. A decline, a two-minute timeout or a cancelled call
+  sends nothing. The built-in agent waits on the same dialog;
 - `linetta_report_continuity`, `linetta_update_continuity`,
   `linetta_propose_story_ops`, `linetta_accept_proposals`, `linetta_reject_proposals`,
   `linetta_save_forecast`: the story-assist Review group — see below.

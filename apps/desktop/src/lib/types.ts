@@ -792,6 +792,29 @@ export interface PublishSheetView {
   moderation_reason?: string;
 }
 
+/** Something an agent asked to put on Linetta Works, waiting for the
+ *  writer (#238). The engine holds the agent's call until it is answered,
+ *  withdrawn, or expires_at passes. */
+export interface PublishApprovalRequest {
+  id: string;
+  kind: "register_work" | "publish_episode" | "publish_cover";
+  project_id: string;
+  work_title: string;
+  node_id?: string;
+  episode_title?: string;
+  /** Already on the site: this would replace what readers see. */
+  republish?: boolean;
+  blurb?: string;
+  serial_status?: PublishSerialStatus;
+  illustration_id?: string;
+  /** "agent" is the built-in panel; "external" is an MCP client. */
+  source: "agent" | "external";
+  /** The name an external client gave itself. Its own claim, not verified. */
+  client?: string;
+  /** Unix milliseconds. */
+  expires_at: number;
+}
+
 export interface PublishCoverView {
   illustration_id: string;
   state: PublishEpisodeState;

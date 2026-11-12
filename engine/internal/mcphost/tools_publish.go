@@ -8,6 +8,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/devlikebear/linetta/engine/internal/episode"
 	"github.com/devlikebear/linetta/engine/internal/publish"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 )
@@ -21,6 +22,14 @@ type Publisher interface {
 	UpsertWork(ctx context.Context, in publish.UpsertInput) (publish.WorkView, error)
 	PublishEpisode(ctx context.Context, nodeID string) (publish.PublishResult, error)
 	PublishCover(ctx context.Context, projectID, illustrationID string) (publish.CoverView, error)
+}
+
+// PublishApprover puts a publish write in front of the writer and waits for
+// their answer (#238): nil means approved. Publishing is the one thing an
+// agent does that readers see and the app cannot undo, so a tool description
+// saying "only when the writer asks" is not the guard; this is.
+type PublishApprover interface {
+	Ask(ctx context.Context, req publish.ApprovalRequest) error
 }
 
 // ---------- linetta_publish_status ----------
@@ -120,22 +129,28 @@ func (d ToolDeps) registerPublishReadTool(s *mcp.Server) {
 	}, record(d, "linetta_publish_status", d.publishStatus))
 }
 
+// approvalNote follows "Only when the writer asks" in each publish write's
+// description: the call waits on the writer (#238), and an agent that knows
+// this tells them to look at the app. Short, because these descriptions ride
+// along with every request (budget_test.go).
+const approvalNote = "; they approve it in the app."
+
 func (d ToolDeps) registerPublishWriteTools(s *mcp.Server) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_register_work",
 		Description: "Register the work on Linetta Works with its blurb, or change its blurb or serial status " +
-			"there. Only when the writer asks, with a blurb they wrote or approved. Title and genres come " +
-			"from the work.",
+			"there. Only when the writer asks, with a blurb they wrote or approved" + approvalNote + " Title and " +
+			"genres come from the work.",
 	}, record(d, "linetta_register_work", d.registerWork))
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_publish_episode",
 		Description: "Publish one episode to Linetta Works for anyone to read, or update its text there. Only " +
-			"when the writer asks. The work must be registered first (linetta_register_work).",
+			"when the writer asks" + approvalNote + " Register the work first.",
 	}, record(d, "linetta_publish_episode", d.publishEpisode))
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_publish_cover",
 		Description: "Make a gallery picture the work's cover on Linetta Works and upload it, replacing any cover " +
-			"there. Only when the writer asks. The work must be registered first. Sheets are not sent.",
+			"there. Only when the writer asks" + approvalNote + " The work must be registered first. Sheets are not sent.",
 	}, record(d, "linetta_publish_cover", d.publishCover))
 }
 
@@ -182,7 +197,7 @@ func toPublishedCover(c publish.CoverView) publishedCover {
 	return publishedCover{IllustrationID: c.IllustrationID, State: c.State, Reason: c.Reason}
 }
 
-func (d ToolDeps) registerWork(ctx context.Context, _ *mcp.CallToolRequest, in registerWorkInput) (*mcp.CallToolResult, registerWorkOutput, error) {
+func (d ToolDeps) registerWork(ctx context.Context, req *mcp.CallToolRequest, in registerWorkInput) (*mcp.CallToolResult, registerWorkOutput, error) {
 	if d.Publish == nil {
 		return toolErr("publishing is not available in this build"), registerWorkOutput{}, nil
 	}
@@ -190,25 +205,29 @@ func (d ToolDeps) registerWork(ctx context.Context, _ *mcp.CallToolRequest, in r
 	if errResult != nil {
 		return errResult, registerWorkOutput{}, nil
 	}
+	ws, errResult := d.publishReady(ctx, p.ID, false)
+	if errResult != nil {
+		return errResult, registerWorkOutput{}, nil
+	}
 	blurb, serial := strings.TrimSpace(in.Blurb), strings.TrimSpace(in.SerialStatus)
 	// The site wants the blurb on every update; a writer who only says "mark
 	// it completed" should not need the agent to retype it.
-	if blurb == "" || serial == "" {
-		ws, err := d.Publish.WorkStatus(ctx, p.ID)
-		if err != nil {
-			return toolErr("%s", publishFailure(err)), registerWorkOutput{}, nil
+	if ws.Work != nil {
+		if blurb == "" {
+			blurb = ws.Work.Blurb
 		}
-		if ws.Work != nil {
-			if blurb == "" {
-				blurb = ws.Work.Blurb
-			}
-			if serial == "" {
-				serial = ws.Work.SerialStatus
-			}
+		if serial == "" {
+			serial = ws.Work.SerialStatus
 		}
 	}
 	if n := utf8.RuneCountInString(blurb); n > publish.MaxBlurbRunes {
 		return toolErr("the blurb is %d characters; the site takes at most %d", n, publish.MaxBlurbRunes), registerWorkOutput{}, nil
+	}
+	if errResult := d.askToPublish(ctx, req, publish.ApprovalRequest{
+		Kind: publish.ApprovalRegisterWork, ProjectID: p.ID, WorkTitle: p.Title,
+		Blurb: blurb, SerialStatus: serial, Republish: ws.Registered,
+	}); errResult != nil {
+		return errResult, registerWorkOutput{}, nil
 	}
 	w, err := d.Publish.UpsertWork(ctx, publish.UpsertInput{ProjectID: p.ID, Blurb: blurb, SerialStatus: serial})
 	if err != nil {
@@ -219,12 +238,40 @@ func (d ToolDeps) registerWork(ctx context.Context, _ *mcp.CallToolRequest, in r
 	return nil, registerWorkOutput{WorkURL: w.URL, SerialStatus: w.SerialStatus}, nil
 }
 
-func (d ToolDeps) publishEpisode(ctx context.Context, _ *mcp.CallToolRequest, in publishEpisodeInput) (*mcp.CallToolResult, publishEpisodeOutput, error) {
+func (d ToolDeps) publishEpisode(ctx context.Context, req *mcp.CallToolRequest, in publishEpisodeInput) (*mcp.CallToolResult, publishEpisodeOutput, error) {
 	if d.Publish == nil {
 		return toolErr("publishing is not available in this build"), publishEpisodeOutput{}, nil
 	}
 	n, errResult := d.requireNodeInProject(ctx, in.NodeID, in.ProjectID)
 	if errResult != nil {
+		return errResult, publishEpisodeOutput{}, nil
+	}
+	p, errResult := d.requireProject(ctx, n.ProjectID)
+	if errResult != nil {
+		return errResult, publishEpisodeOutput{}, nil
+	}
+	// The writer is asked about the episode, not the scene the agent passed.
+	ep, err := episode.Resolve(ctx, d.Nodes, p.OutlinePreset, n.ID)
+	if errors.Is(err, episode.ErrNotFound) {
+		return toolErr("%s", publishFailure(&rpc.ReasonError{Reason: rpc.ReasonPublishNotEpisode, Err: err})), publishEpisodeOutput{}, nil
+	}
+	if err != nil {
+		return toolErr("could not find the episode: %v", err), publishEpisodeOutput{}, nil
+	}
+	ws, errResult := d.publishReady(ctx, p.ID, true)
+	if errResult != nil {
+		return errResult, publishEpisodeOutput{}, nil
+	}
+	republish := false
+	for _, e := range ws.Episodes {
+		if e.NodeID == ep.NodeID && e.State != "" && e.State != "unpublished" {
+			republish = true
+		}
+	}
+	if errResult := d.askToPublish(ctx, req, publish.ApprovalRequest{
+		Kind: publish.ApprovalPublishEpisode, ProjectID: p.ID, WorkTitle: p.Title,
+		NodeID: ep.NodeID, EpisodeTitle: strings.TrimSpace(ep.Label + " " + ep.Title), Republish: republish,
+	}); errResult != nil {
 		return errResult, publishEpisodeOutput{}, nil
 	}
 	res, err := d.Publish.PublishEpisode(ctx, n.ID)
@@ -240,7 +287,7 @@ func (d ToolDeps) publishEpisode(ctx context.Context, _ *mcp.CallToolRequest, in
 	}, nil
 }
 
-func (d ToolDeps) publishCover(ctx context.Context, _ *mcp.CallToolRequest, in publishCoverInput) (*mcp.CallToolResult, publishedCover, error) {
+func (d ToolDeps) publishCover(ctx context.Context, req *mcp.CallToolRequest, in publishCoverInput) (*mcp.CallToolResult, publishedCover, error) {
 	if d.Publish == nil {
 		return toolErr("publishing is not available in this build"), publishedCover{}, nil
 	}
@@ -252,12 +299,84 @@ func (d ToolDeps) publishCover(ctx context.Context, _ *mcp.CallToolRequest, in p
 	if id == "" {
 		return toolErr("illustration_id is required; choose a picture from linetta_list_illustrations"), publishedCover{}, nil
 	}
+	ws, errResult := d.publishReady(ctx, p.ID, true)
+	if errResult != nil {
+		return errResult, publishedCover{}, nil
+	}
+	if errResult := d.askToPublish(ctx, req, publish.ApprovalRequest{
+		Kind: publish.ApprovalPublishCover, ProjectID: p.ID, WorkTitle: p.Title,
+		IllustrationID: id, Republish: ws.Sheets.Cover != nil,
+	}); errResult != nil {
+		return errResult, publishedCover{}, nil
+	}
 	cover, err := d.Publish.PublishCover(ctx, p.ID, id)
 	if err != nil {
 		return toolErr("%s", publishFailure(err)), publishedCover{}, nil
 	}
 	d.notifyChanged(p.ID, "linetta_publish_cover", nil, "")
 	return nil, toPublishedCover(cover), nil
+}
+
+// publishReady reads the work's state on the site and refuses what is bound
+// to fail, so the writer is never asked to approve a publish that cannot
+// happen. A site it could not read is left to the publish call itself.
+func (d ToolDeps) publishReady(ctx context.Context, projectID string, needRegistered bool) (publish.WorkStatus, *mcp.CallToolResult) {
+	ws, err := d.Publish.WorkStatus(ctx, projectID)
+	if err != nil {
+		return publish.WorkStatus{}, toolErr("%s", publishFailure(err))
+	}
+	if !ws.Connected {
+		return ws, toolErr("%s", publishFailure(&rpc.ReasonError{Reason: rpc.ReasonPublishNotConnected}))
+	}
+	if needRegistered && !ws.Registered && !ws.Offline {
+		return ws, toolErr("%s", publishFailure(&rpc.ReasonError{Reason: rpc.ReasonPublishWorkNotRegistered}))
+	}
+	return ws, nil
+}
+
+// askToPublish waits for the writer's answer in the app. It returns nil only
+// when they approved; anything else is a refusal that says nothing was sent.
+func (d ToolDeps) askToPublish(ctx context.Context, req *mcp.CallToolRequest, ar publish.ApprovalRequest) *mcp.CallToolResult {
+	if d.PublishApproval == nil {
+		return toolErr("publishing needs the writer's approval in the app, which this server cannot ask for; nothing was published")
+	}
+	ar.Source = d.Source
+	if ar.Source == "" {
+		ar.Source = SourceExternal
+	}
+	if ar.Source == SourceExternal {
+		ar.Client = clientName(req)
+	}
+	err := d.PublishApproval.Ask(ctx, ar)
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, publish.ErrApprovalDenied):
+		return toolErr("the writer declined this in the app; nothing was published. Do not ask again unless they bring it up")
+	case errors.Is(err, publish.ErrApprovalTimeout):
+		return toolErr("the writer did not approve this in the app in time; nothing was published. Tell them it needs " +
+			"their approval in Linetta and try again only when they ask")
+	default:
+		return toolErr("nothing was published: %v", err)
+	}
+}
+
+// clientName is the name an external client gave itself when it connected,
+// shown to the writer as a label. The client chose it, so it is cut short
+// and never used to decide anything.
+func clientName(req *mcp.CallToolRequest) string {
+	if req == nil || req.Session == nil {
+		return ""
+	}
+	ip := req.Session.InitializeParams()
+	if ip == nil || ip.ClientInfo == nil {
+		return ""
+	}
+	name := strings.TrimSpace(ip.ClientInfo.Name)
+	if utf8.RuneCountInString(name) > 40 {
+		name = string([]rune(name)[:40])
+	}
+	return name
 }
 
 // publishFailure says what went wrong in words an agent can relay. The

@@ -132,6 +132,10 @@ type ToolDeps struct {
 	// Publish puts episodes on Linetta Works. Nil in a build or a test that
 	// wires none; the publish tools refuse rather than panicking.
 	Publish Publisher
+	// PublishApproval is where every publish write waits for the writer to
+	// approve it in the app (#238). Nil refuses those tools: nothing reaches
+	// readers on an agent's word alone.
+	PublishApproval PublishApprover
 
 	// Attachment returns image n (1-based) the writer attached to the
 	// built-in agent's message for run runID, so add_reference_image can

@@ -11,6 +11,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/devlikebear/linetta/engine/internal/episode"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/publish"
@@ -52,9 +53,22 @@ func (f *fakePublisher) PublishCover(_ context.Context, _, illustrationID string
 	return f.cover, f.coverErr
 }
 
+// fakeApprover answers every request with err (nil approves) and keeps what
+// it was asked.
+type fakeApprover struct {
+	asked []publish.ApprovalRequest
+	err   error
+}
+
+func (a *fakeApprover) Ask(_ context.Context, req publish.ApprovalRequest) error {
+	a.asked = append(a.asked, req)
+	return a.err
+}
+
 type publishFixture struct {
 	deps      ToolDeps
 	pub       *fakePublisher
+	approver  *fakeApprover
 	projectID string
 	nodeID    string
 	otherID   string
@@ -79,12 +93,15 @@ func newPublishFixture(t *testing.T) *publishFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &publishFixture{pub: &fakePublisher{}, projectID: p.ID, nodeID: *p.LastOpenedNodeID, otherID: other.ID, otherNode: *other.LastOpenedNodeID}
+	f := &publishFixture{pub: &fakePublisher{status: publish.WorkStatus{Connected: true, Registered: true}}, approver: &fakeApprover{}, projectID: p.ID, nodeID: *p.LastOpenedNodeID, otherID: other.ID, otherNode: *other.LastOpenedNodeID}
 	f.deps = ToolDeps{
 		Projects: projects,
 		Nodes:    node.NewRepo(st),
 		Activity: NewActivityRepo(st.DB()),
 		Publish:  f.pub,
+		// Approved unless a test says otherwise; the approval tests below
+		// decline, time out, or leave it unwired.
+		PublishApproval: f.approver,
 		Notify: func(method string, params any) {
 			if c, ok := params.(ChangedPayload); ok && method == "mcp.changed" {
 				f.changed = append(f.changed, c)
@@ -407,5 +424,165 @@ func TestPublishStatus_showsTheSitesCover(t *testing.T) {
 	}
 	if out.Cover == nil || out.Cover.IllustrationID != "ill" || out.Cover.State != publish.EpisodeRejected || out.Cover.Reason != "수위" {
 		t.Fatalf("cover = %+v", out.Cover)
+	}
+}
+
+// ---------- the writer's approval (#238) ----------
+
+// publishWriteCalls is one call of each tool that puts something on the site.
+func publishWriteCalls(f *publishFixture) []struct {
+	name string
+	args map[string]any
+} {
+	return []struct {
+		name string
+		args map[string]any
+	}{
+		{"linetta_register_work", map[string]any{"project_id": f.projectID, "blurb": "소개"}},
+		{"linetta_publish_episode", map[string]any{"node_id": f.nodeID}},
+		{"linetta_publish_cover", map[string]any{"project_id": f.projectID, "illustration_id": "ill"}},
+	}
+}
+
+func (f *publishFixture) sentAnything() bool {
+	return len(f.pub.upserts)+len(f.pub.published)+len(f.pub.covers) > 0
+}
+
+func TestPublishWrites_sendNothingTheWriterDeclines(t *testing.T) {
+	for i := range publishWriteCalls(newPublishFixture(t)) {
+		f := newPublishFixture(t)
+		call := publishWriteCalls(f)[i]
+		t.Run(call.name, func(t *testing.T) {
+			f.approver.err = publish.ErrApprovalDenied
+			cs := connectedServer(t, f.deps, settings.MCPModeFull, AllToolGroups())
+			res := callPublishTool(t, cs, call.name, call.args)
+			if !res.IsError || !strings.Contains(toolText(res), "declined") || !strings.Contains(toolText(res), "nothing was published") {
+				t.Fatalf("result = %v %q", res.IsError, toolText(res))
+			}
+			if len(f.approver.asked) != 1 || f.sentAnything() || len(f.changed) != 0 {
+				t.Fatalf("asked %d, sent %v, changed %+v", len(f.approver.asked), f.sentAnything(), f.changed)
+			}
+		})
+	}
+}
+
+func TestPublishWrites_sendNothingWhenTheWriterDoesNotAnswer(t *testing.T) {
+	f := newPublishFixture(t)
+	f.approver.err = publish.ErrApprovalTimeout
+	cs := connectedServer(t, f.deps, settings.MCPModeFull, AllToolGroups())
+	for _, call := range publishWriteCalls(f) {
+		res := callPublishTool(t, cs, call.name, call.args)
+		if !res.IsError || !strings.Contains(toolText(res), "did not approve") {
+			t.Errorf("%s: result = %q", call.name, toolText(res))
+		}
+	}
+	if f.sentAnything() {
+		t.Fatalf("sent without an answer: %+v %+v %+v", f.pub.upserts, f.pub.published, f.pub.covers)
+	}
+}
+
+func TestPublishWrites_refuseWhenNoApprovalCanBeAsked(t *testing.T) {
+	f := newPublishFixture(t)
+	f.deps.PublishApproval = nil
+	cs := connectedServer(t, f.deps, settings.MCPModeFull, AllToolGroups())
+	for _, call := range publishWriteCalls(f) {
+		if res := callPublishTool(t, cs, call.name, call.args); !res.IsError || !strings.Contains(toolText(res), "approval") {
+			t.Errorf("%s: result = %q", call.name, toolText(res))
+		}
+	}
+	if f.sentAnything() {
+		t.Fatal("sent without a way to ask the writer")
+	}
+}
+
+func TestPublishWrites_doNotAskTheWriterAboutWhatCannotHappen(t *testing.T) {
+	f := newPublishFixture(t)
+	f.pub.status = publish.WorkStatus{}
+	cs := connectedServer(t, f.deps, settings.MCPModeFull, AllToolGroups())
+	for _, call := range publishWriteCalls(f) {
+		if res := callPublishTool(t, cs, call.name, call.args); !res.IsError || !strings.Contains(toolText(res), "Settings → Publishing") {
+			t.Errorf("%s unconnected: result = %q", call.name, toolText(res))
+		}
+	}
+	f.pub.status = publish.WorkStatus{Connected: true}
+	for _, name := range []string{"linetta_publish_episode", "linetta_publish_cover"} {
+		args := map[string]any{"node_id": f.nodeID}
+		if name == "linetta_publish_cover" {
+			args = map[string]any{"project_id": f.projectID, "illustration_id": "ill"}
+		}
+		if res := callPublishTool(t, cs, name, args); !res.IsError || !strings.Contains(toolText(res), "linetta_register_work") {
+			t.Errorf("%s unregistered: result = %q", name, toolText(res))
+		}
+	}
+	if len(f.approver.asked) != 0 || f.sentAnything() {
+		t.Fatalf("asked %+v, sent %v", f.approver.asked, f.sentAnything())
+	}
+}
+
+func TestPublishEpisode_asksAboutTheEpisodeAndSaysWhoIsAsking(t *testing.T) {
+	f := newPublishFixture(t)
+	f.pub.status.Episodes = []publish.EpisodeView{}
+	cs := connectedServer(t, f.deps, settings.MCPModeFull, AllToolGroups())
+	if res := callPublishTool(t, cs, "linetta_publish_episode", map[string]any{"node_id": f.nodeID}); res.IsError {
+		t.Fatalf("publish failed: %q", toolText(res))
+	}
+	if len(f.approver.asked) != 1 {
+		t.Fatalf("asked %+v", f.approver.asked)
+	}
+	got := f.approver.asked[0]
+	ep, err := episode.Resolve(context.Background(), f.deps.Nodes, project.OutlinePresetWebNovel, f.nodeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Kind != publish.ApprovalPublishEpisode || got.ProjectID != f.projectID || got.WorkTitle != "작품" ||
+		got.NodeID != ep.NodeID || got.EpisodeTitle == "" || got.Republish {
+		t.Fatalf("request = %+v (episode %+v)", got, ep)
+	}
+	if got.Source != SourceExternal || got.Client == "" {
+		t.Fatalf("source = %q client = %q, want the external client named", got.Source, got.Client)
+	}
+}
+
+func TestPublishEpisode_tellsTheWriterWhenItReplacesPublishedText(t *testing.T) {
+	f := newPublishFixture(t)
+	ep, err := episode.Resolve(context.Background(), f.deps.Nodes, project.OutlinePresetWebNovel, f.nodeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.pub.status.Episodes = []publish.EpisodeView{{NodeID: ep.NodeID, State: publish.EpisodeModified}}
+	cs := connectedServer(t, f.deps, settings.MCPModeFull, AllToolGroups())
+	if res := callPublishTool(t, cs, "linetta_publish_episode", map[string]any{"node_id": f.nodeID}); res.IsError {
+		t.Fatalf("publish failed: %q", toolText(res))
+	}
+	if len(f.approver.asked) != 1 || !f.approver.asked[0].Republish {
+		t.Fatalf("asked %+v, want a republish", f.approver.asked)
+	}
+}
+
+func TestPublishWrites_theBuiltInAgentAsksToo(t *testing.T) {
+	f := newPublishFixture(t)
+	f.deps.Source = SourceAgent
+	f.approver.err = publish.ErrApprovalDenied
+	cs := connectedServer(t, f.deps, settings.MCPModeFull, AllToolGroups())
+	res := callPublishTool(t, cs, "linetta_publish_episode", map[string]any{"node_id": f.nodeID})
+	if !res.IsError || len(f.approver.asked) != 1 || f.approver.asked[0].Source != SourceAgent || f.approver.asked[0].Client != "" {
+		t.Fatalf("result %q, asked %+v", toolText(res), f.approver.asked)
+	}
+	if f.sentAnything() {
+		t.Fatal("the built-in agent published without approval")
+	}
+}
+
+func TestRegisterWork_showsTheWriterTheBlurbItWillSend(t *testing.T) {
+	f := newPublishFixture(t)
+	f.pub.status = publish.WorkStatus{Connected: true, Registered: true,
+		Work: &publish.WorkView{Blurb: "원래 소개", SerialStatus: publish.SerialOngoing}}
+	cs := connectedServer(t, f.deps, settings.MCPModeFull, AllToolGroups())
+	if res := callPublishTool(t, cs, "linetta_register_work", map[string]any{"project_id": f.projectID, "serial_status": "completed"}); res.IsError {
+		t.Fatalf("update failed: %q", toolText(res))
+	}
+	got := f.approver.asked[0]
+	if got.Kind != publish.ApprovalRegisterWork || got.Blurb != "원래 소개" || got.SerialStatus != "completed" || !got.Republish {
+		t.Fatalf("request = %+v", got)
 	}
 }

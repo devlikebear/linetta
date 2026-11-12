@@ -663,7 +663,11 @@ is not on the site yet and it registers the work first with
 `linetta_register_work`, using a blurb you wrote or approved, then publishes
 with `linetta_publish_episode`. It can also change the blurb, mark the work
 complete, or put a gallery picture up as the cover with
-`linetta_publish_cover`. Only you can connect an account.
+`linetta_publish_cover`. Only you can connect an account, and nothing an
+agent asks to publish goes up until you approve it: Linetta shows what it
+would send (the work, the episode, the blurb or the picture) and waits up to
+two minutes for **Upload** or **Don't upload**. Declined or unanswered, nothing
+is sent.
 
 **Sheets and cover.** The quickest way to set the cover is from the gallery:
 open a picture and press **Upload as Linetta Works cover**. It shows only when

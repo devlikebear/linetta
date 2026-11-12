@@ -561,9 +561,9 @@ export const en: Translation = {
       { name: 'linetta_delete_reference_image', note: 'Remove reference image' },
       { name: 'linetta_request_illustration', note: 'Ask for a picture; nothing is drawn until you approve' },
       { name: 'linetta_set_representative_illustration', note: 'Set or clear the picture that stands for a scene, episode or part' },
-      { name: 'linetta_register_work', note: 'Register a work on Linetta Works with a blurb you approved' },
-      { name: 'linetta_publish_episode', note: 'Publish an episode when you ask' },
-      { name: 'linetta_publish_cover', note: 'Make a gallery picture the work’s cover, without sending sheets' }
+      { name: 'linetta_register_work', note: 'Register a work on Linetta Works — only after you approve it in the app' },
+      { name: 'linetta_publish_episode', note: 'Publish an episode — only after you approve it in the app' },
+      { name: 'linetta_publish_cover', note: 'Upload a gallery picture as the cover — only after you approve it' }
     ],
     safetyLabel: 'What keeps it safe',
     safety: [
@@ -1118,9 +1118,9 @@ export const ko: Translation = {
       { name: 'linetta_delete_reference_image', note: '참조 이미지 삭제' },
       { name: 'linetta_request_illustration', note: '삽화 요청 — 승인 전에는 그리지 않습니다' },
       { name: 'linetta_set_representative_illustration', note: '씬·회차·부를 대표하는 그림 지정 또는 해제' },
-      { name: 'linetta_register_work', note: '작가가 승인한 소개글로 작품을 Linetta Works에 등록' },
-      { name: 'linetta_publish_episode', note: '요청받은 회차 게시' },
-      { name: 'linetta_publish_cover', note: '갤러리 그림을 작품 표지로 — 시트는 보내지 않음' }
+      { name: 'linetta_register_work', note: '작품을 Linetta Works에 등록 — 앱에서 작가가 승인해야 올라감' },
+      { name: 'linetta_publish_episode', note: '회차 게시 — 앱에서 작가가 승인해야 올라감' },
+      { name: 'linetta_publish_cover', note: '갤러리 그림을 작품 표지로 — 앱에서 작가가 승인해야 올라감' }
     ],
     safetyLabel: '무엇이 이것을 안전하게 하는가',
     safety: [
@@ -1673,9 +1673,9 @@ export const ja: Translation = {
       { name: 'linetta_delete_reference_image', note: '参照画像を削除' },
       { name: 'linetta_request_illustration', note: '挿絵を依頼 — 承認まで描かれません' },
       { name: 'linetta_set_representative_illustration', note: 'シーン・話・部を代表する絵を設定または解除' },
-      { name: 'linetta_register_work', note: '作者が承認した紹介文で作品を Linetta Works に登録' },
-      { name: 'linetta_publish_episode', note: '頼まれた話を公開' },
-      { name: 'linetta_publish_cover', note: 'ギャラリーの絵を作品の表紙に — シートは送らない' }
+      { name: 'linetta_register_work', note: '作品を Linetta Works に登録 — アプリで作者が承認したときだけ' },
+      { name: 'linetta_publish_episode', note: '話を公開 — アプリで作者が承認したときだけ' },
+      { name: 'linetta_publish_cover', note: 'ギャラリーの絵を表紙に — アプリで作者が承認したときだけ' }
     ],
     safetyLabel: '安全を保つもの',
     safety: [

@@ -237,7 +237,8 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	// publish), after cutting the output schema to what an agent needs.
 	// linetta_register_work joined them at 690B (publish now 694B): 2,615B.
 	// linetta_publish_cover and the status tool's cover field brought the
-	// four to 3,527B.
+	// four to 3,527B. #238's "they approve it in the app" on the three
+	// writes, paid for by dropping a tool name the agent already sees: 3,577B.
 	if pub := sizes["linetta_publish_status"] + sizes["linetta_publish_episode"] + sizes["linetta_register_work"] + sizes["linetta_publish_cover"]; pub > 3600 {
 		t.Errorf("publish tools cost %dB, want <= 3600B", pub)
 	}

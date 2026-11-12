@@ -151,3 +151,40 @@ func PublishEpisodeSetVisibility(svc PublishService) rpc.Handler {
 		return json.Marshal(out)
 	}
 }
+
+// PublishApprovals is the queue of publish requests an agent made and the
+// writer has not answered yet (#238).
+type PublishApprovals interface {
+	Pending() []publish.ApprovalRequest
+	Answer(id string, approved bool) error
+}
+
+// PublishApprovalsPending returns a handler for publish.approvals_pending:
+// every request still waiting, so a window that opens late shows them too.
+func PublishApprovalsPending(a PublishApprovals) rpc.Handler {
+	return func(context.Context, json.RawMessage) (json.RawMessage, error) {
+		return json.Marshal(map[string][]publish.ApprovalRequest{"pending": a.Pending()})
+	}
+}
+
+// PublishApprovalAnswer returns a handler for publish.approval_answer: the
+// writer approves or declines one request. Only the app calls this; no MCP
+// tool can reach it.
+func PublishApprovalAnswer(a PublishApprovals) rpc.Handler {
+	return func(_ context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var in struct {
+			ID       string `json:"id"`
+			Approved *bool  `json:"approved"`
+		}
+		if err := json.Unmarshal(params, &in); err != nil || strings.TrimSpace(in.ID) == "" || in.Approved == nil {
+			return nil, invalidParams("id and approved required")
+		}
+		if err := a.Answer(in.ID, *in.Approved); err != nil {
+			if errors.Is(err, publish.ErrApprovalUnknown) {
+				return nil, rpc.NotFound(rpc.ReasonPublishApprovalGone, "the request is no longer waiting")
+			}
+			return nil, publishError(err)
+		}
+		return json.Marshal(map[string]bool{"ok": true})
+	}
+}
