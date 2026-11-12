@@ -206,8 +206,17 @@ func (v timeView) compare(e Entry) ([]Conflict, *Previous) {
 		}
 		return conflict(fmt.Sprintf("%s에서 이미 %s일이 지났는데 %s에서는 %s일입니다", there, number(was), here, number(now)))
 	}
+	// Two counts in one scene tell the same moment, so they agree within the
+	// tolerance either way: a scene does not pass months between two lines
+	// often enough to excuse "석 달" beside "삼 년".
 	if at == cur {
-		return nil, previous
+		if now <= was+slack {
+			return nil, previous
+		}
+		if age {
+			return conflict(fmt.Sprintf("%s의 나이가 %s에 %s살과 %s살로 함께 적혀 있습니다", e.Subject, here, number(was), number(now)))
+		}
+		return conflict(fmt.Sprintf("%s에 %s 경과가 %s일과 %s일로 함께 적혀 있습니다", here, e.Subject, number(was), number(now)))
 	}
 	change := (now - was) * unit
 	skip := e.About

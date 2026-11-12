@@ -168,6 +168,31 @@ func TestReplacingAnElapsedCountStillComparesIt(t *testing.T) {
 	}
 }
 
+// Two counts in one scene tell the same moment: they may differ by the
+// tolerance, not by years.
+func TestTwoCountsInOneSceneMustAgree(t *testing.T) {
+	f := newTimeFixture(t, 4)
+	ev := f.event(t, 0, "등대지기 실종", nil)
+	f.elapsed(t, 1, 2, ev, 90, "석 달")
+	if got, _ := f.compare(t, f.elapsed(t, 2, 2, ev, 100, "백 일")); len(got) != 0 {
+		t.Fatalf("석 달 beside 백 일: %+v", got)
+	}
+	got, _ := f.compare(t, f.elapsed(t, 3, 2, ev, 1095, "삼 년"))
+	if len(got) != 1 || got[0].Reason != "3화에 등대지기 실종 경과가 100일과 1,095일로 함께 적혀 있습니다" {
+		t.Fatalf("석 달 beside 삼 년: %+v", got)
+	}
+
+	g := newTimeFixture(t, 4)
+	g.age(t, 1, 2, "도현", 17)
+	if got, _ := g.compare(t, g.age(t, 2, 2, "도현", 18)); len(got) != 0 {
+		t.Fatalf("17 beside 18: %+v", got)
+	}
+	got, _ = g.compare(t, g.age(t, 3, 2, "도현", 25))
+	if len(got) != 1 || !strings.Contains(got[0].Reason, "18살과 25살") {
+		t.Fatalf("18 beside 25: %+v", got)
+	}
+}
+
 // Another event with a known date is a measure too.
 func TestElapsedFlowCanBeMeasuredFromAnotherEvent(t *testing.T) {
 	f := newTimeFixture(t, 8)
