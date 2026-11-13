@@ -132,3 +132,7 @@ button.style-where {
   color: var(--accent);
   border-color: var(--accent);
 }
+
+.style-writer-notes {
+  white-space: pre-wrap;
+}

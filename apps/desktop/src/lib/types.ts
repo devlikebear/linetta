@@ -1659,10 +1659,18 @@ export interface WriterStyleRules {
   max_sentence_chars: number;
   updated_at: number;
 }
+/** style.get_writer_rules: the writer's default rules with their prose notes (#182). */
+export interface WriterStyleState extends WriterStyleRules {
+  notes: string;
+  /** The most the notes may be, in characters. */
+  notes_limit: number;
+}
 /** style.get_rules: the work's own rules, the writer's, and what a check runs against. */
 export interface StyleRulesState extends StyleRules {
   writer: WriterStyleRules;
   effective: StyleRules;
+  /** The writer's default style notes, which this work's brief carries unless it opts out. */
+  writer_notes?: string;
 }
 export type LedgerKind = "promise" | "gag" | "question" | "decision" | "number" | "timeline" | "knowledge" | "cut_plan";
 export type LedgerStatus = "open" | "paid" | "dropped";

@@ -42,6 +42,9 @@ const (
 	ReasonStyleNoDraft      = "style_no_draft"
 	ReasonStyleProfileEmpty = "style_profile_empty"
 	ReasonStyleNotesTooLong = "style_notes_too_long"
+	// The writer's default style notes, or an approved draft of them, would
+	// be over their 1,000-character limit (#182).
+	ReasonStyleWriterNotesTooLong = "style_writer_notes_too_long"
 
 	// The writer's own direction (story-assist Phase 1): limits are refused
 	// rather than trimmed, the same reason style's are above.

@@ -48,6 +48,7 @@ export function StyleSection({ projectId, nodeId, onOpenNode, onBeforeCheck, onO
   // The writer's default style (#181): rules this work inherits unless it
   // opts out, shown read-only here and changed only in Settings.
   const [writer, setWriter] = useState<WriterStyleRules | null>(null);
+  const [writerNotes, setWriterNotes] = useState("");
   const [followWriter, setFollowWriter] = useState(true);
   const [ownLimit, setOwnLimit] = useState(false);
   const [scenes, setScenes] = useState<NodeRow[]>([]);
@@ -68,6 +69,7 @@ export function StyleSection({ projectId, nodeId, onOpenNode, onBeforeCheck, onO
       setMaxSentence(rules.max_sentence_chars > 0 ? String(rules.max_sentence_chars) : "");
       setAnchor(rules.anchor_node_id ?? "");
       setWriter(rules.writer ?? null);
+      setWriterNotes(rules.writer_notes ?? "");
       setFollowWriter(rules.ignore_writer_style !== true);
       setOwnLimit(rules.own_sentence_limit === true);
     }).catch((e) => { if (!cancelled) setError(e); });
@@ -202,7 +204,7 @@ export function StyleSection({ projectId, nodeId, onOpenNode, onBeforeCheck, onO
         </div>
 
         <p className="style-hint style-rules-hint">{t("style.hint")}</p>
-        {writer && (!writerEmpty(writer) || !followWriter) && (
+        {writer && (!writerEmpty(writer) || writerNotes.trim() !== "" || !followWriter) && (
           <div className="style-inherited" data-testid="style-writer-rules">
             <label className="style-toggle">
               <input
@@ -221,7 +223,10 @@ export function StyleSection({ projectId, nodeId, onOpenNode, onBeforeCheck, onO
             {followWriter && (
               <>
                 <p className="style-draft-title">{t("style.writerRules")}</p>
-                {writerEmpty(writer) && <p className="style-hint">{t("style.writerEmpty")}</p>}
+                {writerEmpty(writer) && writerNotes.trim() === "" && <p className="style-hint">{t("style.writerEmpty")}</p>}
+                {writerNotes.trim() !== "" && (
+                  <p className="style-hint style-writer-notes">{t("style.writerNotes", { notes: writerNotes.trim() })}</p>
+                )}
                 {writer.avoid_phrases.length > 0 && (
                   <p className="style-hint">{t("style.writerPhrases", { phrases: writer.avoid_phrases.join(", ") })}</p>
                 )}

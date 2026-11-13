@@ -67,14 +67,17 @@ type analyzeStyleOutput struct {
 // approve action. There is deliberately no MCP tool that approves.
 
 type proposeStyleProfileInput struct {
-	ProjectID string `json:"project_id" jsonschema:"id of the work"`
+	ProjectID string `json:"project_id,omitempty" jsonschema:"id of the work"`
 	Profile   string `json:"profile" jsonschema:"the style in prose, at most 2200 characters"`
+	// Scope "writer" proposes the writer's default style, for every work
+	// (#183), instead of this work's.
+	Scope string `json:"scope,omitempty" jsonschema:"work (default) or writer"`
 }
 
 func (in proposeStyleProfileInput) scope() (string, string) { return in.ProjectID, "" }
 
 type proposeStyleProfileOutput struct {
-	ProjectID  string `json:"project_id"`
+	ProjectID  string `json:"project_id,omitempty"`
 	Status     string `json:"status"`
 	Characters int    `json:"characters"`
 	Limit      int    `json:"limit"`
@@ -98,15 +101,22 @@ func (d ToolDeps) registerStyleWriteTools(s *mcp.Server) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_propose_style_profile",
 		Description: "Save a style profile you drew from the writer's own scenes (measure them with " +
-			"linetta_analyze_style, read a few) as a draft. The writer reviews it in Story World and it " +
-			"joins the style notes only if they approve: say it is waiting, and do not treat it as their " +
-			"preference. Replaces an earlier draft.",
+			"linetta_analyze_style, read a few) as a draft. The writer approves it before it joins the style " +
+			"notes: say it is waiting, not their preference. Replaces an earlier draft. Scope writer: their " +
+			"default style for every work, drawn from more than one.",
 	}, record(d, "linetta_propose_style_profile", d.proposeStyleProfile))
 }
 
 func (d ToolDeps) proposeStyleProfile(ctx context.Context, _ *mcp.CallToolRequest, in proposeStyleProfileInput) (*mcp.CallToolResult, proposeStyleProfileOutput, error) {
 	if d.Style == nil {
 		return toolErr("style profiles are not available in this build"), proposeStyleProfileOutput{}, nil
+	}
+	switch strings.TrimSpace(in.Scope) {
+	case "", "work":
+	case "writer":
+		return d.proposeWriterStyle(ctx, in)
+	default:
+		return toolErr("scope is %q (this work, the default) or %q (the writer's default style for every work)", "work", "writer"), proposeStyleProfileOutput{}, nil
 	}
 	p, errResult := d.requireProject(ctx, in.ProjectID)
 	if errResult != nil {
@@ -128,6 +138,35 @@ func (d ToolDeps) proposeStyleProfile(ctx context.Context, _ *mcp.CallToolReques
 		Status:     styleProfilePending,
 		Characters: utf8.RuneCountInString(draft.Body),
 		Limit:      style.MaxProfileRunes,
+	}, nil
+}
+
+// proposeWriterStyle saves a draft of the writer's default style (#183). It
+// waits for the writer like a work's profile, and nothing reads it until they
+// approve it in Settings. It applies to every work, so a client the writer
+// pinned to one work may not propose it — the rule the writer profile follows
+// (#97): what is global can be read through a pin, not rewritten.
+func (d ToolDeps) proposeWriterStyle(ctx context.Context, in proposeStyleProfileInput) (*mcp.CallToolResult, proposeStyleProfileOutput, error) {
+	if restricted := d.allowedProjectID(); restricted != "" {
+		return toolErr("this Linetta server is restricted to work %q, and the writer's default style applies to "+
+				"every work, so it is outside that restriction. Propose with scope work for this work's style.", restricted),
+			proposeStyleProfileOutput{}, nil
+	}
+	draft, err := d.Style.SaveWriterDraft(ctx, d.now(), in.Profile, d.sourceOrExternal())
+	switch {
+	case errors.Is(err, style.ErrDraftEmpty):
+		return toolErr("profile is empty; describe the style in prose"), proposeStyleProfileOutput{}, nil
+	case errors.Is(err, style.ErrWriterNotesTooLong):
+		return toolErr("profile is %d characters; the writer's default style is at most %d — shorten it and call again",
+			utf8.RuneCountInString(strings.TrimSpace(in.Profile)), style.MaxWriterNotesRunes), proposeStyleProfileOutput{}, nil
+	case err != nil:
+		return nil, proposeStyleProfileOutput{}, err
+	}
+	d.notifyChanged("", "linetta_propose_style_profile", nil, "")
+	return nil, proposeStyleProfileOutput{
+		Status:     styleProfilePending,
+		Characters: utf8.RuneCountInString(draft.Body),
+		Limit:      style.MaxWriterNotesRunes,
 	}, nil
 }
 

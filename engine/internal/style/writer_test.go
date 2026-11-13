@@ -143,3 +143,73 @@ func firstRule(rep Report, rule string) (Violation, bool) {
 	}
 	return Violation{}, false
 }
+
+func TestWriterNotesAndDraft(t *testing.T) {
+	ctx := context.Background()
+	st, err := storetest.Open(ctx, filepath.Join(t.TempDir(), "library.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	repo := NewRepo(st)
+
+	// Notes and rules share a row without clobbering each other.
+	if _, err := repo.SetWriterRules(ctx, 1, WriterRules{AvoidPhrases: []string{"마치"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.SetWriterNotes(ctx, 2, "  현재형.  "); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.SetWriterRules(ctx, 3, WriterRules{AvoidPhrases: []string{"마치", "문득"}}); err != nil {
+		t.Fatal(err)
+	}
+	if notes, _ := repo.GetWriterNotes(ctx); notes != "현재형." {
+		t.Fatalf("notes = %q", notes)
+	}
+	if _, err := repo.SetWriterNotes(ctx, 4, strings.Repeat("가", MaxWriterNotesRunes+1)); !errors.Is(err, ErrWriterNotesTooLong) {
+		t.Fatalf("over the limit: %v", err)
+	}
+
+	// A work that opts out carries none of it into its brief.
+	p, _ := project.NewRepo(st).Create(ctx, 1, project.NewInput{Title: "A", LengthTarget: "short", DefaultPOV: "first"})
+	if got, _ := repo.WriterNotesFor(ctx, p.ID); got != "현재형." {
+		t.Fatalf("following work gets %q", got)
+	}
+	if _, err := repo.SetRules(ctx, 5, Rules{ProjectID: p.ID, IgnoreWriterStyle: true}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := repo.WriterNotesFor(ctx, p.ID); got != "" {
+		t.Fatalf("opted-out work gets %q", got)
+	}
+
+	// Drafts: nothing to approve, then append, then a refusal over the limit
+	// that leaves the notes and the draft as they were.
+	if _, err := repo.ApproveWriterDraft(ctx, 6, "x", ApproveAppend); !errors.Is(err, ErrNoDraft) {
+		t.Fatalf("approve with no draft: %v", err)
+	}
+	if _, err := repo.SaveWriterDraft(ctx, 7, "짧게.", "agent"); err != nil {
+		t.Fatal(err)
+	}
+	notes, err := repo.ApproveWriterDraft(ctx, 8, "짧게.", ApproveAppend)
+	if err != nil || notes != "현재형.\n\n짧게." {
+		t.Fatalf("appended = %q, %v", notes, err)
+	}
+	if _, pending, _ := repo.GetWriterDraft(ctx); pending {
+		t.Fatal("draft left after approval")
+	}
+	if _, err := repo.SaveWriterDraft(ctx, 9, strings.Repeat("나", 600), "agent"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.SetWriterNotes(ctx, 10, strings.Repeat("다", 600)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.ApproveWriterDraft(ctx, 11, strings.Repeat("나", 600), ApproveAppend); !errors.Is(err, ErrWriterNotesTooLong) {
+		t.Fatalf("append over the limit: %v", err)
+	}
+	if _, pending, _ := repo.GetWriterDraft(ctx); !pending {
+		t.Fatal("a refused approval dropped the draft")
+	}
+	if notes, err := repo.ApproveWriterDraft(ctx, 12, strings.Repeat("나", 600), ApproveReplace); err != nil || notes != strings.Repeat("나", 600) {
+		t.Fatalf("replace = %d runes, %v", len([]rune(notes)), err)
+	}
+}

@@ -33,6 +33,7 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   style_no_draft: "style.noDraft",
   style_profile_empty: "style.profileEmpty",
   style_notes_too_long: "style.notesTooLong",
+  style_writer_notes_too_long: "settings.writerStyle.notesTooLong",
   // The writer's own direction (story-assist Phase 1): refused rather than
   // trimmed, the same reason the style codes above are.
   direction_focus_too_long: "direction.limit.focus",

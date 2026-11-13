@@ -147,11 +147,9 @@ func buildSystem(c Context) string {
 		b.WriteString("日本語で答えてください。出力はマークダウンの見出しなしで、純粋な本文のみ書いてください。\n\n")
 		switch c.Options.Tone {
 		case TonePresetMy:
-			if strings.TrimSpace(c.StyleNotes) != "" {
-				b.WriteString("作家のスタイルノート（必ず従うこと）:\n")
-				b.WriteString(c.StyleNotes)
-				b.WriteString("\n\n")
-			}
+			b.WriteString(systemStyleNotes(c, "作家の基本文体（すべての作品、必ず従うこと）:\n",
+				"作家のスタイルノート（必ず従うこと）:\n",
+				"この作品のスタイルノート（必ず従うこと。上と食い違うときはこちらに従うこと）:\n"))
 		case TonePresetCool:
 			b.WriteString("今回の出力は冷たく距離感のあるトーンを保ってください。\n\n")
 		case TonePresetSensory:
@@ -177,11 +175,9 @@ func buildSystem(c Context) string {
 		b.WriteString("Respond in English. Output pure prose only, without markdown headers.\n\n")
 		switch c.Options.Tone {
 		case TonePresetMy:
-			if strings.TrimSpace(c.StyleNotes) != "" {
-				b.WriteString("The writer's style notes (must follow):\n")
-				b.WriteString(c.StyleNotes)
-				b.WriteString("\n\n")
-			}
+			b.WriteString(systemStyleNotes(c, "The writer's default style (every work, must follow):\n",
+				"The writer's style notes (must follow):\n",
+				"This work's style notes (must follow; where they disagree with the above, follow these):\n"))
 		case TonePresetCool:
 			b.WriteString("Keep this output in a cold, detached tone.\n\n")
 		case TonePresetSensory:
@@ -206,11 +202,9 @@ func buildSystem(c Context) string {
 	b.WriteString("출력은 마크다운 헤더 없이 순수 본문만 작성합니다.\n\n")
 	switch c.Options.Tone {
 	case TonePresetMy:
-		if strings.TrimSpace(c.StyleNotes) != "" {
-			b.WriteString("작가의 스타일 노트(반드시 따를 것):\n")
-			b.WriteString(c.StyleNotes)
-			b.WriteString("\n\n")
-		}
+		b.WriteString(systemStyleNotes(c, "작가의 기본 문체(모든 작품, 반드시 따를 것):\n",
+			"작가의 스타일 노트(반드시 따를 것):\n",
+			"이 작품의 스타일 노트(반드시 따를 것, 위와 어긋나면 이쪽을 따를 것):\n"))
 	case TonePresetCool:
 		b.WriteString("이번 출력은 차갑고 거리감 있는 톤으로 유지하라.\n\n")
 	case TonePresetSensory:
@@ -226,6 +220,30 @@ func buildSystem(c Context) string {
 	}
 	if c.Options.ShortForm {
 		b.WriteString("출력은 한 문단 이내, 500자 이내로 짧게 작성하세요.\n")
+	}
+	return b.String()
+}
+
+// systemStyleNotes is the inline editor's must-follow style block: the
+// writer's default style (#182) first, then this work's notes. With no writer
+// notes it is exactly the work's block it always was.
+func systemStyleNotes(c Context, writerHead, workHead, workAfterWriterHead string) string {
+	writer := strings.TrimSpace(c.WriterStyleNotes)
+	hasWork := strings.TrimSpace(c.StyleNotes) != ""
+	var b strings.Builder
+	if writer != "" {
+		b.WriteString(writerHead)
+		b.WriteString(writer)
+		b.WriteString("\n\n")
+	}
+	if hasWork {
+		if writer != "" {
+			b.WriteString(workAfterWriterHead)
+		} else {
+			b.WriteString(workHead)
+		}
+		b.WriteString(c.StyleNotes)
+		b.WriteString("\n\n")
 	}
 	return b.String()
 }
@@ -275,10 +293,30 @@ func buildUser(c Context) string {
 	// Ahead of everything that grows with the work: a client that caps a tool
 	// result keeps the front of the brief, and the writer's style is what must
 	// not fall off the end.
-	if c.Options.Tone != TonePresetMy && strings.TrimSpace(c.StyleNotes) != "" {
-		b.WriteString(langPick(lang, "## 작가 메모\n", "## Author Memo\n", "## 作家メモ\n"))
-		b.WriteString(c.StyleNotes)
-		b.WriteString("\n\n")
+	if c.Options.Tone != TonePresetMy {
+		// The writer's default style first, then this work's (#182).
+		if writer := strings.TrimSpace(c.WriterStyleNotes); writer != "" {
+			b.WriteString(langPick(lang, "## 작가 기본 문체\n", "## Writer's Default Style\n", "## 作家の基本文体\n"))
+			b.WriteString(writer)
+			b.WriteString("\n")
+			if strings.TrimSpace(c.StyleNotes) != "" {
+				b.WriteString(langPick(lang,
+					"모든 작품에 적용하는 작가의 지침입니다. 아래 작가 메모는 이 작품의 것이며, 둘이 어긋나면 작가 메모를 따르십시오.\n",
+					"The writer's direction for every work. The author memo below is this work's; where the two disagree, follow the memo.\n",
+					"すべての作品に適用する作家の指針です。下の作家メモはこの作品のもので、食い違うときは作家メモに従ってください。\n"))
+			} else {
+				b.WriteString(langPick(lang,
+					"모든 작품에 적용하는 작가의 지침입니다.\n",
+					"The writer's direction for every work.\n",
+					"すべての作品に適用する作家の指針です。\n"))
+			}
+			b.WriteString("\n")
+		}
+		if strings.TrimSpace(c.StyleNotes) != "" {
+			b.WriteString(langPick(lang, "## 작가 메모\n", "## Author Memo\n", "## 作家メモ\n"))
+			b.WriteString(c.StyleNotes)
+			b.WriteString("\n\n")
+		}
 	}
 	if anchor := strings.TrimSpace(c.StyleAnchor); anchor != "" {
 		b.WriteString(fmt.Sprintf(langPick(lang,

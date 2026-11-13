@@ -27,6 +27,7 @@ func styleError(err error) error {
 		{style.ErrDraftEmpty, rpc.ReasonStyleProfileEmpty},
 		{style.ErrNotesTooLong, rpc.ReasonStyleNotesTooLong},
 		{style.ErrDraftTooLong, rpc.ReasonStyleNotesTooLong},
+		{style.ErrWriterNotesTooLong, rpc.ReasonStyleWriterNotesTooLong},
 	}
 	for _, r := range reasons {
 		if errors.Is(err, r.err) {
@@ -43,6 +44,9 @@ type styleRulesResult struct {
 	style.Rules
 	Writer    style.WriterRules `json:"writer"`
 	Effective style.Rules       `json:"effective"`
+	// WriterNotes are the writer's default style notes (#182), which this
+	// work's brief carries unless it opts out.
+	WriterNotes string `json:"writer_notes"`
 }
 
 // GetStyleRules returns a handler for style.get_rules.
@@ -62,7 +66,11 @@ func GetStyleRules(repo *style.Repo) rpc.Handler {
 		if err != nil {
 			return nil, styleError(err)
 		}
-		return json.Marshal(styleRulesResult{Rules: own, Writer: writer, Effective: style.Merge(own, writer)})
+		notes, err := repo.GetWriterNotes(ctx)
+		if err != nil {
+			return nil, styleError(err)
+		}
+		return json.Marshal(styleRulesResult{Rules: own, Writer: writer, Effective: style.Merge(own, writer), WriterNotes: notes})
 	}
 }
 
@@ -118,15 +126,90 @@ func CheckStyle(repo *style.Repo, nodes *node.Repo) rpc.Handler {
 	}
 }
 
+// writerStyleResult is style.get_writer_rules's reply: the writer's default
+// rules and, beside them, the prose notes (#182) and their limit.
+type writerStyleResult struct {
+	style.WriterRules
+	Notes      string `json:"notes"`
+	NotesLimit int    `json:"notes_limit"`
+}
+
 // GetWriterStyleRules returns a handler for style.get_writer_rules: the
-// writer's default rules, under every work's own.
+// writer's default style, under every work's own.
 func GetWriterStyleRules(repo *style.Repo) rpc.Handler {
 	return func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
-		out, err := repo.GetWriterRules(ctx)
+		rules, err := repo.GetWriterRules(ctx)
 		if err != nil {
 			return nil, styleError(err)
 		}
-		return json.Marshal(out)
+		notes, err := repo.GetWriterNotes(ctx)
+		if err != nil {
+			return nil, styleError(err)
+		}
+		return json.Marshal(writerStyleResult{WriterRules: rules, Notes: notes, NotesLimit: style.MaxWriterNotesRunes})
+	}
+}
+
+// SetWriterStyleNotes returns a handler for style.set_writer_notes. Only the
+// writer sets the notes; an agent can only propose a draft of them.
+func SetWriterStyleNotes(repo *style.Repo, now Clock) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var in struct {
+			Notes string `json:"notes"`
+		}
+		if err := json.Unmarshal(params, &in); err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "notes required"}
+		}
+		notes, err := repo.SetWriterNotes(ctx, now(), in.Notes)
+		if err != nil {
+			return nil, styleError(err)
+		}
+		return json.Marshal(map[string]string{"notes": notes})
+	}
+}
+
+// GetWriterStyleDraft returns a handler for style.get_writer_draft: the
+// writer-wide style profile an agent proposed (#183), if one is waiting.
+func GetWriterStyleDraft(repo *style.Repo) rpc.Handler {
+	return func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
+		draft, pending, err := repo.GetWriterDraft(ctx)
+		if err != nil {
+			return nil, styleError(err)
+		}
+		return json.Marshal(styleDraftResult{Pending: pending, Draft: draft, Limit: style.MaxWriterNotesRunes})
+	}
+}
+
+// ApproveWriterStyleDraft returns a handler for style.approve_writer_draft:
+// the writer's act, and the only way a proposal becomes their default style.
+// No MCP tool reaches it.
+func ApproveWriterStyleDraft(repo *style.Repo, now Clock) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var in struct {
+			Body string `json:"body"`
+			Mode string `json:"mode"`
+		}
+		if err := json.Unmarshal(params, &in); err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "body and mode required"}
+		}
+		notes, err := repo.ApproveWriterDraft(ctx, now(), in.Body, in.Mode)
+		if errors.Is(err, style.ErrApproveMode) {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
+		}
+		if err != nil {
+			return nil, styleError(err)
+		}
+		return json.Marshal(map[string]string{"notes": notes})
+	}
+}
+
+// DiscardWriterStyleDraft returns a handler for style.discard_writer_draft.
+func DiscardWriterStyleDraft(repo *style.Repo) rpc.Handler {
+	return func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
+		if err := repo.DiscardWriterDraft(ctx); err != nil {
+			return nil, styleError(err)
+		}
+		return json.Marshal(map[string]bool{"ok": true})
 	}
 }
 

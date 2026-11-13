@@ -784,7 +784,7 @@ func sectionReport(c storycontext.Context) (included, empty []string) {
 		// "direction" has its own switch too (IncludeDirection →
 		// ContextKeyDirection), unlike the curated memory pair.
 		{"direction", !c.Direction.Empty()},
-		{"style_notes", strings.TrimSpace(c.StyleNotes) != ""},
+		{"style_notes", strings.TrimSpace(c.StyleNotes) != "" || strings.TrimSpace(c.WriterStyleNotes) != ""},
 	}
 	included, empty = []string{}, []string{}
 	for _, ch := range checks {

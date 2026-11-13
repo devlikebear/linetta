@@ -1,4 +1,4 @@
-import type { CharacterVisualSheet, ReferenceImageMeta, ArtStyle, StyleApproveMode, StyleCheckResult, StyleDraftState, StyleRules, StyleRulesState, WriterStyleRules } from "./types";
+import type { CharacterVisualSheet, ReferenceImageMeta, ArtStyle, StyleApproveMode, StyleCheckResult, StyleDraftState, StyleRules, StyleRulesState, WriterStyleRules, WriterStyleState } from "./types";
 import type { ArchivedNote } from "./types";
 import type { WorksGalleryPage } from "./types";
 import type { ManuscriptPages, SubmissionReport } from "./types";
@@ -788,9 +788,16 @@ export const style = {
   setRules: (rules: Omit<StyleRules, "updated_at" | "writer_phrases" | "sentence_limit_source">) =>
     rpcCall<StyleRules>("style.set_rules", rules),
   /** The writer's default rules, under every work's own (#179). Only the app sets them. */
-  getWriterRules: () => rpcCall<WriterStyleRules>("style.get_writer_rules"),
+  getWriterRules: () => rpcCall<WriterStyleState>("style.get_writer_rules"),
   setWriterRules: (rules: Omit<WriterStyleRules, "updated_at">) =>
     rpcCall<WriterStyleRules>("style.set_writer_rules", rules),
+  /** The writer's default style in prose (#182). Only the app sets it. */
+  setWriterNotes: (notes: string) => rpcCall<{ notes: string }>("style.set_writer_notes", { notes }),
+  /** An agent's proposal for the writer's default style (#183), waiting for approval. */
+  getWriterDraft: () => rpcCall<StyleDraftState>("style.get_writer_draft"),
+  approveWriterDraft: (body: string, mode: StyleApproveMode) =>
+    rpcCall<{ notes: string }>("style.approve_writer_draft", { body, mode }),
+  discardWriterDraft: () => rpcCall<{ ok: boolean }>("style.discard_writer_draft"),
   /** Checks one scene (or the scenes under a chapter) when nodeId is given, the whole work otherwise. */
   check: (projectId: string, nodeId?: string) =>
     rpcCall<StyleCheckResult>("style.check", { project_id: projectId, node_id: nodeId ?? "" }),

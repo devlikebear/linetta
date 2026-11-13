@@ -332,7 +332,8 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		WithSkillSource(skillBriefSource{store: skillsStore}).
 		WithDirectionSource(directionBriefSource{repo: directionRepo, forecast: forecastSvc}).
 		WithLedgerSource(ledgerRepo).
-		WithStyleAnchorSource(styleAnchorSource{styles: styles, nodes: nodes})
+		WithStyleAnchorSource(styleAnchorSource{styles: styles, nodes: nodes}).
+		WithWriterStyleSource(styles)
 
 	// Linetta Works publishing (Phase 3). Registered here, before the MCP
 	// host, because the publish tools publish through the same service.
@@ -576,6 +577,10 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("style.check", handlers.CheckStyle(styles, nodes))
 	s.Handle("style.get_writer_rules", handlers.GetWriterStyleRules(styles))
 	s.Handle("style.set_writer_rules", handlers.SetWriterStyleRules(styles, clock))
+	s.Handle("style.set_writer_notes", handlers.SetWriterStyleNotes(styles, clock))
+	s.Handle("style.get_writer_draft", handlers.GetWriterStyleDraft(styles))
+	s.Handle("style.approve_writer_draft", handlers.ApproveWriterStyleDraft(styles, clock))
+	s.Handle("style.discard_writer_draft", handlers.DiscardWriterStyleDraft(styles))
 	s.Handle("style.get_draft", handlers.GetStyleDraft(styles))
 	s.Handle("style.approve_draft", handlers.ApproveStyleDraft(styles, clock))
 	s.Handle("style.discard_draft", handlers.DiscardStyleDraft(styles))
