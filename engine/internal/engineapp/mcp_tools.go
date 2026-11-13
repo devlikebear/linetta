@@ -96,10 +96,12 @@ type mcpToolRepos struct {
 	skillHistory *agentskills.History
 	// publish is nil on a build that cannot publish.
 	publish *publish.Service
-	enqueue func(nodeID string)
-	notify  func(method string, params any)
-	clock   func() int64
-	db      *sql.DB
+	// publishApprovals is where the publish tools wait for the writer.
+	publishApprovals *publish.Approvals
+	enqueue          func(nodeID string)
+	notify           func(method string, params any)
+	clock            func() int64
+	db               *sql.DB
 }
 
 // agentToolDeps is what setupMCP hands the built-in agent to clone for its
@@ -156,11 +158,8 @@ func buildToolDeps(deps mcpDeps, activity *mcphost.ActivityRepo) mcphost.ToolDep
 	if deps.repos.publish != nil {
 		tools.Publish = deps.repos.publish
 	}
-	// A nil *publish.Service in the interface field would be a non-nil
-	// Publisher that panics; leave the field nil instead, which the tools
-	// refuse cleanly.
-	if deps.repos.publish != nil {
-		tools.Publish = deps.repos.publish
+	if deps.repos.publishApprovals != nil {
+		tools.PublishApproval = deps.repos.publishApprovals
 	}
 	// What the tool set costs, for the Settings pane's tool-budget group
 	// (#99). Wired here because internal/settings may not import mcphost.

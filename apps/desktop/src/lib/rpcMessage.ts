@@ -136,6 +136,7 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   publish_image_too_large: "errors.publishImageTooLarge",
   publish_too_many_images: "errors.publishTooManyImages",
   publish_too_many_sheets: "errors.publishTooManySheets",
+  publish_approval_gone: "errors.publishApprovalGone",
   // The private vault (Phase 11). As above: the site's message is Korean.
   vault_not_connected: "errors.vaultNotConnected",
   vault_consent_required: "errors.vaultConsentRequired",

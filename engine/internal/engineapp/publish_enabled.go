@@ -30,11 +30,15 @@ type publishDeps struct {
 	images publish.Illustrations
 	// sheets are the writer's sheets the work can show on the site.
 	sheets publish.SheetSource
+	// notify reaches the app: the approval dialog listens for the requests
+	// the publish tools wait on.
+	notify func(method string, params any)
 }
 
 // setupPublish registers the publish.* handlers and returns the service the
-// MCP tools publish through, plus its closer.
-func setupPublish(deps publishDeps) (*publish.Service, func() error) {
+// MCP tools publish through, the queue in which those tools wait for the
+// writer's approval (#238), and the service's closer.
+func setupPublish(deps publishDeps) (*publish.Service, *publish.Approvals, func() error) {
 	client := publish.NewClient(publish.BaseURLFromEnv(), DefaultVersion)
 	creds := publish.NewCredentials(deps.settingsStore)
 	state := publish.NewStateRepo(deps.db)
@@ -56,8 +60,12 @@ func setupPublish(deps publishDeps) (*publish.Service, func() error) {
 	s.Handle("publish.cover_set", handlers.PublishCoverSet(svc))
 	s.Handle("publish.cover_publish", handlers.PublishCoverPublish(svc))
 	s.Handle("publish.sheets_sync", handlers.PublishSheetsSync(svc))
+	// An agent's publish waits here until the writer answers in the app.
+	approvals := publish.NewApprovals(deps.notify, publish.DefaultApprovalTimeout)
+	s.Handle("publish.approvals_pending", handlers.PublishApprovalsPending(approvals))
+	s.Handle("publish.approval_answer", handlers.PublishApprovalAnswer(approvals))
 	// What readers see on the site, read without the writer's account.
 	s.Handle("works.gallery", handlers.WorksGallery(client))
 	s.Handle("works.gallery_cover", handlers.WorksGalleryCover(client))
-	return svc, connector.Close
+	return svc, approvals, connector.Close
 }

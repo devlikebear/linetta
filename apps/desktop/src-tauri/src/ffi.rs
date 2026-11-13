@@ -258,6 +258,10 @@ fn notification_event(method: &str) -> Option<&'static str> {
         // and the gallery's requests section read it; when a drawing was
         // put into a scene, node_ids names it so an open editor reloads.
         "illustrations.changed" => Some("illustrations-changed"),
+        // An agent is waiting for the writer to approve putting something
+        // on Linetta Works (#238). Missing here, the dialog never opens and
+        // every publish the writer asked for times out.
+        "publish.approvals_changed" => Some("publish-approvals-changed"),
         _ => None,
     }
 }
@@ -492,6 +496,16 @@ mod tests {
         assert_eq!(notification_event("proposals.changed"), Some("proposals-changed"));
         assert_eq!(notification_event("illustrations.changed"), Some("illustrations-changed"));
         assert_eq!(notification_event("proposals.unmapped"), None);
+    }
+
+    #[test]
+    fn publish_approvals_are_forwarded_to_the_renderer() {
+        // The publish tools wait on this dialog. Missing here, nothing an
+        // agent publishes can ever be approved.
+        assert_eq!(
+            notification_event("publish.approvals_changed"),
+            Some("publish-approvals-changed")
+        );
     }
 
     #[cfg(target_os = "windows")]

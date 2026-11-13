@@ -29,6 +29,7 @@ import type {
   CodexLoginStart,
   CodexStatus,
   PublishConnectStatus,
+  PublishApprovalRequest,
   PublishCoverView,
   PublishEpisodeView,
   PublishResult,
@@ -541,6 +542,11 @@ export const publishApi = {
     rpcCall<PublishCoverView>("publish.cover_publish", { project_id: projectId, illustration_id: illustrationId }),
   /** Sends the chosen sheets and cover to the site. */
   sheetsSync: (projectId: string) => rpcCall<PublishSheetsStatus>("publish.sheets_sync", { project_id: projectId }),
+  /** What agents are waiting for the writer to approve (#238). */
+  approvalsPending: () => rpcCall<{ pending: PublishApprovalRequest[] }>("publish.approvals_pending"),
+  /** The writer's answer to one request. Only the app can give it. */
+  answerApproval: (id: string, approved: boolean) =>
+    rpcCall<{ ok: true }>("publish.approval_answer", { id, approved }),
 };
 
 /** The private vault (Phase 11). A push or pull reports through the

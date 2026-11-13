@@ -199,6 +199,9 @@ const (
 	ReasonPublishTooManyImages = "publish_too_many_images"
 	// More sheets are turned on than the site takes for one work.
 	ReasonPublishTooManySheets = "publish_too_many_sheets"
+	// The writer answered a publish approval that had already timed out or
+	// whose agent call gave up (#238).
+	ReasonPublishApprovalGone = "publish_approval_gone"
 )
 
 // The private vault on Linetta Works (Phase 11). As with publishing, most are the

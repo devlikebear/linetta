@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { Library } from "./routes/Library";
 import { ToastProvider } from "./components/ToastProvider";
 import { EngineGate } from "./components/EngineGate";
+import { PublishApprovalDialog } from "./components/PublishApprovalDialog";
 import { I18nProvider, useI18n } from "./lib/i18n";
 import { settings as settingsApi } from "./lib/rpc";
 import type { Settings } from "./lib/types";
@@ -42,6 +43,8 @@ function AppRoutes() {
   return (
     <div className="app-frame">
       <SettingsVisualBridge />
+      {/* An agent may ask to publish while the writer is on any screen. */}
+      <PublishApprovalDialog />
       <Suspense
         fallback={<main className="shell"><p className="hint">{t("app.loading")}</p></main>}
       >
