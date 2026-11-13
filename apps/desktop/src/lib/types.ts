@@ -892,6 +892,17 @@ export interface AgentAsk {
  *  mounts mid-turn rejoins it from: `seq` is the last agent.* event the turn
  *  had emitted, `text` the reply streamed so far that is not yet a transcript
  *  row, `tool` the tool it is inside. Mirrors agent.RunStatus (runs.go). */
+/** One chip in the agent panel: an MCP prompt (#133), resolved to the
+ *  sentence it puts in the composer. An external client lists the same
+ *  prompts as slash commands. */
+export interface AgentPrompt {
+  name: string;
+  title: string;
+  text: string;
+  /** Where the panel shows it: "start", "followup", "longform". */
+  slots: string[];
+}
+
 export interface AgentRunStatus {
   running: boolean;
   run_id?: string;

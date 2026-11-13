@@ -205,3 +205,18 @@ func AgentUndo(ctrl AgentController) rpc.Handler {
 		return json.RawMessage(`{"ok":true}`), nil
 	}
 }
+
+// AgentPrompts returns the agent panel's chips: the MCP prompts an external
+// client lists as slash commands, already resolved to the sentence each one
+// puts in the composer (#133). list does the resolving; this only wraps it.
+func AgentPrompts[T any](list func(ctx context.Context) ([]T, error)) rpc.Handler {
+	return func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
+		prompts, err := list(ctx)
+		if err != nil {
+			return nil, rpc.MethodErrorFrom(err)
+		}
+		return json.Marshal(struct {
+			Prompts []T `json:"prompts"`
+		}{Prompts: prompts})
+	}
+}

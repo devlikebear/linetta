@@ -210,6 +210,32 @@ Write (`full` mode only):
   `linetta_propose_story_ops`, `linetta_accept_proposals`, `linetta_reject_proposals`,
   `linetta_save_forecast`: the story-assist Review group — see below.
 
+### Prompts
+
+The server also lists MCP prompts (`engine/internal/mcphost/prompts.go`, #133):
+`draft_current_scene`, `check_continuity`, `fill_story_world`,
+`suggest_next_scene`, `forecast_next_episode`, `review_episode`, `review_part`,
+`close_arc`, `rebuild_record` and `find_impact`. Claude Code shows them as
+`/linetta:draft_current_scene` and so on. Each returns one user message in the
+app's language. The optional `project_id` and `node_id` arguments add the work
+and scene on lines after the sentence, since an external client has no open
+scene for "this scene" to mean. A server lists only the prompts whose tools it
+serves, so `read_only` keeps `suggest_next_scene` and `review_part`, and the
+Review group switched off drops the prompts that record findings.
+
+The agent panel's chips are these prompts. Its `agent.prompts` RPC asks an
+in-memory server for `prompts/list` and `prompts/get`, the same two calls an
+external client makes. The chip titles, sentences, order and placement (the
+`linetta/slots` `_meta`: start, follow-up, long-form) all come from there, and
+none of it is written in the renderer. The panel-only chips stay in the panel:
+the ones for a selected passage, and the ledger tidy-up before starting fresh.
+
+A prompt is not a skill. A prompt says what to start now; a skill says how a
+kind of work is done, and the writer or the agent edits it. A prompt may name
+a tool or a skill but never carries the method, the story brief or the
+manuscript; the agent reads those through `linetta_get_story_context` like any
+other turn.
+
 ### World deletes and undo
 
 `linetta_apply_story_ops` deletes entities, relationships, fact cards,

@@ -37,6 +37,7 @@ vi.mock("../../lib/rpc", () => ({
     cancel: rpc.agentCancel,
     history: rpc.agentHistory,
     status: rpc.agentStatus,
+    prompts: () => Promise.resolve({ prompts: [] }),
   },
   settings: { get: rpc.settingsGet },
 }));
