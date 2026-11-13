@@ -156,7 +156,9 @@ Read:
 - `linetta_read_scene`, `linetta_list_characters`, `linetta_get_fact_cards`
 - `linetta_get_character_visuals`, `linetta_build_illustration_prompt`
 - `linetta_analyze_style`: holds a scene, a chapter or the whole work against
-  the writer's style rules (`internal/style`) and reports violations. It is
+  the writer's style rules (`internal/style`) and reports violations. The
+  rules are the work's own merged with the writer's default style, and each
+  violation says whose rule it broke (`source`: `work` or `writer`). It is
   deterministic and model-free; tone is left to the caller. The same call
   returns `stats` — counted measurements of the scenes read (`style.Measure`)
 - `linetta_search_manuscript`, `linetta_where_does_appear`, `linetta_get_plot`
@@ -185,7 +187,10 @@ Write (`full` mode only):
 - `linetta_propose_style_profile`: saves an agent's description of the
   writer's style as a pending draft (`project_style_drafts`). Only the app's
   `style.approve_draft` RPC moves a draft into `projects.style_notes`, and
-  so into the story brief; there is no MCP tool that approves;
+  so into the story brief; there is no MCP tool that approves. With
+  `scope: "writer"` the draft is for the writer's default style instead
+  (`writer_style_draft`, approved with `style.approve_writer_draft`). A client
+  pinned to one work cannot propose that one;
 - `linetta_set_character_visuals`, `linetta_set_art_style`;
 - `linetta_add_reference_image`, `linetta_delete_reference_image`;
 - `linetta_register_work`: registers the work on the site with a blurb, or
@@ -329,6 +334,24 @@ imported only by `internal/provider`, `internal/agent`, and the test-only
 `rpc/handlers`) must not reach it even transitively: those packages are shared
 by every agent, built-in or connected over MCP, and a model client in their
 dependency graph would mean one of them could call a model on its own.
+
+## Where style lives
+
+Four places hold something about how a writer writes. Each has one job, and an
+agent writes to none of the first two without the writer's approval.
+
+| Place | What it holds | Who writes it | Reaches the agent as |
+|---|---|---|---|
+| Writer's default style (Settings → Writing, `writer_style`) | Check rules and prose notes for every work | The writer; an agent can only propose notes (`scope: "writer"`) | The writer's direction, ahead of the work's, in every brief; rules merged into every check |
+| Work style (Story World → Style, `project_style_rules`, `projects.style_notes`) | This work's rules and notes, its anchor scene, and whether it follows the writer's default style | The writer; an agent can only propose notes | The writer's direction for this work; it wins where the two disagree |
+| Writer profile (Settings → Memory) | How the writer works: habits, what to avoid while working | The writer and agents alike, without approval | A note recorded for this writer, not their instruction |
+| Skills (Settings → Skills) | How a kind of work is done (#98) | The writer and agents alike | Names and descriptions; bodies on request |
+
+Style goes in the first two, not in the writer profile: a line there is read as
+an agent's memo, not as the writer's word. A work can turn the writer's default
+style off; then neither its rules nor its notes apply there. The default style
+stays with the library when a work is restored elsewhere, like the writer
+profile; the switch travels with the work.
 
 ## Scene summaries
 

@@ -334,6 +334,14 @@ one that drafted a scene can hold it against your rules before handing it
 back. It does not judge tone: that stays with the style notes in the brief and
 whoever reads them. Rules are in library backups and restored works.
 
+Style that follows you into every work goes in **Settings → Writing → Writer's
+default style**: phrases to avoid and a sentence limit, merged into every
+work's check, and prose notes that every brief carries as your direction
+ahead of the work's own. Where a work's rules or notes say otherwise, the
+work wins, and a work can turn your default style off altogether. Each
+violation in a check says whether it broke your default style or the work's
+rule.
+
 You do not have to describe your style from memory. Ask an agent to work it
 out from scenes you have already written: `linetta_analyze_style` also
 measures them — sentence lengths, how much is dialogue, how your sentences
@@ -341,8 +349,9 @@ tend to end — and `linetta_propose_style_profile` saves what the agent makes
 of that as a **draft**. A draft is the agent's reading, not your instruction,
 so it stays out of your style notes and out of every brief until you approve
 it under Story World → Style, where you can edit it first, add it after your
-notes, replace them with it, or discard it. No tool approves a draft; only
-you do.
+notes, replace them with it, or discard it. A draft of your default style for
+every work waits under Settings → Writing the same way. No tool approves a
+draft; only you do.
 
 Visual write tools (full mode): `linetta_set_character_visuals` (`project_id`, `name` or
 `entity_id`, optional `age_range`, `build`, `hair`, `outfit`, `signature`, `palette`, `notes`),
