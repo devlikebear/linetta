@@ -36,6 +36,15 @@ func styleError(err error) error {
 	return &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 }
 
+// styleRulesResult is style.get_rules's reply: the work's own rules at the top
+// level, as before, with the writer's default rules and the rules a check of
+// this work actually runs against beside them (#179).
+type styleRulesResult struct {
+	style.Rules
+	Writer    style.WriterRules `json:"writer"`
+	Effective style.Rules       `json:"effective"`
+}
+
 // GetStyleRules returns a handler for style.get_rules.
 func GetStyleRules(repo *style.Repo) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
@@ -45,11 +54,15 @@ func GetStyleRules(repo *style.Repo) rpc.Handler {
 		if err := json.Unmarshal(params, &in); err != nil || strings.TrimSpace(in.ProjectID) == "" {
 			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: errIDRequired}
 		}
-		out, err := repo.GetRules(ctx, in.ProjectID)
+		own, err := repo.GetRules(ctx, in.ProjectID)
 		if err != nil {
 			return nil, styleError(err)
 		}
-		return json.Marshal(out)
+		writer, err := repo.GetWriterRules(ctx)
+		if err != nil {
+			return nil, styleError(err)
+		}
+		return json.Marshal(styleRulesResult{Rules: own, Writer: writer, Effective: style.Merge(own, writer)})
 	}
 }
 
@@ -78,8 +91,10 @@ type styleCheckResult struct {
 
 // CheckStyle returns a handler for style.check. node_id narrows the check to
 // one scene, or to the scenes under one chapter; without it the whole work is
-// checked. The check reads the manuscript and writes nothing.
-func CheckStyle(repo *style.Repo, nodes *node.Repo, globalPhrases func() []string) rpc.Handler {
+// checked. It runs against the work's rules with the writer's merged in, and
+// each violation says whose rule it broke. It reads the manuscript and writes
+// nothing.
+func CheckStyle(repo *style.Repo, nodes *node.Repo) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var in struct {
 			ProjectID string `json:"project_id"`
@@ -88,7 +103,7 @@ func CheckStyle(repo *style.Repo, nodes *node.Repo, globalPhrases func() []strin
 		if err := json.Unmarshal(params, &in); err != nil || strings.TrimSpace(in.ProjectID) == "" {
 			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: errIDRequired}
 		}
-		rules, err := repo.GetRules(ctx, in.ProjectID)
+		rules, err := repo.EffectiveRules(ctx, in.ProjectID)
 		if err != nil {
 			return nil, styleError(err)
 		}
@@ -99,11 +114,36 @@ func CheckStyle(repo *style.Repo, nodes *node.Repo, globalPhrases func() []strin
 		if in.NodeID != "" && !containsNode(list, in.NodeID) {
 			return nil, rpc.NotFound(rpc.ReasonNodeNotFound, "node not found in this work")
 		}
-		checked := rules
-		if globalPhrases != nil {
-			checked.AvoidPhrases = append(append([]string{}, rules.AvoidPhrases...), globalPhrases()...)
+		return json.Marshal(styleCheckResult{Rules: rules, Report: style.Check(style.ScenesUnder(list, in.NodeID), rules)})
+	}
+}
+
+// GetWriterStyleRules returns a handler for style.get_writer_rules: the
+// writer's default rules, under every work's own.
+func GetWriterStyleRules(repo *style.Repo) rpc.Handler {
+	return func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
+		out, err := repo.GetWriterRules(ctx)
+		if err != nil {
+			return nil, styleError(err)
 		}
-		return json.Marshal(styleCheckResult{Rules: rules, Report: style.Check(style.ScenesUnder(list, in.NodeID), checked)})
+		return json.Marshal(out)
+	}
+}
+
+// SetWriterStyleRules returns a handler for style.set_writer_rules. Like
+// approving a style profile, this is the writer's act on the app's own RPC
+// surface; no MCP tool sets the writer's rules.
+func SetWriterStyleRules(repo *style.Repo, now Clock) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var in style.WriterRules
+		if err := json.Unmarshal(params, &in); err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "avoid_phrases and max_sentence_chars required"}
+		}
+		out, err := repo.SetWriterRules(ctx, now(), in)
+		if err != nil {
+			return nil, styleError(err)
+		}
+		return json.Marshal(out)
 	}
 }
 

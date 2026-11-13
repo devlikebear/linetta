@@ -45,6 +45,11 @@ type Violation struct {
 	// Length and Limit are set for RuleSentenceTooLong, in characters.
 	Length int `json:"length,omitempty"`
 	Limit  int `json:"limit,omitempty"`
+	// Source says whose rule this is, for RuleAvoidPhrase and
+	// RuleSentenceTooLong: SourceWriter (the writer's default style) or
+	// SourceWork (this work's). The pattern rules are Linetta's own and have
+	// none.
+	Source string `json:"source,omitempty"`
 }
 
 // Report is the result of checking scenes against rules.
@@ -86,6 +91,7 @@ func Check(scenes []Scene, rules Rules) Report {
 				add(Violation{
 					NodeID: sc.NodeID, Label: sc.Label, Rule: RuleAvoidPhrase, Paragraph: para,
 					Phrase: hit.phrase, Excerpt: excerpt(text, hit.start, hit.end),
+					Source: rules.phraseSource(hit.phrase),
 				})
 			}
 			if rules.MaxSentenceChars > 0 {
@@ -94,6 +100,7 @@ func Check(scenes []Scene, rules Rules) Report {
 						add(Violation{
 							NodeID: sc.NodeID, Label: sc.Label, Rule: RuleSentenceTooLong, Paragraph: para,
 							Excerpt: clip(s, excerptContext*3), Length: n, Limit: rules.MaxSentenceChars,
+							Source: rules.limitSource(),
 						})
 					}
 				}

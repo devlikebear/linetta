@@ -31,9 +31,15 @@ type analyzeStyleInput struct {
 
 func (in analyzeStyleInput) scope() (string, string) { return in.ProjectID, in.NodeID }
 
+// styleRulesOut is the rules the check ran against: the work's own with the
+// writer's default style merged in (#180). Each violation's source says whose
+// rule it broke, so an agent can tell the writer which list a phrase is on.
 type styleRulesOut struct {
 	AvoidPhrases     []string `json:"avoid_phrases"`
 	MaxSentenceChars int      `json:"max_sentence_chars" jsonschema:"0 means no limit"`
+	// IgnoresWriterStyle: this work does not follow the writer's default
+	// style, which is why none of it shows here.
+	IgnoresWriterStyle bool `json:"ignores_writer_style,omitempty"`
 }
 
 type analyzeStyleOutput struct {
@@ -81,10 +87,10 @@ const styleProfilePending = "pending_writer_approval"
 func registerStyleTools(s *mcp.Server, d ToolDeps) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_analyze_style",
-		Description: "Check a scene, a chapter, or the whole work against the writer's style rules " +
-			"(phrases to avoid, a sentence-length limit) and measure it (sentence lengths, dialogue " +
-			"share, common endings). Each violation comes with its scene, paragraph and an excerpt. " +
-			"Reads only. It cannot judge tone — hold the text against the style notes yourself.",
+		Description: "Check a scene, a chapter, or the whole work against the style rules (phrases to " +
+			"avoid, a sentence-length limit) and measure it (sentence lengths, dialogue share, common " +
+			"endings). Each violation gives its scene, paragraph, excerpt and whose rule (work or writer). " +
+			"Reads only. Tone is yours to judge against the style notes.",
 	}, record(d, "linetta_analyze_style", d.analyzeStyle))
 }
 
@@ -141,7 +147,10 @@ func (d ToolDeps) analyzeStyle(ctx context.Context, _ *mcp.CallToolRequest, in a
 	if errResult != nil {
 		return errResult, analyzeStyleOutput{}, nil
 	}
-	rules, err := d.Style.GetRules(ctx, p.ID)
+	// The work's rules with the writer's merged in. The writer's are read
+	// even by a client pinned to this work: they are part of how this work is
+	// checked, and nothing here can change them.
+	rules, err := d.Style.EffectiveRules(ctx, p.ID)
 	if err != nil {
 		return nil, analyzeStyleOutput{}, err
 	}
@@ -150,9 +159,6 @@ func (d ToolDeps) analyzeStyle(ctx context.Context, _ *mcp.CallToolRequest, in a
 		return nil, analyzeStyleOutput{}, err
 	}
 	scenes := style.ScenesUnder(nodes, in.NodeID)
-	if d.Settings != nil {
-		rules.AvoidPhrases = append(rules.AvoidPhrases, d.Settings.StyleAvoidPhrases()...)
-	}
 	rep := style.Check(scenes, rules)
 
 	limit := in.Limit
@@ -164,8 +170,11 @@ func (d ToolDeps) analyzeStyle(ctx context.Context, _ *mcp.CallToolRequest, in a
 		rep.Truncated = true
 	}
 	return nil, analyzeStyleOutput{
-		ProjectID:     p.ID,
-		Rules:         styleRulesOut{AvoidPhrases: rules.AvoidPhrases, MaxSentenceChars: rules.MaxSentenceChars},
+		ProjectID: p.ID,
+		Rules: styleRulesOut{
+			AvoidPhrases: rules.AvoidPhrases, MaxSentenceChars: rules.MaxSentenceChars,
+			IgnoresWriterStyle: rules.IgnoreWriterStyle,
+		},
 		ScenesChecked: rep.ScenesChecked,
 		Total:         rep.Total,
 		Violations:    rep.Violations,

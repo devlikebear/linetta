@@ -18,6 +18,7 @@ import { McpSection } from "../components/settings/McpSection";
 import { MemorySection } from "../components/settings/MemorySection";
 import { ProviderSection } from "../components/settings/ProviderSection";
 import { SummarizerSection } from "../components/settings/SummarizerSection";
+import { WriterStyleSection } from "../components/settings/WriterStyleSection";
 import { ImageGenSection } from "../components/settings/ImageGenSection";
 import { PublishSection } from "../components/settings/PublishSection";
 import { SyncOverview } from "../components/settings/SyncOverview";
@@ -549,6 +550,8 @@ export function Settings() {
             </section>
             )}
 
+            {tab === "writing" && <WriterStyleSection />}
+
             {tab === "writing" && (
             <section className="settings-section">
               <h3>{t("settings.writing.title")}</h3>
@@ -874,23 +877,6 @@ export function Settings() {
                 </span>
                 <span className={`switch${current.agent_impact_review_enabled === true ? " on" : ""}`} />
               </button>
-              <label className="set-row is-stacked">
-                <span className="sk-wrap">
-                  <span className="sk">{t("settings.style.globalPhrases")}</span>
-                  <span className="sd">{t("settings.style.globalPhrasesDescription")}</span>
-                </span>
-                <textarea
-                  rows={3}
-                  defaultValue={(current.style_avoid_phrases ?? []).join("\n")}
-                  disabled={saving}
-                  onBlur={(e) => {
-                    const phrases = e.target.value.split("\n").map((line) => line.trim()).filter((line) => line !== "");
-                    if (phrases.join("\n") !== (current.style_avoid_phrases ?? []).join("\n")) {
-                      apply({ style_avoid_phrases: phrases });
-                    }
-                  }}
-                />
-              </label>
             </section>
             <SkillsSection />
             </>

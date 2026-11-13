@@ -1,4 +1,4 @@
-import type { CharacterVisualSheet, ReferenceImageMeta, ArtStyle, StyleApproveMode, StyleCheckResult, StyleDraftState, StyleRules } from "./types";
+import type { CharacterVisualSheet, ReferenceImageMeta, ArtStyle, StyleApproveMode, StyleCheckResult, StyleDraftState, StyleRules, StyleRulesState, WriterStyleRules } from "./types";
 import type { ArchivedNote } from "./types";
 import type { WorksGalleryPage } from "./types";
 import type { ManuscriptPages, SubmissionReport } from "./types";
@@ -784,8 +784,13 @@ export const visuals = {
 };
 
 export const style = {
-  getRules: (projectId: string) => rpcCall<StyleRules>("style.get_rules", { project_id: projectId }),
-  setRules: (rules: Omit<StyleRules, "updated_at">) => rpcCall<StyleRules>("style.set_rules", rules),
+  getRules: (projectId: string) => rpcCall<StyleRulesState>("style.get_rules", { project_id: projectId }),
+  setRules: (rules: Omit<StyleRules, "updated_at" | "writer_phrases" | "sentence_limit_source">) =>
+    rpcCall<StyleRules>("style.set_rules", rules),
+  /** The writer's default rules, under every work's own (#179). Only the app sets them. */
+  getWriterRules: () => rpcCall<WriterStyleRules>("style.get_writer_rules"),
+  setWriterRules: (rules: Omit<WriterStyleRules, "updated_at">) =>
+    rpcCall<WriterStyleRules>("style.set_writer_rules", rules),
   /** Checks one scene (or the scenes under a chapter) when nodeId is given, the whole work otherwise. */
   check: (projectId: string, nodeId?: string) =>
     rpcCall<StyleCheckResult>("style.check", { project_id: projectId, node_id: nodeId ?? "" }),
