@@ -16,8 +16,9 @@ type Repo struct {
 func NewRepo(s *store.Store) *Repo { return &Repo{s: s} }
 
 // ResyncForNode replaces the node's mention set with `found`. Any Found whose
-// EntityID does not exist in the entities table is silently dropped (the body
-// might reference a stale entity id after a deletion — that's allowed).
+// EntityID is not a character of the node's own work is silently dropped: the
+// body may name a stale id after a deletion, which is allowed, or another
+// work's character, which must not link the two works (#108).
 func (r *Repo) ResyncForNode(ctx context.Context, nodeID string, found []Found) error {
 	tx, err := r.s.DB().BeginTx(ctx, nil)
 	if err != nil {
@@ -30,7 +31,9 @@ func (r *Repo) ResyncForNode(ctx context.Context, nodeID string, found []Found) 
 	}
 	for _, f := range found {
 		var exists int
-		if err := tx.QueryRowContext(ctx, `SELECT 1 FROM entities WHERE id = ?`, f.EntityID).Scan(&exists); err != nil {
+		if err := tx.QueryRowContext(ctx, `
+SELECT 1 FROM entities e JOIN nodes n ON n.project_id = e.project_id
+ WHERE e.id = ? AND n.id = ?`, f.EntityID, nodeID).Scan(&exists); err != nil {
 			continue
 		}
 		if _, err := tx.ExecContext(ctx, `

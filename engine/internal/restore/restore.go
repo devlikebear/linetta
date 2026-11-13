@@ -215,7 +215,6 @@ func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, p
 
 	newProjectID := uuid.NewString()
 	nodeMap := map[string]string{}
-	entityMap := map[string]string{}
 	threadMap := map[string]string{}
 	// beatMap lets continuity_observations' refs_json (story-assist Phase 2)
 	// follow a beat ref to its new id, the same way entityMap and cardMap do
@@ -253,13 +252,23 @@ func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, p
 	for _, oldID := range nodeOrder {
 		nodeMap[oldID] = uuid.NewString()
 	}
-	// Pictures get their new ids before the scenes are copied, so each
-	// scene and each of its versions can point at the copy of the picture
-	// it shows rather than at the original work's.
-	illustrationMap, err := illustrationIDMap(ctx, sdb, projectID)
+	// Pictures, characters and notes get their new ids before the scenes are
+	// copied, so each scene and each of its versions points at the copies of
+	// what it shows, mentions and annotates rather than at the original
+	// work's (#108).
+	illustrationMap, err := freshIDs(ctx, sdb, `SELECT id FROM illustrations WHERE project_id = ?`, projectID)
 	if err != nil {
-		return MergeResult{}, err
+		return MergeResult{}, fmt.Errorf("read illustrations: %w", err)
 	}
+	entityMap, err := freshIDs(ctx, sdb, `SELECT id FROM entities WHERE project_id = ?`, projectID)
+	if err != nil {
+		return MergeResult{}, fmt.Errorf("read entities: %w", err)
+	}
+	noteMap, err := freshIDs(ctx, sdb, `SELECT id FROM notes WHERE node_id IN (SELECT id FROM nodes WHERE project_id = ?)`, projectID)
+	if err != nil {
+		return MergeResult{}, fmt.Errorf("read notes: %w", err)
+	}
+	refs := docRefs{illustrations: illustrationMap, entities: entityMap, notes: noteMap}
 	for _, oldID := range nodeOrder {
 		if err := copyRows(ctx, sdb, tx, "nodes", "id = ?", []any{oldID}, func(row map[string]any) (map[string]any, bool) {
 			row["id"] = nodeMap[asString(row["id"])]
@@ -267,7 +276,7 @@ func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, p
 			if p := asString(row["parent_id"]); p != "" {
 				row["parent_id"] = nodeMap[p]
 			}
-			rewriteIllustrationIDs(row, illustrationMap)
+			refs.rewrite(row)
 			return row, true
 		}); err != nil {
 			return MergeResult{}, fmt.Errorf("copy nodes: %w", err)
@@ -275,9 +284,7 @@ func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, p
 	}
 
 	if err := copyRows(ctx, sdb, tx, "entities", "project_id = ?", []any{projectID}, func(row map[string]any) (map[string]any, bool) {
-		newID := uuid.NewString()
-		entityMap[asString(row["id"])] = newID
-		row["id"] = newID
+		row["id"] = entityMap[asString(row["id"])]
 		row["project_id"] = newProjectID
 		return row, true
 	}); err != nil {
@@ -417,7 +424,7 @@ func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, p
 			if !ok {
 				return nil, false
 			}
-			row["id"] = uuid.NewString()
+			row["id"] = noteMap[asString(row["id"])]
 			row["node_id"] = n
 			return row, true
 		}); err != nil {
@@ -522,7 +529,7 @@ func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, p
 			}
 			row["id"] = uuid.NewString()
 			row["node_id"] = n
-			rewriteIllustrationIDs(row, illustrationMap)
+			refs.rewrite(row)
 			return row, true
 		}); err != nil {
 		return MergeResult{}, fmt.Errorf("copy node_snapshots: %w", err)
@@ -781,11 +788,11 @@ func normalizeValue(v any) any {
 	return v
 }
 
-// illustrationIDMap assigns every picture in the backed-up work a new id.
-func illustrationIDMap(ctx context.Context, src *sql.DB, projectID string) (map[string]string, error) {
-	rows, err := src.QueryContext(ctx, `SELECT id FROM illustrations WHERE project_id = ?`, projectID)
+// freshIDs gives every id the query returns a new one.
+func freshIDs(ctx context.Context, src *sql.DB, query string, args ...any) (map[string]string, error) {
+	rows, err := src.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("read illustrations: %w", err)
+		return nil, err
 	}
 	defer rows.Close()
 	out := map[string]string{}
@@ -799,17 +806,76 @@ func illustrationIDMap(ctx context.Context, src *sql.DB, projectID string) (map[
 	return out, rows.Err()
 }
 
-// rewriteIllustrationIDs points a copied document's pictures at their
-// copies. A document that does not parse is copied as it is: the merge never
-// fails over a scene it could not read.
-func rewriteIllustrationIDs(row map[string]any, ids map[string]string) {
+// docRefs maps the ids a scene document names inside its JSON: the picture
+// an illustration node shows, the character a mention names, and the note a
+// note marker opens. The mentions table is rebuilt from the document on every
+// save, so a mention left on the original's id would lead the copy back to the
+// original's character the next time the scene is saved.
+type docRefs struct {
+	illustrations map[string]string
+	entities      map[string]string
+	notes         map[string]string
+}
+
+// rewrite points a copied row's content_doc at the copies. An id with no copy
+// stays as it is: the backup's own scene named something its work no longer
+// had, and the copy keeps saying the same. A document that does not parse is
+// copied as it is: the merge never fails over a scene it could not read.
+func (r docRefs) rewrite(row map[string]any) {
 	doc, ok := row["content_doc"].(string)
-	if !ok || len(ids) == 0 {
+	if !ok || doc == "" {
 		return
 	}
-	if next, changed, err := illustref.RewriteIDs(doc, ids); err == nil && changed {
+	if next, changed, err := r.rewriteDoc(doc); err == nil && changed {
 		row["content_doc"] = next
 	}
+}
+
+func (r docRefs) rewriteDoc(raw string) (string, bool, error) {
+	var doc any
+	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
+		return "", false, err
+	}
+	changed := false
+	remap := func(attrs map[string]any, key string, ids map[string]string) {
+		old, _ := attrs[key].(string)
+		if next, ok := ids[old]; ok && next != old {
+			attrs[key] = next
+			changed = true
+		}
+	}
+	var walk func(v any)
+	walk = func(v any) {
+		switch t := v.(type) {
+		case map[string]any:
+			if attrs, ok := t["attrs"].(map[string]any); ok {
+				switch t["type"] {
+				case illustref.NodeType:
+					remap(attrs, "id", r.illustrations)
+				case "mention":
+					remap(attrs, "id", r.entities)
+				case "noteMarker":
+					remap(attrs, "noteId", r.notes)
+				}
+			}
+			if content, ok := t["content"].([]any); ok {
+				walk(content)
+			}
+		case []any:
+			for _, c := range t {
+				walk(c)
+			}
+		}
+	}
+	walk(doc)
+	if !changed {
+		return raw, false, nil
+	}
+	out, err := json.Marshal(doc)
+	if err != nil {
+		return "", false, err
+	}
+	return string(out), true, nil
 }
 
 // remapContinuityRefs rewrites a continuity_observations.refs_json value
