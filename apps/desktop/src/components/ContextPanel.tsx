@@ -4,7 +4,8 @@ import type { CharCountBasis, NodeRow, Project, Entity, EntityKind } from "../li
 import { charCountBasisOf } from "../lib/charCount";
 import { ManuscriptPages } from "./ManuscriptPages";
 import { changesContinuity } from "../lib/agentTools";
-import { projects as projectsApi, continuity as continuityApi } from "../lib/rpc";
+import { projects as projectsApi, continuity as continuityApi, settings as settingsApi } from "../lib/rpc";
+import { rpcErrorMessage } from "../lib/rpcMessage";
 import { PlotPanel } from "./PlotPanel";
 import { User, MapPin, Box, Lightbulb, Book, Search } from "../lib/icons";
 import { InlineEditableText } from "./InlineEditableText";
@@ -145,6 +146,23 @@ export function ContextPanel({ project, node, charCount, todayChars = null, epis
   const [overview, setOverview] = useState(project.outline ?? "");
   const [synopsis, setSynopsis] = useState(project.synopsis ?? "");
   const [synopsisBusy, setSynopsisBusy] = useState<"rewrite" | "clear" | null>(null);
+  // The rewrite button is there only while AI summaries are on (#135): it
+  // sends the work's summaries to the writer's provider.
+  const [synopsisRewriteOn, setSynopsisRewriteOn] = useState(false);
+  const [confirmRewrite, setConfirmRewrite] = useState(false);
+  const [synopsisError, setSynopsisError] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    settingsApi
+      .get()
+      .then((s) => {
+        if (!cancelled) setSynopsisRewriteOn(s.summarizer_provider_enabled === true);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const overviewSaveTimer = useRef<number | null>(null);
   const synopsisSaveTimer = useRef<number | null>(null);
   const [directionCollapsed, setDirectionCollapsed] = useState<boolean>(() => readDirectionCollapsed());
@@ -228,6 +246,27 @@ export function ContextPanel({ project, node, charCount, todayChars = null, epis
     } finally {
       setBasisBusy(false);
     }
+  };
+
+  const rewriteSynopsis = async () => {
+    if (synopsisSaveTimer.current) window.clearTimeout(synopsisSaveTimer.current);
+    setConfirmRewrite(false);
+    setSynopsisError(null);
+    setSynopsisBusy("rewrite");
+    try {
+      const updated = await projectsApi.rewriteSynopsis(project.id);
+      setSynopsis(updated.synopsis ?? "");
+      onProjectChanged?.(updated);
+    } catch (err) {
+      setSynopsisError(rpcErrorMessage(err, t));
+    } finally {
+      setSynopsisBusy(null);
+    }
+  };
+  // The writer's own synopsis is not kept, so replacing one asks first.
+  const askRewriteSynopsis = () => {
+    if (synopsis.trim() === "") void rewriteSynopsis();
+    else setConfirmRewrite(true);
   };
 
   const clearSynopsis = async () => {
@@ -398,17 +437,34 @@ export function ContextPanel({ project, node, charCount, todayChars = null, epis
         </div>
 
         {/* 시놉시스 — the writer's own story summary; it also feeds the MCP brief.
-            Deriving one from scene summaries needed a model, so that button is
-            gone and this is edited by hand or written by an agent. */}
+            Edited by hand or written by an agent; with AI summaries on, the
+            writer's provider can rewrite it from the parts' summaries. */}
         <div className="sec">
           <h4>
             <span>{t("workspace.synopsis")}</span>
             <span className="sec-actions">
+              {synopsisRewriteOn && (
+                <button type="button" data-testid="synopsis-rewrite" onClick={askRewriteSynopsis} disabled={synopsisBusy !== null}>
+                  {t("workspace.rewrite")}
+                </button>
+              )}
               <button type="button" onClick={clearSynopsis} disabled={synopsisBusy !== null || synopsis.trim() === ""}>
                 {t("workspace.clear")}
               </button>
             </span>
           </h4>
+          {confirmRewrite && (
+            <div className="sec-confirm" role="alertdialog" data-testid="synopsis-rewrite-confirm">
+              <p className="sd">{t("workspace.rewriteSynopsisConfirm")}</p>
+              <button type="button" className="btn ghost sm" onClick={() => setConfirmRewrite(false)}>
+                {t("common.cancel")}
+              </button>
+              <button type="button" className="btn accent sm" data-testid="synopsis-rewrite-go" onClick={() => void rewriteSynopsis()}>
+                {t("workspace.rewrite")}
+              </button>
+            </div>
+          )}
+          {synopsisError && <p className="char-preset-error" role="alert">{synopsisError}</p>}
           <textarea
             aria-label={t("workspace.projectSynopsis")}
             className="project-text-edit"

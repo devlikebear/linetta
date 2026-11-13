@@ -204,6 +204,14 @@ const (
 	ReasonPublishApprovalGone = "publish_approval_gone"
 )
 
+// The BYOK summarizer (#135).
+const (
+	// The writer has not switched provider summaries on in Settings.
+	ReasonSummarizerOff = "summarizer_off"
+	// The work has no summaries yet to write a synopsis from.
+	ReasonSynopsisNothingToSummarize = "synopsis_nothing_to_summarize"
+)
+
 // The private vault on Linetta Works (Phase 11). As with publishing, most are the
 // site's codes carried through. Conflict means another device pushed first, and
 // LocalChanges that a pull would overwrite work this device has not pushed.

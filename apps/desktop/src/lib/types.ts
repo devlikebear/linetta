@@ -489,6 +489,13 @@ export interface McpConnectOutcome {
 }
 
 /** One recorded external tool call, shown in the activity list. */
+/** What provider summaries have cost so far (#135). */
+export interface SummarizerUsage {
+  calls: number;
+  input: number;
+  output: number;
+}
+
 export interface McpActivityEntry {
   id: string;
   at: number;
@@ -498,7 +505,8 @@ export interface McpActivityEntry {
   ok: boolean;
   detail?: string;
   /** Who called the tool: "agent" for Linetta's built-in writing agent,
-   *  "external" for a client connected over the MCP port. The engine stamps
+   *  "external" for a client connected over the MCP port, "summarizer" for
+   *  the background summarizer using the writer's provider. The engine stamps
    *  this from a static field on the tool deps, never from the wire, so an
    *  external client cannot claim to be the agent. */
   source?: string;
@@ -1018,6 +1026,8 @@ export interface Settings {
   agent_self_review_enabled?: boolean;
   /** Off unless the writer turns it on: it sends finished scenes to the model again. */
   agent_episode_review_enabled?: boolean;
+  /** Off unless the writer turns it on (#135): long scenes go to the provider to be summarized. */
+  summarizer_provider_enabled?: boolean;
   agent_settlement_enabled?: boolean;
   agent_impact_review_enabled?: boolean;
   /** Phrases to keep out of every work. */
@@ -1096,6 +1106,8 @@ export interface SettingsPatch {
   agent_self_review_enabled?: boolean;
   /** Off unless the writer turns it on: it sends finished scenes to the model again. */
   agent_episode_review_enabled?: boolean;
+  /** Off unless the writer turns it on (#135): long scenes go to the provider to be summarized. */
+  summarizer_provider_enabled?: boolean;
   agent_settlement_enabled?: boolean;
   agent_impact_review_enabled?: boolean;
   /** Phrases to keep out of every work. */

@@ -1564,6 +1564,8 @@ const messages = {
     "errors.publishTooManyImages": "삽화가 사이트에 올릴 수 있는 장수보다 많습니다(회차당 30장, 작품당 300장). 아무것도 게시하지 않았습니다. 삽화를 줄이거나 회차를 나눠 주세요.",
     "errors.publishTooManySheets": "공개로 켠 시트가 사이트가 받는 수(작품당 200개)보다 많습니다. 아무것도 올리지 않았습니다. 일부 시트의 공개를 꺼 주세요.",
     "errors.publishApprovalGone": "이 요청은 이미 끝났습니다. 시간이 지났거나 에이전트가 요청을 거뒀고, 아무것도 올리지 않았습니다.",
+    "errors.summarizerOff": "설정 → AI 모델에서 AI 요약을 켜야 쓸 수 있습니다.",
+    "errors.synopsisNothingToSummarize": "아직 시놉시스를 쓸 요약이 없습니다. 씬을 먼저 써 주세요.",
     "publishApproval.titleRegister": "이 작품을 Linetta Works에 등록할까요?",
     "publishApproval.titleUpdateWork": "Linetta Works의 작품 정보를 바꿀까요?",
     "publishApproval.titleEpisode": "이 회차를 Linetta Works에 공개할까요?",
@@ -1763,6 +1765,7 @@ const messages = {
     "settings.mcp.activity.title": "최근 활동",
     "settings.mcp.activity.sourceAgent": "내장 에이전트",
     "settings.mcp.activity.sourceExternal": "외부 클라이언트",
+    "settings.mcp.activity.sourceSummarizer": "AI 요약",
     // 기억(#97). 프롬프트에 매번 들어가는 짧은 문서 두 개라서, 설명은 "무엇이
     // 적히는가"가 아니라 "누가 언제 읽는가"를 먼저 말한다 — 작가가 여기에 쓴
     // 문장은 다음 턴부터 모든 대화에 실린다.
@@ -1858,6 +1861,11 @@ const messages = {
     "settings.providers.cli.missing": "Claude Code를 찾지 못했습니다. 설치한 뒤 터미널에서 claude를 한 번 실행해 로그인하고 다시 확인해 주세요.",
     "settings.providers.cli.hint": "API 키 없이 내 Claude 로그인으로 실행됩니다. Linetta는 Claude Code의 파일·셸·웹 도구와 내 설정(훅, 플러그인, 다른 MCP 서버)을 끈 채로 Linetta 툴만 쓰게 합니다. 로그인이 되어 있는지는 연결 테스트로 확인할 수 있습니다.",
     "settings.providers.cli.recheck": "다시 확인",
+    "settings.summarizer.title": "AI 요약",
+    "settings.summarizer.enabled": "긴 씬 요약과 시놉시스에 공급자 사용",
+    "settings.summarizer.description": "켜면 긴 씬을 저장할 때마다 그 본문을 지금 쓰는 AI 공급자로 보내 요약을 받고, 작품 패널에 시놉시스 재작성 버튼이 생깁니다. 공급자 요금이 들고, 공급자 동의가 없으면 아무것도 보내지 않습니다. 에이전트가 쓴 요약은 바꾸지 않고, 바뀐 요약은 직전 것을 하나 남겨 둡니다. Claude Code 공급자에서는 실행되지 않습니다.",
+    "settings.summarizer.usage": "지금까지 {calls}번 · 입력 {input} · 출력 {output} 토큰",
+    "workspace.rewriteSynopsisConfirm": "지금 시놉시스를 AI 공급자가 새로 쓴 것으로 바꿀까요? 지금 내용은 남지 않습니다.",
     "settings.providers.cli.signedOut": "Claude Code 로그인이 되어 있지 않거나 만료되었습니다. 터미널에서 claude auth login을 실행해 로그인한 뒤 연결 테스트를 다시 눌러 주세요.",
     "settings.providers.state.configured": "설정됨",
     "settings.providers.state.notConfigured": "설정 안 됨",
@@ -1906,7 +1914,7 @@ const messages = {
     // lands there ("Google Gemini으로" is ungrammatical). `에` has no such
     // allomorph, so the sentence stays correct for every destination.
     "settings.providers.consent":
-      "에이전트가 툴로 열려 있는 작품만이 아니라 내 모든 작품의 어느 씬이든 그 원문과 요약, 아웃라인, 원고 전체 검색 결과, 등장인물·플롯·팩트 카드, 기억해 두라고 한 내용, 작품 목록, 인물 참조 이미지를 읽을 수 있고, 메시지에 첨부한 이미지가 그 메시지에 답하는 요청과 함께 가고, 여기에 더해 작가 프로필과 작품 노트와 스킬의 이름·설명이 매 요청과 함께 실리고, 그중 작가 프로필과 적용 범위가 \"모든 작품\"인 스킬은 열려 있는 작품에 한정되지 않으며, 손이 많이 간 턴 뒤에는 무엇을 배웠는지 묻는 호출이 한 번 더 갈 수 있고(설정 → 스킬에서 끌 수 있습니다), 이 모두가 {provider}에 전송되고 Linetta는 그 밖의 어떤 곳에도 보내지 않는다는 데 동의합니다",
+      "에이전트가 툴로 열려 있는 작품만이 아니라 내 모든 작품의 어느 씬이든 그 원문과 요약, 아웃라인, 원고 전체 검색 결과, 등장인물·플롯·팩트 카드, 기억해 두라고 한 내용, 작품 목록, 인물 참조 이미지를 읽을 수 있고, 메시지에 첨부한 이미지가 그 메시지에 답하는 요청과 함께 가고, 여기에 더해 작가 프로필과 작품 노트와 스킬의 이름·설명이 매 요청과 함께 실리고, 그중 작가 프로필과 적용 범위가 \"모든 작품\"인 스킬은 열려 있는 작품에 한정되지 않으며, 손이 많이 간 턴 뒤에는 무엇을 배웠는지 묻는 호출이 한 번 더 갈 수 있고(설정 → 스킬에서 끌 수 있습니다), 설정 → AI 모델에서 AI 요약을 켜면 저장한 긴 씬의 본문과 작품의 부·회차 요약이 요약과 시놉시스를 쓰려고 갈 수 있고, 이 모두가 {provider}에 전송되고 Linetta는 그 밖의 어떤 곳에도 보내지 않는다는 데 동의합니다",
     "settings.providers.consent.customEndpoint": "직접 설정한 OpenAI 호환 엔드포인트",
     "settings.providers.test": "연결 테스트",
     "settings.providers.test.ok": "연결됨",
@@ -3465,6 +3473,8 @@ const messages = {
     "errors.publishTooManyImages": "The episode has more illustrations than the site takes (30 per episode, 300 per work). Nothing was published. Use fewer illustrations or split the episode.",
     "errors.publishTooManySheets": "More sheets are marked to show than the site takes (200 per work). Nothing was uploaded. Turn some of them off.",
     "errors.publishApprovalGone": "This request has already ended: it timed out or the agent withdrew it. Nothing was uploaded.",
+    "errors.summarizerOff": "Turn on AI summaries under Settings → AI models first.",
+    "errors.synopsisNothingToSummarize": "There are no summaries to write a synopsis from yet. Write a scene first.",
     "publishApproval.titleRegister": "Register this work on Linetta Works?",
     "publishApproval.titleUpdateWork": "Change this work's details on Linetta Works?",
     "publishApproval.titleEpisode": "Publish this episode on Linetta Works?",
@@ -3664,6 +3674,7 @@ const messages = {
     "settings.mcp.activity.title": "Recent activity",
     "settings.mcp.activity.sourceAgent": "Built-in agent",
     "settings.mcp.activity.sourceExternal": "External client",
+    "settings.mcp.activity.sourceSummarizer": "AI summaries",
     "settings.memory.title": "Memory",
     "settings.memory.description":
       "A short note the agent reads every time. You can rewrite it yourself, and the agent writes here too.",
@@ -3740,6 +3751,11 @@ const messages = {
     "settings.providers.cli.missing": "Claude Code was not found. Install it, run claude once in a terminal to sign in, then check again.",
     "settings.providers.cli.hint": "Runs under your own Claude login, with no API key. Linetta switches off Claude Code's file, shell and web tools and your own setup (hooks, plugins, other MCP servers), so it can use only Linetta's tools. The connection test tells you whether you are signed in.",
     "settings.providers.cli.recheck": "Check again",
+    "settings.summarizer.title": "AI summaries",
+    "settings.summarizer.enabled": "Use the provider for long scene summaries and synopses",
+    "settings.summarizer.description": "When on, each time you save a long scene its text goes to your current AI provider for a summary, and the work panel gets a button to rewrite the synopsis. Your provider charges for it, and nothing is sent without the provider's consent. Summaries an agent wrote are left alone, and a replaced summary keeps the one before it. Does not run with the Claude Code provider.",
+    "settings.summarizer.usage": "{calls} calls so far · Input {input} · Output {output} tokens",
+    "workspace.rewriteSynopsisConfirm": "Replace the synopsis with one your AI provider writes? The current text is not kept.",
     "settings.providers.cli.signedOut": "Claude Code is not signed in, or its login has expired. Run claude auth login in a terminal, then test the connection again.",
     "settings.providers.state.configured": "Configured",
     "settings.providers.state.notConfigured": "Not configured",
@@ -3771,7 +3787,7 @@ const messages = {
     "settings.providers.model.refresh": "Refresh",
     "settings.providers.model.listFailed": "Could not load the model list. Type a model name you know, or leave it empty to use the provider default.",
     "settings.providers.consent":
-      "I agree that the agent's tools can read any scene in any of my works and not only the one I have open, along with its summaries, the outline, search results from across the manuscript, the character, plot and fact cards, the facts I have told it to remember, the list of my works and my characters' reference images; that images I attach to a message go with the requests that answer it; that the writer profile, the work notes and my skills' names and descriptions ride along with every request, the writer profile and any skill whose scope is every work being global rather than scoped to the work I have open; that after a tool-heavy turn one further call may go out asking what it learned, which I can switch off under Settings → Skills; and that all of it is sent to {provider} and nowhere else",
+      "I agree that the agent's tools can read any scene in any of my works and not only the one I have open, along with its summaries, the outline, search results from across the manuscript, the character, plot and fact cards, the facts I have told it to remember, the list of my works and my characters' reference images; that images I attach to a message go with the requests that answer it; that the writer profile, the work notes and my skills' names and descriptions ride along with every request, the writer profile and any skill whose scope is every work being global rather than scoped to the work I have open; that after a tool-heavy turn one further call may go out asking what it learned, which I can switch off under Settings → Skills; that if I turn on AI summaries under Settings → AI models, the text of a long scene I save and my works' part and episode summaries may go to write summaries and synopses; and that all of it is sent to {provider} and nowhere else",
     "settings.providers.consent.customEndpoint": "the OpenAI-compatible endpoint set above",
     "settings.providers.test": "Test connection",
     "settings.providers.test.ok": "Connected",
@@ -5329,6 +5345,8 @@ const messages = {
     "errors.publishTooManyImages": "挿絵がサイトの受け付ける枚数（1話30枚、1作品300枚）を超えています。何も公開していません。挿絵を減らすか、話を分けてください。",
     "errors.publishTooManySheets": "公開をオンにしたシートがサイトの受け付ける数（1作品200件）を超えています。何もアップロードしていません。いくつかのシートの公開をオフにしてください。",
     "errors.publishApprovalGone": "このリクエストはすでに終わっています。時間切れか、エージェントが取り下げました。何もアップロードしていません。",
+    "errors.summarizerOff": "設定 → AIモデルで AI 要約をオンにしてください。",
+    "errors.synopsisNothingToSummarize": "シノプシスを書くための要約がまだありません。先にシーンを書いてください。",
     "publishApproval.titleRegister": "この作品をLinetta Worksに登録しますか？",
     "publishApproval.titleUpdateWork": "Linetta Worksの作品情報を変更しますか？",
     "publishApproval.titleEpisode": "この話をLinetta Worksに公開しますか？",
@@ -5528,6 +5546,7 @@ const messages = {
     "settings.mcp.activity.title": "最近の操作",
     "settings.mcp.activity.sourceAgent": "内蔵エージェント",
     "settings.mcp.activity.sourceExternal": "外部クライアント",
+    "settings.mcp.activity.sourceSummarizer": "AI 要約",
     "settings.memory.title": "記憶",
     "settings.memory.description":
       "エージェントが毎回読む短いメモです。自分で書き直せますし、エージェントもここに書き込みます。",
@@ -5601,6 +5620,11 @@ const messages = {
     "settings.providers.cli.missing": "Claude Codeが見つかりませんでした。インストールしてからターミナルでclaudeを一度実行してログインし、もう一度確認してください。",
     "settings.providers.cli.hint": "APIキーなしで自分のClaudeログインで動きます。LinettaはClaude Codeのファイル・シェル・Webツールと自分の設定（フック、プラグイン、ほかのMCPサーバー）をオフにし、Linettaのツールだけを使わせます。ログインしているかは接続テストで確認できます。",
     "settings.providers.cli.recheck": "もう一度確認",
+    "settings.summarizer.title": "AI 要約",
+    "settings.summarizer.enabled": "長いシーンの要約とシノプシスにプロバイダーを使う",
+    "settings.summarizer.description": "オンにすると、長いシーンを保存するたびにその本文を今の AI プロバイダーへ送って要約を受け取り、作品パネルにシノプシスの書き直しボタンが出ます。プロバイダーの料金がかかり、プロバイダーへの同意がなければ何も送りません。エージェントが書いた要約は変えず、置き換えた要約は直前のものを一つ残します。Claude Code プロバイダーでは実行されません。",
+    "settings.summarizer.usage": "これまで {calls} 回 · 入力 {input} · 出力 {output} トークン",
+    "workspace.rewriteSynopsisConfirm": "シノプシスを AI プロバイダーが書いたものに置き換えますか？今の内容は残りません。",
     "settings.providers.cli.signedOut": "Claude Codeにログインしていないか、ログインの有効期限が切れています。ターミナルでclaude auth loginを実行してログインし、もう一度接続テストを押してください。",
     "settings.providers.state.configured": "設定済み",
     "settings.providers.state.notConfigured": "未設定",
@@ -5632,7 +5656,7 @@ const messages = {
     "settings.providers.model.refresh": "更新",
     "settings.providers.model.listFailed": "モデル一覧を取得できませんでした。知っているモデル名を直接入力するか、空のままにするとプロバイダーの既定値を使います。",
     "settings.providers.consent":
-      "エージェントがツールで、開いている作品だけでなく私のすべての作品のどのシーンの原文と要約でも、アウトライン、原稿全体の検索結果、登場人物・プロット・ファクトカード、記憶させた内容、作品一覧、人物の参照画像を読み取ることができ、メッセージに添付した画像はそのメッセージに応答するリクエストとともに送られ、さらに作家プロフィールと作品ノートとスキルの名前・説明が毎回のリクエストとともに送られ、そのうち作家プロフィールと適用範囲が「すべての作品」のスキルは開いている作品に限定されず、手のかかったターンのあとには何を学んだかを尋ねる呼び出しがもう一度送られることがあり（設定 → スキルでオフにできます）、これらすべてが{provider}に送信され、Linetta はそれ以外のどこにも送信しないことに同意します",
+      "エージェントがツールで、開いている作品だけでなく私のすべての作品のどのシーンの原文と要約でも、アウトライン、原稿全体の検索結果、登場人物・プロット・ファクトカード、記憶させた内容、作品一覧、人物の参照画像を読み取ることができ、メッセージに添付した画像はそのメッセージに応答するリクエストとともに送られ、さらに作家プロフィールと作品ノートとスキルの名前・説明が毎回のリクエストとともに送られ、そのうち作家プロフィールと適用範囲が「すべての作品」のスキルは開いている作品に限定されず、手のかかったターンのあとには何を学んだかを尋ねる呼び出しがもう一度送られることがあり（設定 → スキルでオフにできます）、設定 → AIモデルで AI 要約をオンにすると保存した長いシーンの本文と作品の部・話の要約が要約とシノプシスを書くために送られることがあり、これらすべてが{provider}に送信され、Linetta はそれ以外のどこにも送信しないことに同意します",
     "settings.providers.consent.customEndpoint": "上で設定した OpenAI 互換エンドポイント",
     "settings.providers.test": "接続テスト",
     "settings.providers.test.ok": "接続済み",

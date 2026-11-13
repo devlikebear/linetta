@@ -22,6 +22,7 @@ import type {
   AgentHistoryRow,
   AgentImage,
   AgentPrompt,
+  SummarizerUsage,
   AgentRunResult,
   AgentRunStatus,
   ApplyContextResult,
@@ -243,6 +244,9 @@ export const projects = {
   get: (id: string) => rpcCall<Project>("projects.get", { id }),
   update: (input: UpdateProjectInput) => rpcCall<Project>("projects.update", input),
   clearSynopsis: (id: string) => rpcCall<Project>("projects.clear_synopsis", { id }),
+  /** The writer's provider writes the synopsis (#135). Refused unless AI
+   *  summaries are on and the provider is consented to. */
+  rewriteSynopsis: (id: string) => rpcCall<Project>("projects.rewrite_synopsis", { id }),
   /** The work against its submission rule: episodes, their length, the whole work, the synopsis. */
   submissionCheck: (id: string) => rpcCall<SubmissionReport>("projects.submission_check", { id }),
   /** The work in 200-character manuscript sheets, a rough count (episode-length Phase 4). */
@@ -312,6 +316,11 @@ export const snapshots = {
     rpcCall<SnapshotCompareResult>("snapshots.compare", { left_id: leftId, right_id: rightId }),
   restore: (snapshotId: string) =>
     rpcCall<NodeRow>("snapshots.restore", { snapshot_id: snapshotId }),
+};
+
+/** The BYOK summarizer (#135). */
+export const summarizer = {
+  usage: () => rpcCall<SummarizerUsage>("summarizer.usage"),
 };
 
 export const settings = {

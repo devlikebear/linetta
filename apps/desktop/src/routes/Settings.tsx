@@ -17,6 +17,7 @@ import { BackgroundSection } from "../components/settings/BackgroundSection";
 import { McpSection } from "../components/settings/McpSection";
 import { MemorySection } from "../components/settings/MemorySection";
 import { ProviderSection } from "../components/settings/ProviderSection";
+import { SummarizerSection } from "../components/settings/SummarizerSection";
 import { ImageGenSection } from "../components/settings/ImageGenSection";
 import { PublishSection } from "../components/settings/PublishSection";
 import { SyncOverview } from "../components/settings/SyncOverview";
@@ -608,6 +609,8 @@ export function Settings() {
             {tab === "general" && <BackgroundSection />}
 
             {tab === "ai" && agentAvailable && <ProviderSection />}
+
+            {tab === "ai" && agentAvailable && <SummarizerSection />}
 
             {tab === "ai" && agentAvailable && (
               <ImageGenSection onOpenProviders={() => scrollToPane("provider-settings")} />

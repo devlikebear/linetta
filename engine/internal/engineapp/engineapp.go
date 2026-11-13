@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/devlikebear/linetta/engine/internal/agent"
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/appversion"
@@ -186,12 +187,8 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		return cfg.Language
 	}
 
+	// Started below, once the provider it may use exists.
 	summ := summarizer.New(nodes).WithOpsStatus(ops, clock)
-	stopSummarizer := summ.Start(ctx)
-	a.closers = append(a.closers, func() error {
-		stopSummarizer()
-		return nil
-	})
 
 	syncDeps := syncDeps{
 		server:        s,
@@ -356,6 +353,27 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 
 	providerSrc := provider.NewSource(settingsStore, codexHome).WithCLIWorkDir(filepath.Join(home, "agent-cli"))
 
+	// The summarizer may use the same provider for long scenes (#135), only
+	// while the writer has that switched on. Wired before Start: the worker
+	// reads these fields without a lock.
+	summarizerUsage := summarizer.NewUsageRepo(st.DB())
+	summarizerActivity := mcphost.NewActivityRepo(st.DB())
+	summ.WithModel(agent.NewSummaryModel(providerSrc, settingsStore.ActiveProvider),
+		settingsStore.SummarizerProviderEnabled, summarizerUsage,
+		func(ctx context.Context, e summarizer.Event) {
+			if err := summarizerActivity.Record(ctx, mcphost.ActivityEntry{
+				Tool: e.Tool, ProjectID: e.ProjectID, TargetID: e.NodeID, OK: e.OK, Detail: e.Detail,
+				Source: mcphost.SourceSummarizer,
+			}); err != nil {
+				fmt.Fprintf(os.Stderr, "summarizer activity: %v\n", err)
+			}
+		})
+	stopSummarizer := summ.Start(ctx)
+	a.closers = append(a.closers, func() error {
+		stopSummarizer()
+		return nil
+	})
+
 	// Illustration drawing. The painter is the provider's Draw, gated on the
 	// image consent; the gallery and the prompt preview never reach a
 	// provider. Built before the MCP host because its illustration tools
@@ -506,6 +524,8 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("projects.delete", handlers.DeleteProject(projects, companionSvc.DeleteProjectData, vaultHooks.queueDeletion))
 	s.Handle("projects.update", handlers.UpdateProject(projects, clock))
 	s.Handle("projects.clear_synopsis", handlers.ClearProjectSynopsis(projects, clock))
+	s.Handle("projects.rewrite_synopsis", handlers.RewriteProjectSynopsis(projects, summ.WriteSynopsis, clock))
+	s.Handle("summarizer.usage", handlers.SummarizerUsage(summarizerUsage))
 	s.Handle("projects.submission_check", handlers.SubmissionCheck(projects, nodes))
 	s.Handle("projects.manuscript_pages", handlers.ManuscriptPages(projects, nodes))
 	s.Handle("nodes.get", handlers.GetNode(nodes))

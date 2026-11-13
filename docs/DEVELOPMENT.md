@@ -330,6 +330,35 @@ imported only by `internal/provider`, `internal/agent`, and the test-only
 by every agent, built-in or connected over MCP, and a model client in their
 dependency graph would mean one of them could call a model on its own.
 
+## Scene summaries
+
+`engine/internal/summarizer` keeps `nodes.summary` in step with each scene. By
+default no model is involved: a short scene is its own summary, a long one
+gets its opening cut at a sentence, and a container rolls up its children. An
+agent replaces any of these through `linetta_write_summary`, and the
+summarizer never overwrites that.
+
+With **Settings → AI models → AI summaries** on (`summarizer_provider_enabled`,
+off by default, #135), a long scene saved through `nodes.update_content` goes to
+the writer's active provider instead (`summarizer/model.go`). Only the save
+queue does this; `RefreshNow`, which a waiting story brief calls, never does.
+The same switch enables `projects.rewrite_synopsis`, which sends the work's
+top-level summaries for a synopsis.
+
+- The model call is `agent.SummaryModel`, since only `internal/agent` and
+  `internal/provider` may import `pkg/llm`. It goes through
+  `provider.Source.Client`, so a provider without consent sends nothing, and it
+  skips the Claude Code CLI.
+- A generated summary is not marked as written. It is refreshed on the next
+  save, and it never replaces an agent's summary, even one written while the
+  request was in flight. The summary it replaces stays in
+  `nodes.summary_previous`.
+- Each request goes to the activity log with source `summarizer`, and its
+  tokens add up in `summarizer_usage`, shown under the switch
+  (`summarizer.usage`).
+- Engine shutdown cancels a request in flight and waits for the worker, which
+  then writes nothing.
+
 ## Versioning and builds
 
 Keep all app version surfaces aligned with:

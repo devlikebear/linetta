@@ -209,6 +209,32 @@ func (r *Repo) SetWrittenSummary(ctx context.Context, id string, summary string,
 	return r.setSummary(ctx, id, summary, forVersion, true)
 }
 
+// SetGeneratedSummary writes a summary the writer's provider generated for
+// the given version (#135), keeping the summary it replaces in
+// summary_previous. It reports false and changes nothing when someone wrote a
+// summary meanwhile — an agent's summary is never replaced by a generated one.
+func (r *Repo) SetGeneratedSummary(ctx context.Context, id string, summary string, forVersion int) (bool, error) {
+	res, err := r.s.DB().ExecContext(ctx, `
+UPDATE nodes SET summary_previous = summary, summary = ?, summary_for_version = ?, summary_written = 0
+ WHERE id = ? AND summary_written = 0`,
+		summary, forVersion, id)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+// PreviousSummary is the summary a generated one replaced, or "".
+func (r *Repo) PreviousSummary(ctx context.Context, id string) (string, error) {
+	var prev string
+	err := r.s.DB().QueryRowContext(ctx, `SELECT summary_previous FROM nodes WHERE id = ?`, id).Scan(&prev)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	return prev, err
+}
+
 func (r *Repo) setSummary(ctx context.Context, id string, summary string, forVersion int, written bool) error {
 	res, err := r.s.DB().ExecContext(ctx, `
 UPDATE nodes SET summary = ?, summary_for_version = ?, summary_written = ? WHERE id = ?`,
