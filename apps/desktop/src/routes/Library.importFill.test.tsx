@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   diagnosticsGet: vi.fn(),
   providersList: vi.fn(),
   extractionEstimate: vi.fn(),
+  agentPrompts: vi.fn(),
 }));
 
 vi.mock("../lib/importLoad", () => ({
@@ -42,6 +43,7 @@ vi.mock("../lib/rpc", () => ({
   backupApi: { createRecovery: vi.fn() },
   providers: { list: mocks.providersList },
   proposals: { extractionEstimate: mocks.extractionEstimate },
+  agent: { prompts: mocks.agentPrompts },
 }));
 
 function renderLibrary() {
@@ -85,6 +87,9 @@ describe("Library import → Story World 채우기", () => {
       project_id: "new-project", container_count: 1, leaf_count: 1, warnings: [],
     });
     mocks.extractionEstimate.mockResolvedValue({ episodes: 1, chars: 120, input_tokens: 60 });
+    mocks.agentPrompts.mockResolvedValue({
+      prompts: [{ name: "fill_story_world", title: "Story World 채우기", text: "가져온 원고를 회차 순서대로 읽어 줘.", slots: ["start"] }],
+    });
   });
 
   it("navigates straight to Workspace when no provider is connected", async () => {
@@ -117,9 +122,26 @@ describe("Library import → Story World 채우기", () => {
     await runImport(user);
     await screen.findByText("Story World 채우기");
     await user.click(screen.getByRole("button", { name: "시작" }));
-    expect(navigateMock).toHaveBeenCalledWith("/workspace/new-project", {
-      state: { fillStoryWorldPrompt: expect.stringContaining("회차") },
-    });
+    await waitFor(() =>
+      expect(navigateMock).toHaveBeenCalledWith("/workspace/new-project", {
+        state: { fillStoryWorldPrompt: "가져온 원고를 회차 순서대로 읽어 줘." },
+      }),
+    );
+  });
+
+  // #133: the sentence is the engine's fill_story_world prompt. Without it
+  // (the Review tools off) the writer still lands on the work.
+  it("'시작' lands on the work with nothing queued when the engine has no such prompt", async () => {
+    mocks.agentPrompts.mockResolvedValue({ prompts: [] });
+    mocks.providersList.mockResolvedValue([
+      { id: "anthropic", auth: "api_key", active: true, configured: true, consented: true, model: "claude" },
+    ]);
+    const user = userEvent.setup();
+    renderLibrary();
+    await runImport(user);
+    await screen.findByText("Story World 채우기");
+    await user.click(screen.getByRole("button", { name: "시작" }));
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith("/workspace/new-project"));
   });
 
   it("'나중에' sends the writer to Workspace with no prompt queued", async () => {

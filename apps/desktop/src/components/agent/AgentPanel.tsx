@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { Bot, ImagePlus, Quote, Send, Square, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { agent as agentApi, proposals as proposalsApi, providers as providersApi, settings as settingsApi } from "../../lib/rpc";
-import type { AgentAsk, AgentHistoryRow, AgentRunStatus, ProposalsChangedPayload, ProviderStatus } from "../../lib/types";
+import type { AgentAsk, AgentHistoryRow, AgentPrompt, AgentRunStatus, ProposalsChangedPayload, ProviderStatus } from "../../lib/types";
 import { useI18n } from "../../lib/i18n";
 import { toolKind, toolLabelKey, toolVerbKey } from "../../lib/agentTools";
 import { reasonMessage, rpcErrorMessage } from "../../lib/rpcMessage";
@@ -463,7 +463,7 @@ export function AgentPanel({
   onOpenImageSettings,
   onOpenProposals,
 }: Props) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   // "Ready" means the active row is both configured AND consented. A
   // credential without consent is refused server-side — Source.Client()
   // requires both — so a turn sent while only configured comes back as
@@ -475,12 +475,16 @@ export function AgentPanel({
   // writer who is fully set up — a false claim about their own setup, not
   // just an ugly flash.
   const [ready, setReady] = useState<boolean | null>(null);
-  // story-assist Phase 2 (2.C.3): the continuity starter chip calls
-  // linetta_report_continuity, which is absent when the writer has switched
-  // the Review tool group off in Settings. Defaults to true — the on-by-
-  // default switch — so the chip does not flash hidden on every open while
-  // settings.get is still in flight.
+  // The suggestions inbox line needs the Review tool group, which the writer
+  // can switch off in Settings. Defaults to true — the on-by-default switch —
+  // so the line does not flash hidden on every open while settings.get is
+  // still in flight.
   const [reviewToolsEnabled, setReviewToolsEnabled] = useState(true);
+  // The chips (#133): the engine's MCP prompts, the same ones an external
+  // client lists as slash commands, so a chip and its slash command cannot
+  // say different things. The engine leaves out a prompt whose tools the
+  // agent does not have (the Review group switched off, say).
+  const [prompts, setPrompts] = useState<AgentPrompt[]>([]);
   // The rows `ready` was read from, kept for the provider picker under the
   // composer. Only ever replaced by a whole providers.list response.
   const [providerRows, setProviderRows] = useState<ProviderStatus[]>([]);
@@ -1296,6 +1300,25 @@ export function AgentPanel({
 
   useEffect(() => {
     let cancelled = false;
+    agentApi
+      .prompts()
+      .then((res) => {
+        if (!cancelled) setPrompts(res.prompts ?? []);
+      })
+      .catch(() => {
+        // No chips is the honest fallback: the writer can still type.
+      });
+    return () => {
+      cancelled = true;
+    };
+    // The prompts are worded in the app's language; a switch rewords them.
+  }, [language]);
+  const startPrompts = prompts.filter((p) => p.slots.includes("start"));
+  const followupPrompts = prompts.filter((p) => p.slots.includes("followup"));
+  const longformPrompts = prompts.filter((p) => p.slots.includes("longform"));
+
+  useEffect(() => {
+    let cancelled = false;
     settingsApi
       .get()
       .then((s) => {
@@ -1303,9 +1326,8 @@ export function AgentPanel({
         setReviewToolsEnabled(s.review_tools_enabled !== false);
       })
       .catch(() => {
-        // Fail open: the chip's own tool call would refuse if the group
-        // really is off, which is a clearer failure than hiding a chip the
-        // writer expects to see over a transient settings.get error.
+        // Fail open: accepting would refuse if the group really is off,
+        // which is clearer than hiding the line over a transient error.
       });
     return () => {
       cancelled = true;
@@ -1493,7 +1515,7 @@ export function AgentPanel({
     <aside className="panel agent-panel" onMouseDown={(e) => e.stopPropagation()}>
       <div className="panel-head">
         <span className="ttl"><span className="ic"><Bot size={16} /></span> {t("agentPanel.title")}</span>
-        {ready && lines.length > 0 && (
+        {ready && lines.length > 0 && longformPrompts.length > 0 && (
           <button
             type="button"
             className="btn ghost sm"
@@ -1519,19 +1541,19 @@ export function AgentPanel({
       </div>
       {showLongform && (
         <div className="ai-chiprow agent-longform" data-testid="agent-longform-chips">
-          {(["closeArc", "rebuild", "impact"] as const).map((key) => (
+          {longformPrompts.map((p) => (
             <button
-              key={key}
+              key={p.name}
               type="button"
               className="chip"
-              data-testid={`agent-longform-${key}`}
+              data-testid={`agent-longform-${p.name}`}
               onClick={() => {
                 setShowLongform(false);
-                setDraft(t(`agentPanel.longform.${key}.prompt`));
+                setDraft(p.text);
                 composerRef.current?.focus();
               }}
             >
-              {t(`agentPanel.longform.${key}.label`)}
+              {p.title}
             </button>
           ))}
         </div>
@@ -1752,97 +1774,41 @@ export function AgentPanel({
               </button>
             ))}
           </div>
-        ) : lines.length === 0 && !busy ? (
-          // Starting chips: three fixed prompts that fill the composer and
-          // stop there — the writer gets to edit the sentence before it goes
-          // anywhere. They only make sense before the first turn; once the
-          // log has something in it (or a send is already in flight), the
-          // writer is already composing their own message.
+        ) : lines.length === 0 && !busy && startPrompts.length > 0 ? (
+          // Starting chips fill the composer and stop there — the writer gets
+          // to edit the sentence before it goes anywhere. They only make
+          // sense before the first turn; once the log has something in it
+          // (or a send is already in flight), the writer is already composing
+          // their own message.
           <div className="ai-chiprow agent-starters" data-testid="agent-starters">
-            <button
-              type="button"
-              className="chip"
-              data-testid="agent-starter-draftScene"
-              onClick={() => setDraft(t("agentPanel.starters.draftScene.prompt"))}
-            >
-              {t("agentPanel.starters.draftScene.label")}
-            </button>
-            {reviewToolsEnabled ? (
+            {startPrompts.map((p) => (
               <button
+                key={p.name}
                 type="button"
                 className="chip"
-                data-testid="agent-starter-checkContinuity"
-                onClick={() => setDraft(t("agentPanel.starters.checkContinuity.prompt"))}
+                data-testid={`agent-starter-${p.name}`}
+                onClick={() => setDraft(p.text)}
               >
-                {t("agentPanel.starters.checkContinuity.label")}
+                {p.title}
               </button>
-            ) : null}
-            {reviewToolsEnabled ? (
-              <button
-                type="button"
-                className="chip"
-                data-testid="agent-starter-fillStoryWorld"
-                onClick={() => setDraft(t("agentPanel.starters.fillStoryWorld.prompt"))}
-              >
-                {t("agentPanel.starters.fillStoryWorld.label")}
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className="chip"
-              data-testid="agent-starter-nextScene"
-              onClick={() => setDraft(t("agentPanel.starters.nextScene.prompt"))}
-            >
-              {t("agentPanel.starters.nextScene.label")}
-            </button>
-            {reviewToolsEnabled ? (
-              <button
-                type="button"
-                className="chip"
-                data-testid="agent-starter-forecastNext"
-                onClick={() => setDraft(t("agentPanel.starters.forecastNext.prompt"))}
-              >
-                {t("agentPanel.starters.forecastNext.label")}
-              </button>
-            ) : null}
+            ))}
           </div>
-        ) : lines.length > 0 && !busy && !askOpen && reviewToolsEnabled && draft.trim() === "" ? (
+        ) : lines.length > 0 && !busy && !askOpen && followupPrompts.length > 0 && draft.trim() === "" ? (
           // The check-and-plan chips matter most once there is writing to
           // check, which is after the first turn, so they stay within reach
           // whenever the composer is free.
           <div className="ai-chiprow agent-starters" data-testid="agent-followups">
-            <button
-              type="button"
-              className="chip"
-              data-testid="agent-followup-reviewEpisode"
-              onClick={() => setDraft(t("agentPanel.starters.reviewEpisode.prompt"))}
-            >
-              {t("agentPanel.starters.reviewEpisode.label")}
-            </button>
-            <button
-              type="button"
-              className="chip"
-              data-testid="agent-followup-reviewPart"
-              onClick={() => setDraft(t("agentPanel.starters.reviewPart.prompt"))}
-            >
-              {t("agentPanel.starters.reviewPart.label")}
-            </button>
-            <button
-              type="button"
-              className="chip"
-              data-testid="agent-followup-checkContinuity"
-              onClick={() => setDraft(t("agentPanel.starters.checkContinuity.prompt"))}
-            >
-              {t("agentPanel.starters.checkContinuity.label")}
-            </button>
-            <button
-              type="button"
-              className="chip"
-              data-testid="agent-followup-forecastNext"
-              onClick={() => setDraft(t("agentPanel.starters.forecastNext.prompt"))}
-            >
-              {t("agentPanel.starters.forecastNext.label")}
-            </button>
+            {followupPrompts.map((p) => (
+              <button
+                key={p.name}
+                type="button"
+                className="chip"
+                data-testid={`agent-followup-${p.name}`}
+                onClick={() => setDraft(p.text)}
+              >
+                {p.title}
+              </button>
+            ))}
           </div>
         ) : null}
         <div

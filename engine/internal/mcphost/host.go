@@ -141,7 +141,11 @@ func (h *Host) Start(ctx context.Context) error {
 			// caller that does describe the set twice — the built-in agent —
 			// resolves the groups at the top of its turn and passes the same
 			// value to its prompt and to Register.
-			h.deps.Tools(srv, mode, ToolGroupsFrom(h.deps.Settings))
+			groups := ToolGroupsFrom(h.deps.Settings)
+			h.deps.Tools(srv, mode, groups)
+			// The panel's chips as slash commands, in the app's language and
+			// only where this server has the tools they start (#133).
+			RegisterPrompts(srv, h.deps.Settings.Language(), mode, groups)
 		}
 		return srv
 	}, nil)

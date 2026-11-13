@@ -28,6 +28,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/ledger"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
 	"github.com/devlikebear/linetta/engine/internal/manuscriptedit"
+	"github.com/devlikebear/linetta/engine/internal/mcphost"
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/note"
@@ -678,6 +679,9 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("agent.status", handlers.AgentStatus(agentCtrl))
 	s.Handle("agent.clear", handlers.AgentClear(agentCtrl))
 	s.Handle("agent.start_fresh", handlers.AgentStartFresh(agentCtrl))
+	s.Handle("agent.prompts", handlers.AgentPrompts(func(ctx context.Context) ([]mcphost.PanelPrompt, error) {
+		return mcphost.PanelPrompts(ctx, settingsStore.Language(), settings.MCPModeFull, mcphost.ToolGroupsFrom(settingsStore))
+	}))
 	s.Handle("continuity.sample_check", handlers.SampleCheck(continuityRepo, ledgerRepo, agentCtrl, clock))
 	s.Handle("agent.undo", handlers.AgentUndo(agentCtrl))
 	s.Handle("snapshots.list_for_node", handlers.ListSnapshotsForNode(snaps))

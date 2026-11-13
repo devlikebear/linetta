@@ -21,6 +21,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AgentHistoryRow,
   AgentImage,
+  AgentPrompt,
   AgentRunResult,
   AgentRunStatus,
   ApplyContextResult,
@@ -623,6 +624,9 @@ export const agent = {
     rpcCall<AgentHistoryRow[]>("agent.history", { project_id: projectId, limit }),
   status: (projectId: string) => rpcCall<AgentRunStatus>("agent.status", { project_id: projectId }),
   clear: (projectId: string) => rpcCall<{ ok: true }>("agent.clear", { project_id: projectId }),
+  /** The panel's chips: the engine's MCP prompts, in the app's language and
+   *  only those whose tools the agent has (#133). */
+  prompts: () => rpcCall<{ prompts: AgentPrompt[] | null }>("agent.prompts"),
   /** Starts the conversation over from here. Nothing is deleted. */
   startFresh: (projectId: string) =>
     rpcCall<{ ok: true }>("agent.start_fresh", { project_id: projectId }),

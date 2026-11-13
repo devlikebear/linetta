@@ -10,6 +10,7 @@ import {
   openPath,
   proposals as proposalsApi,
   providers as providersApi,
+  agent as agentApi,
 } from "../lib/rpc";
 import type {
   DiagnosticsSnapshot,
@@ -221,12 +222,22 @@ export function Library() {
     setImportFillProjectId(null);
   };
 
-  const startImportFill = () => {
+  const startImportFill = async () => {
     if (!importFillProjectId) return;
-    navigate(`/workspace/${importFillProjectId}`, {
-      state: { fillStoryWorldPrompt: t("agentPanel.starters.fillStoryWorld.prompt") },
-    });
+    const projectId = importFillProjectId;
     setImportFillProjectId(null);
+    // The same sentence as the panel's chip and the fill_story_world slash
+    // command (#133). Without it (the Review tools switched off) the writer
+    // still lands on the work, with nothing queued.
+    const prompt = await agentApi
+      .prompts()
+      .then((res) => res.prompts?.find((p) => p.name === "fill_story_world")?.text)
+      .catch(() => undefined);
+    if (prompt) {
+      navigate(`/workspace/${projectId}`, { state: { fillStoryWorldPrompt: prompt } });
+    } else {
+      navigate(`/workspace/${projectId}`);
+    }
   };
 
   const openBackupFolder = async () => {
@@ -593,7 +604,7 @@ export function Library() {
           estimate={importFillEstimate}
           providerNameKey={activeProvider ? nameKeyFor(activeProvider.id) : undefined}
           model={activeProvider?.model}
-          onStart={startImportFill}
+          onStart={() => void startImportFill()}
           onLater={closeImportFill}
         />
       )}

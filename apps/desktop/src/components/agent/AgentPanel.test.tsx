@@ -15,7 +15,18 @@ const rpc = vi.hoisted(() => ({
   agentHistory: vi.fn(),
   agentStartFresh: vi.fn().mockResolvedValue({ ok: true }),
   settingsGet: vi.fn(),
+  agentPrompts: vi.fn(),
 }));
+
+// What the engine's agent.prompts answers with every tool group on (#133).
+const PROMPTS = [
+  { name: "draft_current_scene", title: "초고", text: "draft text", slots: ["start"] },
+  { name: "check_continuity", title: "점검", text: "continuity text", slots: ["start", "followup"] },
+  { name: "fill_story_world", title: "채우기", text: "fill text", slots: ["start"] },
+  { name: "suggest_next_scene", title: "다음", text: "next text", slots: ["start"] },
+  { name: "review_episode", title: "검수", text: "review text", slots: ["followup"] },
+  { name: "close_arc", title: "결산", text: "close arc text", slots: ["longform"] },
+];
 
 // Same approach as useMcpChanges.test.tsx: a hoisted listener map standing in
 // for Tauri's real event bus, and an `emit` helper that calls the registered
@@ -34,7 +45,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 vi.mock("../../lib/rpc", () => ({
   providers: { list: rpc.providersList },
-  agent: { undo: rpc.agentUndo, run: rpc.agentRun, cancel: rpc.agentCancel, history: rpc.agentHistory, startFresh: rpc.agentStartFresh },
+  agent: { undo: rpc.agentUndo, run: rpc.agentRun, cancel: rpc.agentCancel, history: rpc.agentHistory, startFresh: rpc.agentStartFresh, prompts: rpc.agentPrompts },
   settings: { get: rpc.settingsGet },
   proposals: { list: rpc.proposalsList, accept: rpc.proposalsAccept },
 }));
@@ -185,6 +196,7 @@ async function jumpTo(view: ReturnType<typeof render>, projectId: string, strict
 beforeEach(() => {
   vi.clearAllMocks();
   ev.listeners.clear();
+  rpc.agentPrompts.mockResolvedValue({ prompts: PROMPTS });
 });
 
 /** The notice lines in the log — the "this run failed", "may still be
@@ -1063,54 +1075,48 @@ describe("AgentPanel composer, stop, starters, and usage (#95 Task 6)", () => {
     expect(rpc.agentRun).not.toHaveBeenCalled();
   });
 
+  // #133: the chips are the engine's MCP prompts — titles, sentences and
+  // order all come from agent.prompts, none from the panel itself.
   it("fills the composer from each starting chip without sending", async () => {
     await renderReady();
 
-    const draftChip = screen.getByTestId("agent-starter-draftScene");
-    await act(async () => {
-      draftChip.click();
-    });
+    const row = await screen.findByTestId("agent-starters");
+    expect(Array.from(row.querySelectorAll("button")).map((b) => b.textContent)).toEqual(["초고", "점검", "채우기", "다음"]);
 
+    await act(async () => {
+      screen.getByTestId("agent-starter-draft_current_scene").click();
+    });
     expect(rpc.agentRun).not.toHaveBeenCalled();
-    expect(composer().value).toBe("agentPanel.starters.draftScene.prompt");
+    expect(composer().value).toBe("draft text");
 
     await act(async () => {
-      screen.getByTestId("agent-starter-checkContinuity").click();
+      screen.getByTestId("agent-starter-fill_story_world").click();
     });
-    expect(composer().value).toBe("agentPanel.starters.checkContinuity.prompt");
-
-    await act(async () => {
-      screen.getByTestId("agent-starter-fillStoryWorld").click();
-    });
-    expect(composer().value).toBe("agentPanel.starters.fillStoryWorld.prompt");
-
-    await act(async () => {
-      screen.getByTestId("agent-starter-nextScene").click();
-    });
-    expect(composer().value).toBe("agentPanel.starters.nextScene.prompt");
+    expect(composer().value).toBe("fill text");
   });
 
-  // story-assist Phase 2, 2.C.3: the chip calls linetta_report_continuity,
-  // which is absent from the agent's tool set when the writer has switched
-  // the Review group off — showing the chip then would promise a turn the
-  // tool call itself refuses. story-assist Phase 3 (3.D.3): the
-  // fillStoryWorld chip calls linetta_propose_story_ops, which lives in the
-  // same Review group, and hides for the same reason.
-  it("hides the checkContinuity and fillStoryWorld chips when the Review tool group is off", async () => {
-    rpc.settingsGet.mockImplementation(() => Promise.resolve({ review_tools_enabled: false }));
+  // The engine leaves out a prompt whose tools the agent does not have (the
+  // Review group switched off), so the panel shows only what it is given.
+  it("shows only the chips the engine lists", async () => {
+    rpc.agentPrompts.mockResolvedValue({ prompts: PROMPTS.filter((p) => p.name === "draft_current_scene") });
     await renderReady();
 
-    expect(screen.queryByTestId("agent-starter-checkContinuity")).toBeNull();
-    expect(screen.queryByTestId("agent-starter-fillStoryWorld")).toBeNull();
-    expect(screen.getByTestId("agent-starter-draftScene")).toBeTruthy();
-    expect(screen.getByTestId("agent-starter-nextScene")).toBeTruthy();
+    expect(await screen.findByTestId("agent-starter-draft_current_scene")).toBeTruthy();
+    expect(screen.queryByTestId("agent-starter-check_continuity")).toBeNull();
+    expect(screen.queryByTestId("agent-starter-fill_story_world")).toBeNull();
+  });
+
+  it("shows no chips when the engine cannot list them", async () => {
+    rpc.agentPrompts.mockRejectedValue(new Error("down"));
+    await renderReady();
+    expect(screen.queryByTestId("agent-starters")).toBeNull();
   });
 
   it("hides the starting chips once the conversation has a turn in it", async () => {
     rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "r1" }));
     await renderReady();
 
-    expect(screen.getByTestId("agent-starters")).toBeTruthy();
+    expect(await screen.findByTestId("agent-starters")).toBeTruthy();
 
     await type("써줘");
     await pressEnter();
@@ -1139,10 +1145,12 @@ describe("AgentPanel composer, stop, starters, and usage (#95 Task 6)", () => {
     await pressEnter();
     await emit("agent-done", { run_id: "r1", usage: { input: 1, output: 1 } });
 
-    expect(screen.getByTestId("agent-followups")).toBeTruthy();
+    const row = screen.getByTestId("agent-followups");
+    expect(Array.from(row.querySelectorAll("button")).map((b) => b.textContent)).toEqual(["점검", "검수"]);
     await act(async () => {
-      screen.getByTestId("agent-followup-checkContinuity").click();
+      screen.getByTestId("agent-followup-check_continuity").click();
     });
+    expect(composer().value).toBe("continuity text");
     expect(screen.queryByTestId("agent-followups")).toBeNull();
   });
 
@@ -2722,10 +2730,17 @@ describe("AgentPanel starting the conversation over", () => {
   it("fills the composer from the long-form tools and sends nothing itself", async () => {
     await restoreWith(historyRow({ role: "user", content: "안녕" }));
     fireEvent.click(await screen.findByTestId("agent-longform"));
-    fireEvent.click(screen.getByTestId("agent-longform-closeArc"));
+    fireEvent.click(screen.getByTestId("agent-longform-close_arc"));
     expect(rpc.agentRun).not.toHaveBeenCalled();
     expect((screen.getByLabelText("agentPanel.composer.label") as HTMLTextAreaElement).value)
-      .toBe("agentPanel.longform.closeArc.prompt");
+      .toBe("close arc text");
+  });
+
+  it("has no long-form button when the engine lists no long-form prompts", async () => {
+    rpc.agentPrompts.mockResolvedValue({ prompts: PROMPTS.filter((p) => !p.slots.includes("longform")) });
+    await restoreWith(historyRow({ role: "user", content: "안녕" }));
+    await screen.findByTestId("agent-start-fresh");
+    expect(screen.queryByTestId("agent-longform")).toBeNull();
   });
 
   it("can fill the composer to move decisions to the ledger first", async () => {
