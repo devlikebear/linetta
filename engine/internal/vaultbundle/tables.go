@@ -124,6 +124,7 @@ var excluded = map[string]string{
 	"publish_entities":                 "reconciled with the site after a pull",
 	"publish_covers":                   "reconciled with the site after a pull",
 	"ops_status":                       "library-wide background job state",
+	"summarizer_usage":                 "this device's running total of provider summary calls",
 	"agent_memory_archive_fts":         "search index, rebuilt from agent_memory_archive",
 	"agent_memory_archive_fts_config":  "search index, rebuilt from agent_memory_archive",
 	"agent_memory_archive_fts_content": "search index, rebuilt from agent_memory_archive",

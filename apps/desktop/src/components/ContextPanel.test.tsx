@@ -354,8 +354,8 @@ describe("ContextPanel", () => {
       onProjectChanged,
     });
 
-    // Deriving a synopsis from scene summaries needed a model, so that button
-    // is gone. Clearing never did, and the field is still typed into by hand.
+    // Rewriting needs the writer's provider, so with AI summaries off (the
+    // default) there is no button for it. Clearing never needed one.
     expect(screen.queryByRole("button", { name: "재작성" })).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "클리어" }));
@@ -363,6 +363,37 @@ describe("ContextPanel", () => {
       expect(projects.clearSynopsis).toHaveBeenCalledWith("project-1");
     });
     expect(screen.getByLabelText("작품 시놉시스")).toHaveValue("");
+  });
+
+  // #135: with AI summaries on, the provider can rewrite the synopsis. A
+  // synopsis the writer already has is not kept, so that asks first.
+  it("rewrites the synopsis with the provider once AI summaries are on, asking before it replaces one", async () => {
+    mocks.settingsGet.mockResolvedValue({ language: "ko", summarizer_provider_enabled: true });
+    const user = userEvent.setup();
+    const onProjectChanged = vi.fn();
+    vi.mocked(projects.rewriteSynopsis).mockResolvedValue({ ...project, synopsis: "새로 쓴 시놉시스" });
+
+    renderContextPanel({ project: { ...project, synopsis: "내가 쓴 시놉시스" }, onProjectChanged });
+
+    await user.click(await screen.findByTestId("synopsis-rewrite"));
+    expect(projects.rewriteSynopsis).not.toHaveBeenCalled();
+    expect(screen.getByTestId("synopsis-rewrite-confirm")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("synopsis-rewrite-go"));
+    await waitFor(() => expect(projects.rewriteSynopsis).toHaveBeenCalledWith("project-1"));
+    expect(screen.getByLabelText("작품 시놉시스")).toHaveValue("새로 쓴 시놉시스");
+    expect(onProjectChanged).toHaveBeenLastCalledWith({ ...project, synopsis: "새로 쓴 시놉시스" });
+  });
+
+  it("says why when the provider cannot rewrite the synopsis", async () => {
+    mocks.settingsGet.mockResolvedValue({ language: "ko", summarizer_provider_enabled: true });
+    const user = userEvent.setup();
+    vi.mocked(projects.rewriteSynopsis).mockRejectedValue({ code: -32602, message: "nothing", data: { reason: "synopsis_nothing_to_summarize" } });
+
+    renderContextPanel({ project: { ...project, synopsis: "" } });
+
+    await user.click(await screen.findByTestId("synopsis-rewrite"));
+    expect(await screen.findByRole("alert")).toHaveTextContent("아직 시놉시스를 쓸 요약이 없습니다");
   });
 
   it("lets web novel projects edit the episode character target", async () => {

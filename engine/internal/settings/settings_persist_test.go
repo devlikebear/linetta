@@ -24,7 +24,7 @@ func TestAgentPassesAndAvoidPhrases_surviveRestart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if s.AgentEpisodeReviewEnabled() || s.AgentSettlementEnabled() || s.AgentImpactReviewEnabled() {
+	if s.AgentEpisodeReviewEnabled() || s.AgentSettlementEnabled() || s.AgentImpactReviewEnabled() || s.SummarizerProviderEnabled() {
 		t.Fatalf("a fresh install has a manuscript-resending pass switched on")
 	}
 	if got := s.StyleAvoidPhrases(); len(got) != 0 {
@@ -36,6 +36,7 @@ func TestAgentPassesAndAvoidPhrases_surviveRestart(t *testing.T) {
 		AgentEpisodeReviewEnabled: boolPtr(true),
 		AgentSettlementEnabled:    boolPtr(true),
 		AgentImpactReviewEnabled:  boolPtr(true),
+		SummarizerProviderEnabled: boolPtr(true),
 		StyleAvoidPhrases:         &phrases,
 	}); err != nil {
 		t.Fatalf("Set: %v", err)
@@ -53,6 +54,9 @@ func TestAgentPassesAndAvoidPhrases_surviveRestart(t *testing.T) {
 	}
 	if !s2.AgentImpactReviewEnabled() {
 		t.Error("agent_impact_review_enabled lost on restart")
+	}
+	if !s2.SummarizerProviderEnabled() {
+		t.Error("summarizer_provider_enabled lost on restart")
 	}
 	if got := s2.StyleAvoidPhrases(); !slices.Equal(got, phrases) {
 		t.Errorf("style_avoid_phrases after restart = %q, want %q", got, phrases)

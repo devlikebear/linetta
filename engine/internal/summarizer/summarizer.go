@@ -1,8 +1,9 @@
 // Package summarizer keeps node.summary in sync with node.content_doc.
 //
-// There is no language model behind it any more. A short scene is its own
+// By default there is no language model behind it. A short scene is its own
 // summary; a longer one gets its opening cut at a sentence; a container gets
-// its children rolled up. An agent connected over MCP replaces any of these
+// its children rolled up. A writer who switches it on lets the writer's own
+// provider summarize a long scene after it is saved instead (model.go, #135). An agent connected over MCP replaces any of these
 // with a real summary through linetta_write_summary, and summarizeOneDepth
 // never overwrites that one — not even after the scene is edited and the
 // summary goes stale. A stale written summary of a revised scene still knows
@@ -38,6 +39,12 @@ type Summarizer struct {
 
 	statusMu     sync.Mutex
 	failureCount int
+
+	// The provider path (model.go). Set by WithModel before Start.
+	model        Model
+	modelEnabled func() bool
+	usage        *UsageRepo
+	record       func(context.Context, Event)
 }
 
 func New(nodes *node.Repo) *Summarizer {
@@ -89,21 +96,30 @@ func (s *Summarizer) Enqueue(nodeID string) {
 
 // summarizeOne is the thin entry point used by the background queue. It
 // delegates to summarizeOneDepth with depth=0.
+//
+// It is the only path that may use the provider: a saved scene, in the
+// background. RefreshNow answers a caller that is waiting, so it never does.
 func (s *Summarizer) summarizeOne(ctx context.Context, nodeID string) {
-	s.summarizeOneDepth(ctx, nodeID, 0)
+	s.summarizeNode(ctx, nodeID, 0, true)
 }
 
 // RefreshNow synchronously summarizes the node (and any stale descendants).
 // Implements storycontext.SummaryRefresher so ContextBuilder can populate the
 // hierarchical layer without waiting on the background queue.
 func (s *Summarizer) RefreshNow(ctx context.Context, nodeID string) {
-	s.summarizeOneDepth(ctx, nodeID, 0)
+	s.summarizeNode(ctx, nodeID, 0, false)
 }
 
 // summarizeOneDepth dispatches on node.Kind. Container nodes recurse into
 // their children with depth+1; the depth cap prevents runaway recursion if
 // the parent_id graph were ever to become cyclic.
 func (s *Summarizer) summarizeOneDepth(ctx context.Context, nodeID string, depth int) {
+	s.summarizeNode(ctx, nodeID, depth, false)
+}
+
+// summarizeNode is summarizeOneDepth with viaModel: whether a long leaf may go
+// to the provider.
+func (s *Summarizer) summarizeNode(ctx context.Context, nodeID string, depth int, viaModel bool) {
 	if depth > maxSummarizeDepth {
 		msg := fmt.Sprintf("depth cap hit at %s (depth=%d)", nodeID, depth)
 		fmt.Fprintf(os.Stderr, "summarizer: %s\n", msg)
@@ -121,13 +137,13 @@ func (s *Summarizer) summarizeOneDepth(ctx context.Context, nodeID string, depth
 	}
 	switch n.Kind {
 	case "leaf":
-		s.summarizeLeaf(ctx, n)
+		s.summarizeLeaf(ctx, n, viaModel)
 	case "container":
 		s.summarizeContainer(ctx, n, depth)
 	}
 }
 
-func (s *Summarizer) summarizeLeaf(ctx context.Context, n node.Node) {
+func (s *Summarizer) summarizeLeaf(ctx context.Context, n node.Node, viaModel bool) {
 	if n.ContentDoc == nil {
 		return
 	}
@@ -144,6 +160,10 @@ func (s *Summarizer) summarizeLeaf(ctx context.Context, n node.Node) {
 			return
 		}
 		s.recordOK(ctx, n.ID, false)
+		return
+	}
+
+	if viaModel && s.modelOn() && s.summarizeLeafWithModel(ctx, n.ProjectID, n.ID, plain, capturedVersion) {
 		return
 	}
 

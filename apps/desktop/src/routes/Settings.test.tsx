@@ -74,6 +74,9 @@ vi.mock("../components/settings/PublishSection", () => ({
 vi.mock("../components/settings/ImageGenSection", () => ({
   ImageGenSection: () => <div id="image-settings" data-testid="image-section-stub">image-section</div>,
 }));
+vi.mock("../components/settings/SummarizerSection", () => ({
+  SummarizerSection: () => <div data-testid="summarizer-section-stub">summarizer-section</div>,
+}));
 vi.mock("../components/settings/McpSection", () => ({
   McpSection: () => <div data-testid="mcp-section-stub">mcp-section</div>,
 }));

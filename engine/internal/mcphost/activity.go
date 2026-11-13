@@ -23,6 +23,9 @@ const DefaultActivityLimit = 100
 const (
 	SourceExternal = "external"
 	SourceAgent    = "agent"
+	// SourceSummarizer is the background summarizer using the writer's
+	// provider (#135). It calls no tool; its rows say what it sent.
+	SourceSummarizer = "summarizer"
 )
 
 // ActivityEntry is one recorded tool call.

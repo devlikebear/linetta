@@ -10,6 +10,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/submission"
+	"github.com/devlikebear/linetta/engine/internal/summarizer"
 )
 
 // Clock is an injected millisecond-precision source. Tests pass deterministic
@@ -195,6 +196,49 @@ func ClearProjectSynopsis(repo *project.Repo, now Clock) rpc.Handler {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
 		return json.Marshal(got)
+	}
+}
+
+// RewriteProjectSynopsis asks the writer's provider for a synopsis of the
+// work and saves it as the editable synopsis (#135). write does the asking —
+// summarizer.WriteSynopsis — and refuses unless the writer switched provider
+// summaries on and the provider is consented to.
+func RewriteProjectSynopsis(repo *project.Repo, write func(ctx context.Context, projectID string) (string, error), now Clock) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p idParam
+		if err := json.Unmarshal(params, &p); err != nil || p.ID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id required"}
+		}
+		if _, err := repo.Get(ctx, p.ID); errors.Is(err, project.ErrNotFound) {
+			return nil, rpc.NotFound(rpc.ReasonProjectNotFound, "project not found")
+		} else if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		synopsis, err := write(ctx, p.ID)
+		switch {
+		case errors.Is(err, summarizer.ErrModelOff):
+			return nil, rpc.MethodErrorFrom(&rpc.ReasonError{Reason: rpc.ReasonSummarizerOff, Err: err})
+		case errors.Is(err, summarizer.ErrNothingToSummarize):
+			return nil, rpc.MethodErrorFrom(&rpc.ReasonError{Reason: rpc.ReasonSynopsisNothingToSummarize, Err: err})
+		case err != nil:
+			return nil, rpc.MethodErrorFrom(err)
+		}
+		got, err := repo.Update(ctx, now(), project.UpdateInput{ID: p.ID, Synopsis: &synopsis})
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.Marshal(got)
+	}
+}
+
+// SummarizerUsage returns what provider summaries have cost so far.
+func SummarizerUsage(usage *summarizer.UsageRepo) rpc.Handler {
+	return func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
+		u, err := usage.Get(ctx)
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.Marshal(u)
 	}
 }
 

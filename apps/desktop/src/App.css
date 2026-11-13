@@ -1133,6 +1133,9 @@ details.sec[open] > summary { margin-bottom: 10px; }
   font-size: 10.5px;
 }
 .sec-actions button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+/* Asks before the provider's synopsis replaces the writer's (#135). */
+.sec-confirm { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; margin: 0 0 8px; }
+.sec-confirm .sd { flex-basis: 100%; margin: 0; }
 .sec-actions button:disabled { opacity: 0.45; }
 
 /* ---- Mentioned entities ---- */

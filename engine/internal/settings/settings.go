@@ -164,6 +164,11 @@ type Config struct {
 	// default, because unlike the self-improvement pass it sends the manuscript
 	// again and its cost grows with every episode.
 	AgentEpisodeReviewEnabled bool `json:"agent_episode_review_enabled"`
+	// SummarizerProviderEnabled lets the background summarizer send a long
+	// scene to the writer's own provider after it is saved, and turns the
+	// synopsis rewrite button back on (#135). Off by default: it sends the
+	// manuscript, and the provider's consent still has to be given.
+	SummarizerProviderEnabled bool `json:"summarizer_provider_enabled"`
 	// AgentSettlementEnabled governs the pass that records what a written scene
 	// changed in the ledger. Off by default for the same reason as the review:
 	// it sends the scene to the provider again.
@@ -387,6 +392,7 @@ type Patch struct {
 	MCPConsentedAt            *int64                   `json:"mcp_consented_at,omitempty"`
 	AgentSelfReviewEnabled    *bool                    `json:"agent_self_review_enabled,omitempty"`
 	AgentEpisodeReviewEnabled *bool                    `json:"agent_episode_review_enabled,omitempty"`
+	SummarizerProviderEnabled *bool                    `json:"summarizer_provider_enabled,omitempty"`
 	AgentSettlementEnabled    *bool                    `json:"agent_settlement_enabled,omitempty"`
 	AgentImpactReviewEnabled  *bool                    `json:"agent_impact_review_enabled,omitempty"`
 	StyleAvoidPhrases         *[]string                `json:"style_avoid_phrases,omitempty"`
@@ -578,6 +584,7 @@ func (s *Store) load() error {
 	// plain assignment is right: a file that predates a key decodes to the
 	// default. Switch one to default-on and it needs the presence guard above.
 	s.cfg.AgentEpisodeReviewEnabled = disk.AgentEpisodeReviewEnabled
+	s.cfg.SummarizerProviderEnabled = disk.SummarizerProviderEnabled
 	s.cfg.AgentSettlementEnabled = disk.AgentSettlementEnabled
 	s.cfg.AgentSettlementSince = disk.AgentSettlementSince
 	// A writer who switched settlement on before the moment was recorded gets
@@ -746,6 +753,15 @@ func (s *Store) AgentSettlementSince() (int64, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.cfg.AgentSettlementSince, s.cfg.AgentSettlementEnabled
+}
+
+// SummarizerProviderEnabled reports whether the summarizer may use the
+// writer's provider (#135). Read per scene, so switching it off stops the very
+// next save from sending anything.
+func (s *Store) SummarizerProviderEnabled() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg.SummarizerProviderEnabled
 }
 
 // AgentEpisodeReviewEnabled reports whether a finished episode gets an
@@ -1009,6 +1025,9 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	if p.AgentEpisodeReviewEnabled != nil {
 		next.AgentEpisodeReviewEnabled = *p.AgentEpisodeReviewEnabled
 	}
+	if p.SummarizerProviderEnabled != nil {
+		next.SummarizerProviderEnabled = *p.SummarizerProviderEnabled
+	}
 	if p.AgentSettlementEnabled != nil {
 		if *p.AgentSettlementEnabled && !next.AgentSettlementEnabled {
 			next.AgentSettlementSince = time.Now().UnixMilli()
@@ -1198,6 +1217,7 @@ func (s *Store) persistWith(next Config, legacy legacyPlaintextKeys) error {
 		// next restart and no further.
 		AgentSelfReviewEnabled:    next.AgentSelfReviewEnabled,
 		AgentEpisodeReviewEnabled: next.AgentEpisodeReviewEnabled,
+		SummarizerProviderEnabled: next.SummarizerProviderEnabled,
 		AgentSettlementEnabled:    next.AgentSettlementEnabled,
 		AgentSettlementSince:      next.AgentSettlementSince,
 		AgentImpactReviewEnabled:  next.AgentImpactReviewEnabled,

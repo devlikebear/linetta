@@ -444,7 +444,9 @@ export function McpSection({ bridgePath }: McpSectionProps) {
                 <span data-testid={`mcp-activity-source-${entry.id}`}>
                   {entry.source === "agent"
                     ? t("settings.mcp.activity.sourceAgent")
-                    : t("settings.mcp.activity.sourceExternal")}
+                    : entry.source === "summarizer"
+                      ? t("settings.mcp.activity.sourceSummarizer")
+                      : t("settings.mcp.activity.sourceExternal")}
                 </span>{" "}
                 <b className={entry.ok ? "is-ok" : "is-failed"}>{entry.ok ? "✓" : "✕"}</b> {entry.tool}
                 {entry.detail ? ` — ${entry.detail}` : ""}
