@@ -83,6 +83,7 @@ type ContextBuilder struct {
 	directionSource     DirectionSource
 	ledgerSource        LedgerSource
 	styleAnchorSource   StyleAnchorSource
+	writerStyleSource   WriterStyleSource
 	projects            *project.Repo
 	nodes               *node.Repo
 	mentions            *mention.Repo
@@ -251,6 +252,18 @@ func (b *ContextBuilder) WithLedgerSource(s LedgerSource) *ContextBuilder {
 	return b
 }
 
+// WriterStyleSource gives the writer's default style notes as a brief of the
+// work carries them: none for a work that opts out (#182). Optional.
+type WriterStyleSource interface {
+	WriterNotesFor(ctx context.Context, projectID string) (string, error)
+}
+
+// WithWriterStyleSource wires the writer's default style notes.
+func (b *ContextBuilder) WithWriterStyleSource(s WriterStyleSource) *ContextBuilder {
+	b.writerStyleSource = s
+	return b
+}
+
 // WithStyleAnchorSource wires the optional style anchor line.
 func (b *ContextBuilder) WithStyleAnchorSource(s StyleAnchorSource) *ContextBuilder {
 	b.styleAnchorSource = s
@@ -388,6 +401,12 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 			ledgerBrief = got
 		}
 	}
+	writerStyle := ""
+	if b.writerStyleSource != nil {
+		if got, err := b.writerStyleSource.WriterNotesFor(ctx, n.ProjectID); err == nil {
+			writerStyle = got
+		}
+	}
 	styleAnchor := ""
 	if b.styleAnchorSource != nil {
 		if got, err := b.styleAnchorSource.StyleAnchorLabel(ctx, n.ProjectID); err == nil {
@@ -440,24 +459,25 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 			CharCountBasis:    charcount.Normalize(proj.CharCountBasis),
 			Episode:           b.episodeLength(ctx, proj, n),
 		},
-		Outline:       proj.Outline,
-		Hierarchical:  hierarchical,
-		RelatedScenes: related,
-		Entities:      briefs,
-		Relationships: relations,
-		Plot:          spine,
-		Notes:         noteBriefs,
-		Facts:         facts,
-		FactsOmitted:  factsOmitted,
-		WriterProfile: writerProfile,
-		WorkNotes:     workNotes,
-		Skills:        skills,
-		References:    references,
-		Direction:     direction,
-		StyleNotes:    proj.StyleNotes,
-		SelectionText: selectionText,
-		UserPrompt:    prompt,
-		Options:       opts,
+		Outline:          proj.Outline,
+		Hierarchical:     hierarchical,
+		RelatedScenes:    related,
+		Entities:         briefs,
+		Relationships:    relations,
+		Plot:             spine,
+		Notes:            noteBriefs,
+		Facts:            facts,
+		FactsOmitted:     factsOmitted,
+		WriterProfile:    writerProfile,
+		WorkNotes:        workNotes,
+		Skills:           skills,
+		References:       references,
+		Direction:        direction,
+		StyleNotes:       proj.StyleNotes,
+		WriterStyleNotes: writerStyle,
+		SelectionText:    selectionText,
+		UserPrompt:       prompt,
+		Options:          opts,
 	}, nil
 }
 
@@ -707,6 +727,7 @@ func ApplyContextSelection(c Context) Context {
 	}
 	if !s.Enabled(ContextKeyStyleNotes) {
 		c.StyleNotes = ""
+		c.WriterStyleNotes = ""
 		c.StyleAnchor = ""
 	}
 	if !s.Enabled(ContextKeyFacts) {
@@ -1264,7 +1285,7 @@ func CountsFromContext(c Context) PreviewCounts {
 		PlotBeats:         plotBeats,
 		Notes:             len(c.Notes),
 		ProjectMetaFields: projectMeta,
-		HasStyleNotes:     strings.TrimSpace(c.StyleNotes) != "",
+		HasStyleNotes:     strings.TrimSpace(c.StyleNotes) != "" || strings.TrimSpace(c.WriterStyleNotes) != "",
 	}
 }
 
@@ -1311,7 +1332,8 @@ func PreviewFromContext(c Context, selection ContextSelection) ContextPreview {
 	} else {
 		add(ContextKeyProjectMeta, "작품 설정 (장르/분량/시점)", 0, "", false)
 	}
-	add(ContextKeyStyleNotes, "작가 style notes", boolCount(strings.TrimSpace(c.StyleNotes) != ""), c.StyleNotes, false)
+	styleNotes := strings.TrimSpace(strings.TrimSpace(c.WriterStyleNotes) + "\n\n" + strings.TrimSpace(c.StyleNotes))
+	add(ContextKeyStyleNotes, "작가 style notes", boolCount(styleNotes != ""), styleNotes, false)
 
 	selectedCount := 0
 	selectedChars := 0

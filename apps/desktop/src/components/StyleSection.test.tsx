@@ -267,6 +267,15 @@ describe("StyleSection", () => {
       })));
     });
 
+    // #182: notes alone are something this work inherits too.
+    it("shows the writer's style notes the work's brief will carry", async () => {
+      mocks.getRules.mockResolvedValue({
+        ...rules, writer: { avoid_phrases: [], max_sentence_chars: 0, updated_at: 0 }, writer_notes: "Present tense.",
+      });
+      renderSection();
+      expect(await screen.findByTestId("style-writer-rules")).toHaveTextContent("Style notes: Present tense.");
+    });
+
     it("marks whose rule each violation broke", async () => {
       mocks.getRules.mockResolvedValue({ ...rules, writer });
       mocks.check.mockResolvedValue({

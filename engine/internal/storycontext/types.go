@@ -367,12 +367,17 @@ type Context struct {
 	// writer and this work have. Names and descriptions only, never bodies —
 	// the same rule the built-in agent's system prompt follows, and the
 	// reason SkillBrief has no Body field to fill in by accident.
-	Skills        []SkillBrief     `json:"skills,omitempty"`
-	References    []ReferenceBrief `json:"references,omitempty"`
-	StyleNotes    string           `json:"style_notes"`
-	SelectionText string           `json:"selection_text"`
-	UserPrompt    string           `json:"user_prompt"`
-	Options       Options          `json:"options"`
+	Skills     []SkillBrief     `json:"skills,omitempty"`
+	References []ReferenceBrief `json:"references,omitempty"`
+	StyleNotes string           `json:"style_notes"`
+	// WriterStyleNotes is the writer's default style in prose (#182): the
+	// writer's own direction for every work, rendered ahead of StyleNotes,
+	// which win where the two disagree. Empty for a work that does not follow
+	// the writer's default style.
+	WriterStyleNotes string  `json:"writer_style_notes,omitempty"`
+	SelectionText    string  `json:"selection_text"`
+	UserPrompt       string  `json:"user_prompt"`
+	Options          Options `json:"options"`
 }
 
 // RelationBrief is one relationship between two entities present in the current

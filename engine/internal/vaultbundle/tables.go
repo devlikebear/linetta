@@ -125,6 +125,7 @@ var excluded = map[string]string{
 	"publish_covers":                   "reconciled with the site after a pull",
 	"ops_status":                       "library-wide background job state",
 	"writer_style":                     "the writer's default style, library-wide rather than part of a work",
+	"writer_style_draft":               "an agent's proposal for the writer's default style, library-wide",
 	"summarizer_usage":                 "this device's running total of provider summary calls",
 	"agent_memory_archive_fts":         "search index, rebuilt from agent_memory_archive",
 	"agent_memory_archive_fts_config":  "search index, rebuilt from agent_memory_archive",
