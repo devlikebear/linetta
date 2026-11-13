@@ -103,3 +103,32 @@ button.style-where {
 .style-draft .style-hint {
   margin: 0;
 }
+
+/* The writer's default style this work inherits (#181). */
+.style-inherited {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+}
+
+.style-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.style-source {
+  justify-self: start;
+  padding: 0 6px;
+  border-radius: var(--r-sm);
+  font-size: 11px;
+  color: var(--muted);
+  border: 1px solid var(--line-soft);
+}
+
+.style-source-writer {
+  color: var(--accent);
+  border-color: var(--accent);
+}

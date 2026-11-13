@@ -69,6 +69,7 @@ describe("StyleSection", () => {
 
     await waitFor(() => expect(mocks.setRules).toHaveBeenCalledWith({
       project_id: "p", avoid_phrases: ["suddenly"], max_sentence_chars: 0, anchor_node_id: "",
+      own_sentence_limit: false, ignore_writer_style: false,
     }));
     await waitFor(() => expect(box).toHaveValue("suddenly"));
   });
@@ -222,5 +223,63 @@ describe("StyleSection", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("over 2200 characters");
     expect(screen.getByLabelText("Style profile draft")).toHaveValue("Short sentences. Past tense.");
+  });
+
+  // #181: the writer's default style, inherited and shown but changed only in Settings.
+  describe("the writer's default style", () => {
+    const writer = { avoid_phrases: ["it was the case"], max_sentence_chars: 80, updated_at: 1 };
+
+    it("looks as before when the writer has no default rules", async () => {
+      mocks.getRules.mockResolvedValue({ ...rules, writer: { avoid_phrases: [], max_sentence_chars: 0, updated_at: 0 } });
+      renderSection();
+      await screen.findByLabelText(/Phrases to avoid/);
+      expect(screen.queryByTestId("style-writer-rules")).toBeNull();
+      expect(screen.queryByTestId("style-own-limit")).toBeNull();
+    });
+
+    it("shows what the work inherits, links to Settings, and can opt out", async () => {
+      const onOpenWriterStyle = vi.fn();
+      mocks.getRules.mockResolvedValue({ ...rules, max_sentence_chars: 0, own_sentence_limit: false, writer });
+      mocks.setRules.mockImplementation(async (r) => ({ ...rules, ...r }));
+      renderSection({ onOpenWriterStyle });
+      const box = await screen.findByTestId("style-writer-rules");
+      expect(box).toHaveTextContent("Phrases to avoid: it was the case");
+      expect(box).toHaveTextContent("Sentence limit: 80 characters");
+      // Following the writer's limit: there is no box for one of the work's own.
+      expect(screen.queryByLabelText(/Sentence length limit/)).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "Change in Settings" }));
+      expect(onOpenWriterStyle).toHaveBeenCalled();
+
+      fireEvent.click(screen.getByTestId("style-follow-writer"));
+      await waitFor(() => expect(mocks.setRules).toHaveBeenCalledWith(expect.objectContaining({ ignore_writer_style: true })));
+    });
+
+    it("tells the work's own limit, including none, from the writer's", async () => {
+      mocks.getRules.mockResolvedValue({ ...rules, max_sentence_chars: 0, own_sentence_limit: false, writer });
+      mocks.setRules.mockImplementation(async (r) => ({ ...rules, ...r }));
+      renderSection();
+      fireEvent.click(await screen.findByTestId("style-own-limit"));
+      fireEvent.change(screen.getByLabelText(/Sentence length limit/), { target: { value: "" } });
+      fireEvent.click(screen.getByRole("button", { name: "Save rules" }));
+      await waitFor(() => expect(mocks.setRules).toHaveBeenCalledWith(expect.objectContaining({
+        max_sentence_chars: 0, own_sentence_limit: true, ignore_writer_style: false,
+      })));
+    });
+
+    it("marks whose rule each violation broke", async () => {
+      mocks.getRules.mockResolvedValue({ ...rules, writer });
+      mocks.check.mockResolvedValue({
+        rules: { ...rules, writer_phrases: ["it was the case"] }, scenes_checked: 1, total: 2, truncated: false,
+        violations: [
+          { node_id: "n1", label: "Scene 1", rule: "avoid_phrase", paragraph: 1, phrase: "it was the case", excerpt: "it was the case", source: "writer" },
+          { node_id: "n1", label: "Scene 1", rule: "avoid_phrase", paragraph: 2, phrase: "very", excerpt: "very", source: "work" },
+        ],
+      });
+      renderSection();
+      fireEvent.click(await screen.findByRole("button", { name: "Check the whole work" }));
+      const tags = await screen.findAllByTestId("style-violation-source");
+      expect(tags.map((tag) => tag.textContent)).toEqual(["Writer's default", "This work"]);
+    });
   });
 });

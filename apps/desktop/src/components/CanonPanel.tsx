@@ -37,6 +37,8 @@ interface Props {
   onOpenNode?: (nodeId: string) => void;
   /** Flushes the editor's pending save before a style check reads the manuscript. */
   onBeforeStyleCheck?: () => Promise<void>;
+  /** Opens Settings at the writer's default style (#181). */
+  onOpenWriterStyle?: () => void;
   /** Opens the Fact Book at a continuity observation's fact ref. */
   onOpenFact?: (factId: string) => void;
   /** Opens the suggestions inbox (story-assist Phase 3). Omitted entirely
@@ -50,8 +52,8 @@ interface Props {
 }
 
 export function CanonPanel({
-  projectId, onOpenEntity, onClose, refreshKey = 0, nodeId, onOpenNode, onBeforeStyleCheck, onOpenFact, onOpenProposals,
-  continuityFocusRequest,
+  projectId, onOpenEntity, onClose, refreshKey = 0, nodeId, onOpenNode, onBeforeStyleCheck, onOpenWriterStyle, onOpenFact,
+  onOpenProposals, continuityFocusRequest,
 }: Readonly<Props>) {
   const { t } = useI18n();
   const [all, setAll] = useState<Entity[]>([]);
@@ -149,6 +151,7 @@ export function CanonPanel({
           nodeId={nodeId}
           onOpenNode={onOpenNode}
           onBeforeCheck={onBeforeStyleCheck}
+          onOpenWriterStyle={onOpenWriterStyle}
         />
         <SettlementPending key={`settlement-${projectId}`} projectId={projectId} refreshKey={refreshKey} onOpenNode={onOpenNode} />
         <LedgerSection key={`ledger-${projectId}`} projectId={projectId} nodeId={nodeId} onOpenNode={onOpenNode} />

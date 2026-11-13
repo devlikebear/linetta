@@ -172,6 +172,16 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	if err != nil {
 		return fmt.Errorf("settings: %w", err)
 	}
+	// "Phrases to keep out of every work" was a setting of this device before
+	// the writer's default style (#179) gave it a place in the library. Carried
+	// in once, then cleared, so the two cannot drift apart.
+	if legacy := settingsStore.StyleAvoidPhrases(); len(legacy) > 0 {
+		if err := styles.AdoptPhrases(ctx, clock(), legacy); err != nil {
+			fmt.Fprintf(os.Stderr, "writer style: adopt phrases: %v\n", err)
+		} else if _, err := settingsStore.Set(ctx, settings.Patch{StyleAvoidPhrases: &[]string{}}); err != nil {
+			fmt.Fprintf(os.Stderr, "writer style: clear the old setting: %v\n", err)
+		}
+	}
 	// Which version of each scene was last settled into the ledger, counted
 	// from the moment the writer switched settlement on (longform Phase 6).
 	settlements := ledger.NewSettlements(st, nodes, settingsStore.AgentSettlementSince)
@@ -563,7 +573,9 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("visuals.set_art_style", handlers.SetArtStyle(visuals, clock))
 	s.Handle("style.get_rules", handlers.GetStyleRules(styles))
 	s.Handle("style.set_rules", handlers.SetStyleRules(styles, clock))
-	s.Handle("style.check", handlers.CheckStyle(styles, nodes, settingsStore.StyleAvoidPhrases))
+	s.Handle("style.check", handlers.CheckStyle(styles, nodes))
+	s.Handle("style.get_writer_rules", handlers.GetWriterStyleRules(styles))
+	s.Handle("style.set_writer_rules", handlers.SetWriterStyleRules(styles, clock))
 	s.Handle("style.get_draft", handlers.GetStyleDraft(styles))
 	s.Handle("style.approve_draft", handlers.ApproveStyleDraft(styles, clock))
 	s.Handle("style.discard_draft", handlers.DiscardStyleDraft(styles))

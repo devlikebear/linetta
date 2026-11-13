@@ -1637,9 +1637,32 @@ export interface StyleRules {
   avoid_phrases: string[];
   /** In characters; 0 means no limit. */
   max_sentence_chars: number;
+  /** True: max_sentence_chars is the work's own (0 = no limit). False: the
+   *  work follows the writer's limit (#179). */
+  own_sentence_limit?: boolean;
+  /** "This work does not follow the writer's default style." */
+  ignore_writer_style?: boolean;
   /** The scene the writer set as the prose to match, or "". */
   anchor_node_id: string;
   updated_at: number;
+  /** Only on the rules a check ran against: the phrases from the writer's
+   *  default style, and where the sentence limit came from. */
+  writer_phrases?: string[];
+  sentence_limit_source?: StyleRuleSource;
+}
+/** Whose rule: the writer's default style, or this work's own. */
+export type StyleRuleSource = "writer" | "work";
+/** The writer's default checkable rules, under every work's own (#179). */
+export interface WriterStyleRules {
+  avoid_phrases: string[];
+  /** In characters; 0 means no limit. */
+  max_sentence_chars: number;
+  updated_at: number;
+}
+/** style.get_rules: the work's own rules, the writer's, and what a check runs against. */
+export interface StyleRulesState extends StyleRules {
+  writer: WriterStyleRules;
+  effective: StyleRules;
 }
 export type LedgerKind = "promise" | "gag" | "question" | "decision" | "number" | "timeline" | "knowledge" | "cut_plan";
 export type LedgerStatus = "open" | "paid" | "dropped";
@@ -1762,6 +1785,8 @@ export interface StyleViolation {
   excerpt: string;
   length?: number;
   limit?: number;
+  /** For avoid_phrase and sentence_too_long: whose rule it broke. */
+  source?: StyleRuleSource;
 }
 /** style.check: the rules the check ran against, and what it found. */
 export interface StyleCheckResult {

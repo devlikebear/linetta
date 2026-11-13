@@ -41,9 +41,20 @@ type Rules struct {
 	// MaxSentenceChars is the longest a sentence may be, in characters.
 	// 0 means no limit.
 	MaxSentenceChars int `json:"max_sentence_chars"`
+	// OwnSentenceLimit says MaxSentenceChars is the work's own limit, where 0
+	// means "no limit". False means the work follows the writer's limit (#179).
+	OwnSentenceLimit bool `json:"own_sentence_limit"`
+	// IgnoreWriterStyle is "this work does not follow the writer's default
+	// style": only its own rules are checked.
+	IgnoreWriterStyle bool `json:"ignore_writer_style"`
 	// AnchorNodeID is the scene whose prose the writer set as the one to match.
 	AnchorNodeID string `json:"anchor_node_id"`
 	UpdatedAt    int64  `json:"updated_at"`
+	// The two below are set only on the rules a check runs against (Merge):
+	// the phrases that came from the writer's rules rather than the work's,
+	// and where the sentence limit came from (SourceWriter or SourceWork).
+	WriterPhrases       []string `json:"writer_phrases,omitempty"`
+	SentenceLimitSource string   `json:"sentence_limit_source,omitempty"`
 }
 
 // Empty reports whether there is nothing to check against.
@@ -61,8 +72,8 @@ func (r *Repo) GetRules(ctx context.Context, projectID string) (Rules, error) {
 	out := Rules{ProjectID: projectID, AvoidPhrases: []string{}}
 	var phrases string
 	err := r.s.DB().QueryRowContext(ctx,
-		"SELECT avoid_phrases, max_sentence_chars, anchor_node_id, updated_at FROM project_style_rules WHERE project_id = ?", projectID).
-		Scan(&phrases, &out.MaxSentenceChars, &out.AnchorNodeID, &out.UpdatedAt)
+		"SELECT avoid_phrases, max_sentence_chars, sentence_limit_set, ignore_writer_style, anchor_node_id, updated_at FROM project_style_rules WHERE project_id = ?", projectID).
+		Scan(&phrases, &out.MaxSentenceChars, &out.OwnSentenceLimit, &out.IgnoreWriterStyle, &out.AnchorNodeID, &out.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return out, nil
 	}
@@ -93,14 +104,23 @@ func (r *Repo) SetRules(ctx context.Context, now int64, in Rules) (Rules, error)
 	if in.MaxSentenceChars < 0 || in.MaxSentenceChars > MaxSentenceLimit {
 		return Rules{}, ErrSentenceLimit
 	}
+	// A positive limit is always the work's own. Without one, OwnSentenceLimit
+	// tells "no limit" (true) from "the writer's limit" (false).
+	if in.MaxSentenceChars > 0 {
+		in.OwnSentenceLimit = true
+	}
 	raw, err := json.Marshal(phrases)
 	if err != nil {
 		return Rules{}, err
 	}
-	out := Rules{ProjectID: in.ProjectID, AvoidPhrases: phrases, MaxSentenceChars: in.MaxSentenceChars, AnchorNodeID: in.AnchorNodeID, UpdatedAt: now}
-	_, err = r.s.DB().ExecContext(ctx, `INSERT INTO project_style_rules (project_id, avoid_phrases, max_sentence_chars, anchor_node_id, updated_at) VALUES (?,?,?,?,?)
-ON CONFLICT(project_id) DO UPDATE SET avoid_phrases=excluded.avoid_phrases, max_sentence_chars=excluded.max_sentence_chars, anchor_node_id=excluded.anchor_node_id, updated_at=excluded.updated_at`,
-		out.ProjectID, string(raw), out.MaxSentenceChars, out.AnchorNodeID, out.UpdatedAt)
+	out := Rules{
+		ProjectID: in.ProjectID, AvoidPhrases: phrases, MaxSentenceChars: in.MaxSentenceChars,
+		OwnSentenceLimit: in.OwnSentenceLimit, IgnoreWriterStyle: in.IgnoreWriterStyle,
+		AnchorNodeID: in.AnchorNodeID, UpdatedAt: now,
+	}
+	_, err = r.s.DB().ExecContext(ctx, `INSERT INTO project_style_rules (project_id, avoid_phrases, max_sentence_chars, sentence_limit_set, ignore_writer_style, anchor_node_id, updated_at) VALUES (?,?,?,?,?,?,?)
+ON CONFLICT(project_id) DO UPDATE SET avoid_phrases=excluded.avoid_phrases, max_sentence_chars=excluded.max_sentence_chars, sentence_limit_set=excluded.sentence_limit_set, ignore_writer_style=excluded.ignore_writer_style, anchor_node_id=excluded.anchor_node_id, updated_at=excluded.updated_at`,
+		out.ProjectID, string(raw), out.MaxSentenceChars, out.OwnSentenceLimit, out.IgnoreWriterStyle, out.AnchorNodeID, out.UpdatedAt)
 	return out, err
 }
 

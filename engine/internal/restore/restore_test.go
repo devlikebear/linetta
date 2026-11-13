@@ -369,6 +369,7 @@ func TestMergeProjectCopiesStyleRules(t *testing.T) {
 			}
 			if _, err := style.NewRepo(st).SetRules(ctx, 1, style.Rules{
 				ProjectID: p.ID, AvoidPhrases: []string{"그것은 마치", "수 있었다"}, MaxSentenceChars: 80,
+				IgnoreWriterStyle: true,
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -400,7 +401,10 @@ func TestMergeProjectCopiesStyleRules(t *testing.T) {
 				}
 				return
 			}
-			if len(got.AvoidPhrases) != 2 || got.AvoidPhrases[0] != "그것은 마치" || got.MaxSentenceChars != 80 || merged.ProjectID == p.ID {
+			// The opt-out travels with the work (#179); the writer's rules are
+			// the library's and do not.
+			if len(got.AvoidPhrases) != 2 || got.AvoidPhrases[0] != "그것은 마치" || got.MaxSentenceChars != 80 ||
+				!got.OwnSentenceLimit || !got.IgnoreWriterStyle || merged.ProjectID == p.ID {
 				t.Fatalf("merged rules = %+v", got)
 			}
 		})

@@ -2481,6 +2481,10 @@ export function Workspace() {
             nodeId={load.node.id}
             onOpenNode={(nodeId) => { void navigateToNode({ id: nodeId } as NodeRow); }}
             onBeforeStyleCheck={flushPendingSave}
+            onOpenWriterStyle={() => {
+              rememberSettingsCategory("writing");
+              void flushPendingSave().then(() => navigate("/settings"));
+            }}
             onOpenEntity={(entityId) => setEntitySheetId(entityId)}
             onOpenFact={openFactFromContinuity}
             continuityFocusRequest={continuityFocusRequest}
