@@ -259,3 +259,33 @@ func TestCoMentionLeaves_repeatedMentionsCountOnce(t *testing.T) {
 		t.Errorf("order = %+v, want the tie broken by recency", got)
 	}
 }
+
+// A body naming another work's character does not link the two works: the
+// mention is dropped as if the id were unknown (#108).
+func TestResyncForNode_dropsAnotherWorksEntity(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	other, err := project.NewRepo(f.store).Create(ctx, 1001, project.NewInput{
+		Title: "U", Genres: []string{"SF"}, LengthTarget: "short", DefaultPOV: "first",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stranger, _ := f.er.Create(ctx, 100, entity.NewInput{ProjectID: other.ID, Kind: "character", Name: "윤서"})
+	own, _ := f.er.Create(ctx, 100, entity.NewInput{ProjectID: f.pID, Kind: "character", Name: "해진"})
+
+	found := []Found{
+		{EntityID: stranger.ID, Position: 1, Surface: "윤서"},
+		{EntityID: own.ID, Position: 2, Surface: "해진"},
+	}
+	if err := f.mr.ResyncForNode(ctx, f.nID, found); err != nil {
+		t.Fatalf("ResyncForNode: %v", err)
+	}
+	got, err := f.mr.ListForNode(ctx, f.nID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].EntityID != own.ID {
+		t.Fatalf("after resync: %+v, want only %s", got, own.ID)
+	}
+}
