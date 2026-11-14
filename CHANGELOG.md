@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.24.0 - 2026-11-14
+
+- Added: a thinking depth for the built-in agent under Settings → Agent
+  (model default, low, medium, high). A lower depth answers sooner and costs
+  less; it applies to the turn and its background passes.
+- Added: a background pass model per provider under Settings → AI models. The
+  self-review, settlement, episode review and impact review run on it, so a
+  lighter model can take them while the turn keeps the one you chose. Left
+  empty, the passes use the turn's model; a pass model that cannot be reached
+  falls back to it.
+- Added: agent usage under Settings → Agent. Every request the agent sends,
+  the turn's and each background pass's, is recorded on this device with its
+  input, output and cache tokens. The section shows the last 30 days by kind
+  and model, with the cache hit rate. Records older than 90 days are removed.
+
 ## v1.23.0 - 2026-11-14
 
 - Added: a writer's default style under Settings → Writing. Its phrases to
