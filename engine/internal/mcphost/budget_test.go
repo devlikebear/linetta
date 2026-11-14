@@ -330,7 +330,7 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	// episode row's total and judgement on linetta_get_outline, the length
 	// warning on linetta_write_scene) took it to 29,489B.
 	if total > 29500 {
-		t.Errorf("the original tool budget (excluding linetta_report_continuity) is %dB, want <= 28400B "+
+		t.Errorf("the original tool budget (excluding linetta_report_continuity) is %dB, want <= 29500B "+
 			"(#132 trimmed it from 27687B to 26525B; story-assist raised it to 27100B, 27400B, then 27500B)", total)
 	}
 }

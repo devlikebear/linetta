@@ -202,10 +202,9 @@ func (d ToolDeps) registerWriteTools(s *mcp.Server, groups ToolGroups) {
 func (d ToolDeps) registerMemoryTool(s *mcp.Server) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_edit_memory",
-		Description: "Record something durable about how this writer works (writer_profile, which applies to every work) " +
-			"or about this work (work_notes). Both are read back to you at the start of every session, so keep them " +
-			"short and current: replace a line that changed rather than adding a second one. The result says how much " +
-			"room is left.",
+		Description: "Record something durable about how this writer works (writer_profile, every work) or this work " +
+			"(work_notes); their prose style is theirs to set, not memory. Both are read back each session, so keep " +
+			"them short: replace a line that changed rather than adding one. The result says how much room is left.",
 	}, record(d, "linetta_edit_memory", d.editMemory))
 }
 

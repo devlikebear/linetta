@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+- Added: a writer's default style under Settings → Writing. Its phrases to
+  avoid and sentence limit join every work's style check, and each violation
+  says whether it broke your default style or the work's own rule. Where both
+  set a sentence limit, the work's wins; a work can also say it has none. The
+  old "phrases to avoid in every work" setting moves into it once.
+- Added: prose notes for your default style. Every brief and the inline
+  editor carry them as your direction, ahead of the work's own style notes,
+  which win where the two disagree.
+- Added: a work can turn your default style off in its style section; the
+  switch travels with the work when it is restored or synced.
+- Added: an agent can propose your default style from your manuscripts
+  (`linetta_propose_style_profile` with `scope: "writer"`). It waits under
+  Settings → Writing until you approve, edit or discard it. A client pinned to
+  one work cannot propose it.
+- Changed: the writer profile's help no longer asks for style preferences;
+  style goes in the default style, where it reaches agents as your direction
+  rather than as a memo.
+
 ## v1.22.0 - 2026-11-05
 
 - Added: the iOS app has the built-in agent. It connects with an API key

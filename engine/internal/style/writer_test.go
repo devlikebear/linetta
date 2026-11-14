@@ -213,3 +213,36 @@ func TestWriterNotesAndDraft(t *testing.T) {
 		t.Fatalf("replace = %d runes, %v", len([]rune(notes)), err)
 	}
 }
+
+// #184's evaluation case for the writer's default rules: a rule on every work
+// fires on every work, so a phrase that is right for one can be a false
+// positive in another. "마치" is the simile habit the writer wants out of a
+// contemporary work, but the same letters open "마치고" (finishing) in a
+// historical one that uses neither. The check reports both, as it should for a
+// literal match; what keeps the second work clean is its own switch.
+func TestWriterRules_aPhraseRightForOneWorkIsAFalsePositiveInAnother(t *testing.T) {
+	writer := WriterRules{AvoidPhrases: []string{"마치"}}
+	cases := []struct {
+		name      string
+		work      Rules
+		paragraph string
+		want      int
+	}{
+		{"contemporary: the habit it is meant to catch", Rules{}, "그녀의 목소리는 마치 유리 같았다.", 1},
+		{"historical: a false positive by spelling", Rules{}, "나루터에서 일을 마치고 돌아왔다.", 1},
+		{"historical, opted out: clean", Rules{IgnoreWriterStyle: true}, "나루터에서 일을 마치고 돌아왔다.", 0},
+		{"historical, opted out, its own rule still caught", Rules{IgnoreWriterStyle: true, AvoidPhrases: []string{"하였다"}}, "일을 마치고 돌아오기로 하였다.", 1},
+	}
+	for _, c := range cases {
+		rep := Check(scene(c.paragraph), Merge(c.work, writer))
+		got := 0
+		for _, v := range rep.Violations {
+			if v.Rule == RuleAvoidPhrase {
+				got++
+			}
+		}
+		if got != c.want {
+			t.Errorf("%s: %d phrase violations, want %d: %+v", c.name, got, c.want, rep.Violations)
+		}
+	}
+}

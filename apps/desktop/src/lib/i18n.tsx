@@ -744,7 +744,7 @@ const messages = {
     "style.sourceWriter": "작가 기본",
     "style.sourceWork": "이 작품",
     "settings.writerStyle.title": "작가 기본 문체",
-    "settings.writerStyle.description": "어느 작품을 쓰든 따라다니는 검사 규칙입니다. 저장하면 모든 작품에 바로 적용되고, 작품마다 문체 섹션에서 끌 수 있습니다. 작품에 같은 종류의 규칙이 있으면 피할 표현은 합쳐지고, 문장 길이 한도는 작품 것이 우선합니다.",
+    "settings.writerStyle.description": "어느 작품을 쓰든 따라다니는 문체입니다. 문체를 적는 곳은 여기와 각 작품의 문체 섹션입니다. 저장하면 모든 작품에 바로 적용되고, 작품마다 끌 수 있습니다. 작품에 같은 종류의 규칙이 있으면 피할 표현은 합쳐지고, 문장 길이 한도와 문체 노트는 작품 것이 우선합니다.",
     "settings.writerStyle.saved": "저장했습니다.",
     "settings.writerStyle.notes": "문체 노트 (모든 작품의 브리프에 작가의 지침으로 들어갑니다)",
     "settings.writerStyle.notesHint": "규칙으로 적을 수 없는 어조와 리듬, 시점 습관을 적습니다. 작품의 문체 노트보다 먼저 들어가고, 둘이 어긋나면 작품 것이 우선합니다.",
@@ -1790,7 +1790,7 @@ const messages = {
     "settings.memory.description":
       "에이전트가 매번 읽는 짧은 메모입니다. 직접 고쳐 쓸 수 있고, 에이전트도 여기에 기록합니다.",
     "settings.memory.writerProfile": "작가 프로필",
-    "settings.memory.writerProfile.help": "모든 작품에 적용됩니다. 문체 선호, 피하고 싶은 것, 작업 습관.",
+    "settings.memory.writerProfile.help": "모든 작품에 적용됩니다. 작업 방식과 습관, 일할 때 피하고 싶은 것. 문체는 여기가 아니라 설정 → 쓰기의 작가 기본 문체에 적습니다.",
     "settings.memory.workNotes": "작품 노트",
     "settings.memory.workNotes.help": "이 작품에만 적용됩니다. 에이전트가 이 작품에 대해 알아낸 것.",
     "settings.memory.work": "작품",
@@ -2669,7 +2669,7 @@ const messages = {
     "style.sourceWriter": "Writer's default",
     "style.sourceWork": "This work",
     "settings.writerStyle.title": "Writer's default style",
-    "settings.writerStyle.description": "Check rules that follow you into every work. Saving applies them to every work at once, and each work can turn them off in its style section. Where a work has rules of its own, the phrases to avoid are combined and the work's sentence limit wins.",
+    "settings.writerStyle.description": "The style that follows you into every work. Style is written here and in each work's style section. Saving applies it to every work at once, and each work can turn it off. Where a work has rules of its own, the phrases to avoid are combined, and its sentence limit and style notes win.",
     "settings.writerStyle.saved": "Saved.",
     "settings.writerStyle.notes": "Style notes (go into every work's brief as your direction)",
     "settings.writerStyle.notesHint": "The tone, rhythm and point-of-view habits no rule can hold. They come before a work's own style notes, and the work's win where the two disagree.",
@@ -3714,7 +3714,7 @@ const messages = {
       "A short note the agent reads every time. You can rewrite it yourself, and the agent writes here too.",
     "settings.memory.writerProfile": "Writer profile",
     "settings.memory.writerProfile.help":
-      "Applies to every work. Style preferences, things to avoid, working habits.",
+      "Applies to every work. How you work, your habits, what to avoid while working. Your prose style goes in Settings → Writing → Writer's default style, not here.",
     "settings.memory.workNotes": "Work notes",
     "settings.memory.workNotes.help":
       "Applies to this work only. What the agent has worked out about it.",
@@ -4559,7 +4559,7 @@ const messages = {
     "style.sourceWriter": "作家の基本",
     "style.sourceWork": "この作品",
     "settings.writerStyle.title": "作家の基本文体",
-    "settings.writerStyle.description": "どの作品を書いてもついてくるチェックのルールです。保存するとすべての作品にすぐ適用され、作品ごとに文体セクションでオフにできます。作品に同じ種類のルールがあれば、避ける表現は合わせ、文の長さの上限は作品のものが優先します。",
+    "settings.writerStyle.description": "どの作品を書いてもついてくる文体です。文体を書くのはここと各作品の文体セクションです。保存するとすべての作品にすぐ適用され、作品ごとにオフにできます。作品に同じ種類のルールがあれば、避ける表現は合わせ、文の長さの上限と文体ノートは作品のものが優先します。",
     "settings.writerStyle.saved": "保存しました。",
     "settings.writerStyle.notes": "文体ノート（すべての作品のブリーフに作家の指針として入ります）",
     "settings.writerStyle.notesHint": "ルールにできない語調やリズム、視点の癖を書きます。作品の文体ノートより先に入り、食い違うときは作品のものが優先します。",
@@ -5602,7 +5602,7 @@ const messages = {
     "settings.memory.description":
       "エージェントが毎回読む短いメモです。自分で書き直せますし、エージェントもここに書き込みます。",
     "settings.memory.writerProfile": "作家プロフィール",
-    "settings.memory.writerProfile.help": "すべての作品に適用されます。文体の好み、避けたいこと、作業の習慣。",
+    "settings.memory.writerProfile.help": "すべての作品に適用されます。作業の仕方と習慣、作業中に避けたいこと。文体はここではなく、設定 → 執筆の作家の基本文体に書きます。",
     "settings.memory.workNotes": "作品ノート",
     "settings.memory.workNotes.help": "この作品にのみ適用されます。エージェントがこの作品について知ったこと。",
     "settings.memory.work": "作品",

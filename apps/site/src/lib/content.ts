@@ -399,7 +399,7 @@ export const en: Translation = {
       {
         tag: 'Style at length',
         title: 'Habits that only show over many episodes',
-        body: 'Pick a scene as the reference for a work’s style. The style check finds “not this, but that” parallels, sentences that explain instead of show, sentences repeated across episodes, episodes that all end the same way, and the phrases you listed to avoid.'
+        body: 'Pick a scene as the reference for a work’s style. The style check finds “not this, but that” parallels, sentences that explain instead of show, sentences repeated across episodes, episodes that all end the same way, and the phrases you listed to avoid. Your default style follows you into every work, and each work can add its own rules on top or switch it off.'
       },
       {
         tag: 'Counts and copies',
@@ -532,7 +532,7 @@ export const en: Translation = {
       { name: 'linetta_get_character_visuals', note: 'Character designs and reference images' },
       { name: 'linetta_build_illustration_prompt', note: 'Illustration and four-panel prompts' },
       { name: 'linetta_list_illustrations', note: 'The gallery, and how recent requests were decided' },
-      { name: 'linetta_analyze_style', note: 'Reports where prose breaks your style rules' },
+      { name: 'linetta_analyze_style', note: 'Reports where prose breaks your default or the work’s style rules' },
       { name: 'linetta_read_skill', note: 'Open one recorded how-to in full — the brief lists only names and descriptions' },
       { name: 'linetta_publish_status', note: 'What is published on Linetta Works' }
     ],
@@ -554,7 +554,7 @@ export const en: Translation = {
       { name: 'linetta_edit_ledger', note: 'Add, change or delete a ledger entry; pinned rules stay put' },
       { name: 'linetta_set_part_arc', note: 'A part’s role, goal and target tension' },
       { name: 'linetta_save_forecast', note: 'Save possible branches; none of it is canon' },
-      { name: 'linetta_propose_style_profile', note: 'Drafts a style profile for you to approve' },
+      { name: 'linetta_propose_style_profile', note: 'Drafts a work’s or your default style profile for you to approve' },
       { name: 'linetta_set_character_visuals', note: 'Save character designs' },
       { name: 'linetta_set_art_style', note: 'Save illustration style' },
       { name: 'linetta_add_reference_image', note: 'Attach a reference image, including one from the gallery' },
@@ -956,7 +956,7 @@ export const ko: Translation = {
       {
         tag: '장편의 문체',
         title: '여러 회차에 걸쳐야 보이는 버릇',
-        body: '씬 하나를 작품 문체의 기준으로 고릅니다. 문체 검사는 “A가 아니라 B” 식의 대구, 보여 주지 않고 설명하는 문장, 회차를 넘나들며 반복되는 문장, 늘 같은 방식으로 끝나는 회차, 그리고 피하겠다고 적어 둔 표현을 찾습니다.'
+        body: '씬 하나를 작품 문체의 기준으로 고릅니다. 문체 검사는 “A가 아니라 B” 식의 대구, 보여 주지 않고 설명하는 문장, 회차를 넘나들며 반복되는 문장, 늘 같은 방식으로 끝나는 회차, 그리고 피하겠다고 적어 둔 표현을 찾습니다. 작가 기본 문체는 모든 작품에 따라가고, 작품마다 규칙을 더하거나 끌 수 있습니다.'
       },
       {
         tag: '분량과 복제',
@@ -1089,7 +1089,7 @@ export const ko: Translation = {
       { name: 'linetta_get_character_visuals', note: '인물 디자인과 참조 이미지' },
       { name: 'linetta_build_illustration_prompt', note: '삽화와 4컷 프롬프트' },
       { name: 'linetta_list_illustrations', note: '갤러리와 최근 요청의 처리 결과' },
-      { name: 'linetta_analyze_style', note: '작가의 문체 규칙에 어긋난 곳을 찾아 보고' },
+      { name: 'linetta_analyze_style', note: '작가 기본 문체와 작품 문체 규칙에 어긋난 곳을 찾아 보고' },
       { name: 'linetta_read_skill', note: '기록해 둔 기법 하나를 본문까지 열기 — 브리프에는 이름과 설명만 실립니다' },
       { name: 'linetta_publish_status', note: 'Linetta Works에 게시된 내용' }
     ],
@@ -1111,7 +1111,7 @@ export const ko: Translation = {
       { name: 'linetta_edit_ledger', note: '원장 항목 추가·수정·삭제 — 고정된 규칙은 건드리지 못함' },
       { name: 'linetta_set_part_arc', note: '부의 역할, 목표, 목표 긴장도' },
       { name: 'linetta_save_forecast', note: '가능한 갈래를 저장 — 어느 것도 정사가 아닙니다' },
-      { name: 'linetta_propose_style_profile', note: '작가가 승인할 문체 프로필 초안 제안' },
+      { name: 'linetta_propose_style_profile', note: '작가가 승인할 작품 또는 작가 기본 문체 초안 제안' },
       { name: 'linetta_set_character_visuals', note: '인물 디자인 저장' },
       { name: 'linetta_set_art_style', note: '화풍 저장' },
       { name: 'linetta_add_reference_image', note: '참조 이미지 추가 — 갤러리의 그림도 가능' },
@@ -1511,7 +1511,7 @@ export const ja: Translation = {
       {
         tag: '長編の文体',
         title: '何話も重ねて見える癖',
-        body: 'シーンを一つ選んで作品の文体の基準にします。文体チェックは「AではなくB」型の対句、見せずに説明する文、話をまたいで繰り返される文、いつも同じ終わり方をする話、そして避けると決めた表現を探します。'
+        body: 'シーンを一つ選んで作品の文体の基準にします。文体チェックは「AではなくB」型の対句、見せずに説明する文、話をまたいで繰り返される文、いつも同じ終わり方をする話、そして避けると決めた表現を探します。作家の基本文体はすべての作品についていき、作品ごとにルールを足したりオフにしたりできます。'
       },
       {
         tag: '分量と複製',
@@ -1644,7 +1644,7 @@ export const ja: Translation = {
       { name: 'linetta_get_character_visuals', note: 'キャラクターデザインと参照画像' },
       { name: 'linetta_build_illustration_prompt', note: '挿絵と4コマのプロンプト' },
       { name: 'linetta_list_illustrations', note: 'ギャラリーと最近の依頼の結果' },
-      { name: 'linetta_analyze_style', note: '作者の文体ルールに反する箇所を報告' },
+      { name: 'linetta_analyze_style', note: '作家の基本文体と作品の文体ルールに反する箇所を報告' },
       { name: 'linetta_read_skill', note: '記録された手法を一つ、本文まで開く — ブリーフには名前と説明だけが載ります' },
       { name: 'linetta_publish_status', note: 'Linetta Works に公開された内容' }
     ],
@@ -1666,7 +1666,7 @@ export const ja: Translation = {
       { name: 'linetta_edit_ledger', note: '台帳の項目を追加・変更・削除 — 固定したルールには触れない' },
       { name: 'linetta_set_part_arc', note: '部の役割、目標、目標の緊張度' },
       { name: 'linetta_save_forecast', note: 'ありうる分岐を保存 — どれも正史ではありません' },
-      { name: 'linetta_propose_style_profile', note: '作者が承認する文体プロフィールの下書きを提案' },
+      { name: 'linetta_propose_style_profile', note: '作者が承認する作品または基本文体の下書きを提案' },
       { name: 'linetta_set_character_visuals', note: 'キャラクターデザインを保存' },
       { name: 'linetta_set_art_style', note: '画風を保存' },
       { name: 'linetta_add_reference_image', note: '参照画像を追加 — ギャラリーの絵も可' },
