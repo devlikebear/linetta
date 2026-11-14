@@ -169,7 +169,8 @@ pacing. **Review finished episodes independently**, under Settings → Skills, a
 a separate provider call after a turn that wrote prose: it reads the last few
 scenes with no memory of writing them, using read-only tools, and records what it
 finds. It sends the manuscript again, so it is metered by your provider and is
-off by default. It does not run with the Claude Code provider.
+off by default. With the Claude Code provider it runs as one more `claude` call
+limited to those same read-only tools, and counts against your Claude plan.
 
 The style check also reports paired contrast and narrator explanation in Korean
 prose, a sentence repeated across scenes, and consecutive scenes that end the same
