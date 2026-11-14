@@ -565,6 +565,102 @@ func TestAgentMaxToolCalls_defaultsPersistsAndStaysInRange(t *testing.T) {
 	}
 }
 
+// The agent's thinking depth: model default on a fresh install, one of three
+// named levels when set, a refused value changing nothing, and a value from a
+// newer or hand-edited file that this build does not know falling back to the
+// model default instead of reaching the provider.
+func TestAgentReasoningEffort_defaultsPersistsAndRefusesUnknown(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LINETTA_HOME", dir)
+	ctx := context.Background()
+
+	s, err := NewWithSecretStore(NewMemorySecretStore())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if got := s.AgentReasoningEffort(); got != "" {
+		t.Fatalf("fresh install effort = %q, want the model default", got)
+	}
+	for _, bad := range []string{"max", "none", "HIGH", "fast"} {
+		if _, err := s.Set(ctx, Patch{AgentReasoningEffort: strPtr(bad)}); err == nil {
+			t.Errorf("Set accepted agent_reasoning_effort = %q", bad)
+		}
+	}
+	if _, err := s.Set(ctx, Patch{AgentReasoningEffort: strPtr(" medium ")}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	s2, err := NewWithSecretStore(NewMemorySecretStore())
+	if err != nil {
+		t.Fatalf("re-New: %v", err)
+	}
+	if got := s2.AgentReasoningEffort(); got != "medium" {
+		t.Errorf("effort after reload = %q, want medium", got)
+	}
+	if _, err := s2.Set(ctx, Patch{AgentReasoningEffort: strPtr("")}); err != nil {
+		t.Fatalf("Set back to default: %v", err)
+	}
+	if got := s2.AgentReasoningEffort(); got != "" {
+		t.Errorf("effort after clearing = %q, want the model default", got)
+	}
+
+	legacy := t.TempDir()
+	t.Setenv("LINETTA_HOME", legacy)
+	if err := os.WriteFile(filepath.Join(legacy, "settings.json"),
+		[]byte(`{"language":"en","agent_reasoning_effort":"ultra"}`), 0o600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	s3, err := NewWithSecretStore(NewMemorySecretStore())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if got := s3.AgentReasoningEffort(); got != "" {
+		t.Errorf("unknown effort on disk = %q, want the model default", got)
+	}
+}
+
+// A provider's pass model is stored beside its model, trimmed, survives a
+// reload, and clears back to "same as the model" with an empty string.
+func TestProviderPassModel_setsPersistsAndClears(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LINETTA_HOME", dir)
+	ctx := context.Background()
+
+	s, err := NewWithSecretStore(NewMemorySecretStore())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if _, err := s.Set(ctx, Patch{Providers: map[string]ProviderPatch{
+		ProviderAnthropic: {Model: strPtr("claude-opus-5-5"), PassModel: strPtr(" claude-haiku-5-5 ")},
+	}}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	s2, err := NewWithSecretStore(NewMemorySecretStore())
+	if err != nil {
+		t.Fatalf("re-New: %v", err)
+	}
+	cfg := s2.ProviderConfigFor(ProviderAnthropic)
+	if cfg.Model != "claude-opus-5-5" || cfg.PassModel != "claude-haiku-5-5" {
+		t.Fatalf("after reload model=%q pass_model=%q", cfg.Model, cfg.PassModel)
+	}
+	// Changing the model alone leaves the pass model where it was.
+	if _, err := s2.Set(ctx, Patch{Providers: map[string]ProviderPatch{
+		ProviderAnthropic: {Model: strPtr("claude-sonnet-5-5")},
+	}}); err != nil {
+		t.Fatalf("Set model: %v", err)
+	}
+	if got := s2.ProviderConfigFor(ProviderAnthropic).PassModel; got != "claude-haiku-5-5" {
+		t.Errorf("pass model after a model change = %q", got)
+	}
+	if _, err := s2.Set(ctx, Patch{Providers: map[string]ProviderPatch{
+		ProviderAnthropic: {PassModel: strPtr("")},
+	}}); err != nil {
+		t.Fatalf("Set clear: %v", err)
+	}
+	if got := s2.ProviderConfigFor(ProviderAnthropic).PassModel; got != "" {
+		t.Errorf("cleared pass model = %q", got)
+	}
+}
+
 /* ---------------------------------------------------------------------------
  * #113: a pre-1.0 plaintext api_key on a platform with no secret store.
  *

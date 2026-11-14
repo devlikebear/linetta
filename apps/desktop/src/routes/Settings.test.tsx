@@ -780,6 +780,32 @@ describe("Settings", () => {
     );
   });
 
+  it("saves the thinking depth and offers the model default first", async () => {
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true, mcp_available: false }));
+    mocks.settingsGet.mockResolvedValue({ ...baseSettings });
+    mocks.settingsSet.mockImplementation((patch: Record<string, unknown>) =>
+      Promise.resolve({ ...baseSettings, ...patch }),
+    );
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByTestId("settings-tab-agent"));
+    const select = (await screen.findByTestId("agent-reasoning-effort")) as HTMLSelectElement;
+    // An engine that predates the key sends nothing, which must read as the
+    // model's own default rather than as some level.
+    expect(select.value).toBe("");
+
+    await user.selectOptions(select, "medium");
+    await waitFor(() =>
+      expect(mocks.settingsSet).toHaveBeenLastCalledWith({ agent_reasoning_effort: "medium" }),
+    );
+    await waitFor(() => expect(screen.getByTestId("agent-reasoning-effort")).not.toBeDisabled());
+    await user.selectOptions(screen.getByTestId("agent-reasoning-effort"), "");
+    await waitFor(() =>
+      expect(mocks.settingsSet).toHaveBeenLastCalledWith({ agent_reasoning_effort: "" }),
+    );
+  });
+
   it("treats a blank history budget as automatic and pulls a number into range", async () => {
     mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true, mcp_available: false }));
     mocks.settingsGet.mockResolvedValue({ ...baseSettings });

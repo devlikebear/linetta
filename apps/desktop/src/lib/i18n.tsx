@@ -1522,6 +1522,13 @@ const messages = {
     "settings.tools.current": "지금 에이전트가 받는 툴: {tools}개 · 요청마다 약 {size}",
     "settings.tools.groupCost": "툴 {tools}개 · 약 {size}",
     "settings.tools.historyBudget.title": "대화 기억 길이",
+    "settings.tools.effort.title": "생각 깊이",
+    "settings.tools.effort.description":
+      "답하기 전에 모델이 얼마나 오래 생각할지 정합니다. 큰 모델은 기본값이 가장 깊어서 턴이 길어집니다. 낮추면 빨라지고 비용도 줄지만, 복잡한 집필이나 개고에서는 질이 떨어질 수 있습니다. Claude Code CLI에는 적용되지 않습니다.",
+    "settings.tools.effort.default": "모델 기본값",
+    "settings.tools.effort.low": "낮음 (빠름)",
+    "settings.tools.effort.medium": "보통",
+    "settings.tools.effort.high": "높음 (느림)",
     "settings.tools.historyBudget.auto": "자동",
     "settings.tools.historyBudget.description":
       "매 턴 다시 보내는 이전 대화의 글자 수입니다. 비워 두면 공급자에 맞게 정합니다. 직접 정하려면 {min}~{max} 사이로 입력하세요. 늘리면 잘리는 대화가 줄지만, 사용량 과금 공급자에서는 메시지마다 비용이 커집니다.",
@@ -1917,6 +1924,10 @@ const messages = {
     "settings.providers.model": "모델",
     "settings.providers.model.default": "프로바이더 기본값",
     "settings.providers.model.refresh": "새로고침",
+    "settings.providers.passModel": "백그라운드 패스 모델",
+    "settings.providers.passModel.default": "위 모델과 같음",
+    "settings.providers.passModel.hint":
+      "턴이 끝난 뒤 자동으로 도는 자기 회고와 정리·검토 패스가 쓰는 모델입니다. 가벼운 모델을 고르면 작업 턴의 추가 비용이 줄어듭니다.",
     "settings.providers.model.listFailed": "모델 목록을 가져오지 못했습니다. 아는 모델 이름을 직접 입력하거나, 비워 두면 프로바이더 기본값을 씁니다.",
     // Design spec 5.4: the sentence the writer ticks has to say *what*
     // leaves the machine, not only where it goes. The agent reads story
@@ -3449,6 +3460,13 @@ const messages = {
     "settings.tools.current": "The agent currently gets {tools} tools — about {size} in every request",
     "settings.tools.groupCost": "{tools} tools · about {size}",
     "settings.tools.historyBudget.title": "Conversation memory",
+    "settings.tools.effort.title": "Thinking depth",
+    "settings.tools.effort.description":
+      "How long the model thinks before it answers. Large models default to their deepest setting, which is most of a long turn's wait. Lower is faster and cheaper, but complex drafting and revision may suffer. Does not apply to the Claude Code CLI.",
+    "settings.tools.effort.default": "Model default",
+    "settings.tools.effort.low": "Low (fast)",
+    "settings.tools.effort.medium": "Medium",
+    "settings.tools.effort.high": "High (slow)",
     "settings.tools.historyBudget.auto": "Automatic",
     "settings.tools.historyBudget.description":
       "How many characters of earlier conversation each turn sends again. Leave blank to choose by provider, or enter {min} to {max}. More means less is cut off, and on a metered provider every message costs more.",
@@ -3821,6 +3839,10 @@ const messages = {
     "settings.providers.model": "Model",
     "settings.providers.model.default": "Provider default",
     "settings.providers.model.refresh": "Refresh",
+    "settings.providers.passModel": "Background pass model",
+    "settings.providers.passModel.default": "Same as the model above",
+    "settings.providers.passModel.hint":
+      "The model the self-review and the settlement and review passes use after a turn ends. A lighter model cuts what a working turn costs beyond its reply.",
     "settings.providers.model.listFailed": "Could not load the model list. Type a model name you know, or leave it empty to use the provider default.",
     "settings.providers.consent":
       "I agree that the agent's tools can read any scene in any of my works and not only the one I have open, along with its summaries, the outline, search results from across the manuscript, the character, plot and fact cards, the facts I have told it to remember, the list of my works and my characters' reference images; that images I attach to a message go with the requests that answer it; that the writer profile, the work notes and my skills' names and descriptions ride along with every request, the writer profile and any skill whose scope is every work being global rather than scoped to the work I have open; that after a tool-heavy turn one further call may go out asking what it learned, which I can switch off under Settings → Skills; that if I turn on AI summaries under Settings → AI models, the text of a long scene I save and my works' part and episode summaries may go to write summaries and synopses; and that all of it is sent to {provider} and nowhere else",
@@ -5339,6 +5361,13 @@ const messages = {
     "settings.tools.current": "いまエージェントが受け取るツール: {tools}個 · リクエストごとに約 {size}",
     "settings.tools.groupCost": "ツール {tools}個 · 約 {size}",
     "settings.tools.historyBudget.title": "会話の記憶の長さ",
+    "settings.tools.effort.title": "思考の深さ",
+    "settings.tools.effort.description":
+      "回答する前にモデルがどれだけ考えるかを決めます。大きなモデルは既定値が最も深く、ターンが長くなります。下げると速く安くなりますが、複雑な執筆や改稿では質が落ちることがあります。Claude Code CLI には適用されません。",
+    "settings.tools.effort.default": "モデルの既定値",
+    "settings.tools.effort.low": "低 (速い)",
+    "settings.tools.effort.medium": "中",
+    "settings.tools.effort.high": "高 (遅い)",
     "settings.tools.historyBudget.auto": "自動",
     "settings.tools.historyBudget.description":
       "ターンごとに送り直す以前の会話の文字数です。空欄ならプロバイダーに合わせて決めます。指定する場合は {min}〜{max} の範囲で入力してください。増やすと切り捨てが減りますが、従量課金のプロバイダーではメッセージごとの費用が増えます。",
@@ -5708,6 +5737,10 @@ const messages = {
     "settings.providers.model": "モデル",
     "settings.providers.model.default": "プロバイダーの既定値",
     "settings.providers.model.refresh": "更新",
+    "settings.providers.passModel": "バックグラウンドパスのモデル",
+    "settings.providers.passModel.default": "上のモデルと同じ",
+    "settings.providers.passModel.hint":
+      "ターンの後に自動で走る自己振り返りと整理・レビューのパスが使うモデルです。軽いモデルを選ぶと、作業ターンの追加費用が減ります。",
     "settings.providers.model.listFailed": "モデル一覧を取得できませんでした。知っているモデル名を直接入力するか、空のままにするとプロバイダーの既定値を使います。",
     "settings.providers.consent":
       "エージェントがツールで、開いている作品だけでなく私のすべての作品のどのシーンの原文と要約でも、アウトライン、原稿全体の検索結果、登場人物・プロット・ファクトカード、記憶させた内容、作品一覧、人物の参照画像を読み取ることができ、メッセージに添付した画像はそのメッセージに応答するリクエストとともに送られ、さらに作家プロフィールと作品ノートとスキルの名前・説明が毎回のリクエストとともに送られ、そのうち作家プロフィールと適用範囲が「すべての作品」のスキルは開いている作品に限定されず、手のかかったターンのあとには何を学んだかを尋ねる呼び出しがもう一度送られることがあり（設定 → スキルでオフにできます）、設定 → AIモデルで AI 要約をオンにすると保存した長いシーンの本文と作品の部・話の要約が要約とシノプシスを書くために送られることがあり、これらすべてが{provider}に送信され、Linetta はそれ以外のどこにも送信しないことに同意します",

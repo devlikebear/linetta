@@ -507,6 +507,37 @@ describe("ProviderSection", () => {
     );
   });
 
+  it("saves the background pass model on blur and clears it with an empty field", async () => {
+    activeId = "anthropic";
+    rowExtras = { anthropic: { model: "claude-opus-5-5", pass_model: "claude-haiku-5-5" } };
+    render(<ProviderSection />);
+
+    const input = (await screen.findByTestId("provider-pass-model-input")) as HTMLInputElement;
+    await waitFor(() => expect(input.value).toBe("claude-haiku-5-5"));
+
+    // A blur that changed nothing writes nothing.
+    fireEvent.focusOut(input);
+    expect(rpc.settingsSet).not.toHaveBeenCalledWith(
+      expect.objectContaining({ providers: { anthropic: expect.objectContaining({ pass_model: expect.anything() }) } }),
+    );
+
+    fireEvent.change(input, { target: { value: " claude-sonnet-5-5 " } });
+    fireEvent.focusOut(input);
+    await waitFor(() =>
+      expect(rpc.settingsSet).toHaveBeenCalledWith({
+        providers: { anthropic: { pass_model: "claude-sonnet-5-5" } },
+      }),
+    );
+
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.focusOut(input);
+    await waitFor(() =>
+      expect(rpc.settingsSet).toHaveBeenCalledWith({
+        providers: { anthropic: { pass_model: "" } },
+      }),
+    );
+  });
+
   it("shows the saved model of the provider that is already active at mount", async () => {
     // No provider switch anywhere in this test, which is the whole point.
     // `active` starts as the literal "openai-codex" — the engine's default

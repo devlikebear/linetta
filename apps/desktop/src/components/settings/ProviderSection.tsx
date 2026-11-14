@@ -283,6 +283,10 @@ export function ProviderSection() {
   // and it is fetched only when the writer asks.
   const [models, setModels] = useState<string[]>([]);
   const [modelsError, setModelsError] = useState<unknown>(null);
+  // The background pass model's draft. Outside the reducer on purpose: it
+  // plays no part in the connection test — the test talks to the turn's
+  // model — so it has no business in the signature the badge settles on.
+  const [passDraft, setPassDraft] = useState("");
   // #113: a key a pre-June build wrote into settings.json in plain text, which
   // the engine could not move into secure storage on this platform. It is read
   // from settings.get rather than providers.list because it is not a fact
@@ -443,6 +447,13 @@ export function ProviderSection() {
   const configured = Boolean(current?.configured);
   const baseUrl = current?.base_url ?? "";
   const model = current?.model ?? "";
+  const passModel = current?.pass_model ?? "";
+  // Reseeded from the stored value whenever the provider or that value
+  // changes, so a provider switch never carries one provider's model id into
+  // another's field.
+  useEffect(() => {
+    setPassDraft(passModel);
+  }, [active, passModel]);
   // The configuration on screen right now, which runTest stamps onto the
   // result it stores. The same function the reducer settles against, so the
   // badge is shown exactly while the two agree — there is no second definition
@@ -640,6 +651,16 @@ export function ProviderSection() {
     if (next === model) return;
     await saveInBackground(async () => {
       await settingsApi.set({ providers: { [active]: { model: next } } });
+      await refresh();
+    });
+  };
+
+  // "" is meaningful here too: "the same model as above".
+  const savePassModel = async () => {
+    const next = passDraft.trim();
+    if (next === passModel) return;
+    await saveInBackground(async () => {
+      await settingsApi.set({ providers: { [active]: { pass_model: next } } });
       await refresh();
     });
   };
@@ -944,6 +965,21 @@ export function ProviderSection() {
             {t("settings.providers.model.listFailed")} {rpcErrorMessage(modelsError, t)}
           </p>
         ) : null}
+      </div>
+
+      <div className="modal-field" data-testid="provider-pass-model">
+        <label htmlFor="provider-pass-model-input">{t("settings.providers.passModel")}</label>
+        <input
+          id="provider-pass-model-input"
+          list="provider-model-list"
+          value={passDraft}
+          placeholder={t("settings.providers.passModel.default")}
+          disabled={busy}
+          onChange={(e) => setPassDraft(e.target.value)}
+          onBlur={() => void savePassModel()}
+          data-testid="provider-pass-model-input"
+        />
+        <p className="sd">{t("settings.providers.passModel.hint")}</p>
       </div>
 
       <label className="modal-field modal-check">
