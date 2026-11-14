@@ -129,6 +129,7 @@ var excluded = map[string]string{
 	"writer_style":                     "travels in the library item, under writer_profile",
 	"writer_style_draft":               "travels in the library item, under writer_profile",
 	"summarizer_usage":                 "this device's running total of provider summary calls",
+	"agent_usage":                      "device history of what the agent's requests cost",
 	"agent_memory_archive_fts":         "search index, rebuilt from agent_memory_archive",
 	"agent_memory_archive_fts_config":  "search index, rebuilt from agent_memory_archive",
 	"agent_memory_archive_fts_content": "search index, rebuilt from agent_memory_archive",

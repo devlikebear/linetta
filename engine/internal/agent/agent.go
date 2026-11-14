@@ -171,6 +171,9 @@ type Deps struct {
 	// so the caller can emit mcp.changed with the right target either way.
 	Undo  func(ctx context.Context, batchID, snapshotID string) (projectID, nodeID string, err error)
 	Clock func() int64
+	// Usage keeps each request's tokens, the turn's and every pass's. Nil
+	// keeps none.
+	Usage UsageRecorder
 	// LogPath is where agent diagnostics go — failed turns among them. Empty
 	// keeps them on stdout (tests, the stdio engine).
 	LogPath string

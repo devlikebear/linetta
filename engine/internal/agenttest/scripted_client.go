@@ -28,6 +28,9 @@ type ScriptedTurn struct {
 	ToolName string
 	ToolArgs string
 	Text     string
+	// What the response reports having cost; zero reports nothing. Plain
+	// fields, so a test outside the agent need not import tars/pkg/llm.
+	InputTokens, OutputTokens, CacheReadTokens, CacheWriteTokens int
 }
 
 // NewScriptedClientFactory returns a provider.ClientFactory that plays turns
@@ -78,5 +81,8 @@ func (c *scriptedClient) Chat(ctx context.Context, _ []llm.ChatMessage, opts llm
 	if opts.OnDelta != nil && msg.Content != "" {
 		opts.OnDelta(msg.Content)
 	}
-	return llm.ChatResponse{Message: msg}, nil
+	return llm.ChatResponse{Message: msg, Usage: llm.Usage{
+		InputTokens: t.InputTokens, OutputTokens: t.OutputTokens,
+		CacheReadTokens: t.CacheReadTokens, CacheWriteTokens: t.CacheWriteTokens,
+	}}, nil
 }
