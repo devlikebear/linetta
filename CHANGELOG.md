@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.23.0 - 2026-11-14
 
 - Added: a writer's default style under Settings → Writing. Its phrases to
   avoid and sentence limit join every work's style check, and each violation
@@ -19,6 +19,61 @@
 - Changed: the writer profile's help no longer asks for style preferences;
   style goes in the default style, where it reaches agents as your direction
   rather than as a memo.
+- Added: AI summaries, off by default (Settings → AI models). With them on, the
+  provider you connected for the built-in agent writes the summaries of long
+  scenes and can rewrite the work's synopsis on request; a summary you wrote
+  yourself is never replaced.
+- Added: an episode can have a minimum and maximum length beside its target.
+  The outline gauge shows how far an episode falls short or runs over. New
+  web-novel works start at a 5,000-character minimum (with spaces) and a
+  5,300 target; an existing web-novel work without a range offers once to
+  take it, for that work or for all of them.
+- Added: length presets for web-novel works set the counting basis and the
+  episode target together. Save the current settings as your own preset.
+- Added: the agent keeps to the episode length. Its brief carries the range
+  and how much the current episode still needs, and `linetta_write_scene`
+  warns when the last scene leaves an episode short or any scene takes it over
+  the maximum.
+- Added: submission rules per work (minimum episodes, minimum and maximum
+  length, synopsis required) with a checklist in the right panel; click a
+  short episode to open it. The Works publish dialog says when the episode is
+  under the minimum or over the maximum.
+- Added: short stories and novels show an approximate count of 200-character
+  manuscript pages.
+- Added: the built-in agent writes a plan before prose into an empty episode
+  that has none. With settlement on, the first prose write of a turn first
+  settles up to three earlier episodes still waiting. External clients get the
+  same two facts as warnings from `linetta_write_scene` and
+  `linetta_revise_scene`.
+- Added: secrets and what characters know. A question in the ledger can hold
+  its answer, hidden until you open it, and an open question can be pinned. A
+  "who knows what" table shows, for any episode, which secrets the reader and
+  each character know. The agent's brief carries them, and settlement reports
+  a secret told too early or a character acting on what they cannot know.
+- Added: story time. Ledger facts can record time elapsed since an event and a
+  character's age, and Linetta reports elapsed time that runs backwards, does
+  not fit the in-story dates, or is written twice very differently in one
+  episode. A story-time table sits under the ledger. Mark an episode as a
+  flashback from the outline so its facts are not compared in story order.
+- Added: Linetta Works sync carries the agent's conversations, and the iOS app
+  syncs with Linetta Works like the desktop app. The Mac App Store build still
+  leaves sync out.
+- Added: the library shows the Linetta Works gallery; a work opens its page in
+  your browser.
+- Added: the agent panel's starters are MCP prompts, so Claude Code and other
+  clients run the same ones (for example `/linetta:draft_current_scene`).
+- Changed: when an agent, built-in or external, publishes to Linetta Works,
+  the app asks you first and shows what will be sent. Nothing goes out if you
+  decline or do not answer within two minutes.
+- Fixed: the phrases to avoid and the episode review, settlement and impact
+  review switches were lost when the app restarted.
+- Fixed: the work's total character count in the right panel changed only
+  after reopening the work.
+- Fixed: rebuilding the mention index sent settled episodes back to waiting
+  for settlement.
+- Fixed: a work restored as a new copy kept mentions and note markers pointing
+  at the original work's characters and notes.
+- Security: the engine is built with Go 1.27.4 (GO-2026-6859).
 
 ## v1.22.0 - 2026-11-05
 
