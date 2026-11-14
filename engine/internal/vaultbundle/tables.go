@@ -27,7 +27,9 @@ const (
 	// about the work, and the reference material attached to it.
 	CategoryConversations = "conversations"
 	// The two below live outside any work, in the library item.
-	CategoryGlobalSkills  = "global_skills"
+	CategoryGlobalSkills = "global_skills"
+	// CategoryWriterProfile is the writer profile and the writer's default
+	// style: what the agent and the checks know about this writer in every work.
 	CategoryWriterProfile = "writer_profile"
 )
 
@@ -124,8 +126,8 @@ var excluded = map[string]string{
 	"publish_entities":                 "reconciled with the site after a pull",
 	"publish_covers":                   "reconciled with the site after a pull",
 	"ops_status":                       "library-wide background job state",
-	"writer_style":                     "the writer's default style, library-wide rather than part of a work",
-	"writer_style_draft":               "an agent's proposal for the writer's default style, library-wide",
+	"writer_style":                     "travels in the library item, under writer_profile",
+	"writer_style_draft":               "travels in the library item, under writer_profile",
 	"summarizer_usage":                 "this device's running total of provider summary calls",
 	"agent_memory_archive_fts":         "search index, rebuilt from agent_memory_archive",
 	"agent_memory_archive_fts_config":  "search index, rebuilt from agent_memory_archive",

@@ -162,7 +162,7 @@ func (s *Service) takeLibrary(ctx context.Context, sess session, item RemoteItem
 	if err != nil {
 		return err
 	}
-	s.setLibraryWarning(applied.ProfileRefused)
+	s.setLibraryWarning(applied)
 	if remote.Meta.Settings.UpdatedAt > selection.UpdatedAt {
 		if err := s.adoptSelection(ctx, selection, remote.Meta.Settings); err != nil {
 			return err
@@ -336,10 +336,13 @@ func (s *Service) bestEffortLibrary(ctx context.Context, run func() error) {
 	}
 }
 
-func (s *Service) setLibraryWarning(refused bool) {
+func (s *Service) setLibraryWarning(applied vaultbundle.LibraryApplied) {
 	warning := ""
-	if refused {
+	switch {
+	case applied.ProfileRefused:
 		warning = LibraryWarningProfileRefused
+	case applied.StyleRefused:
+		warning = LibraryWarningStyleRefused
 	}
 	s.warningMu.Lock()
 	s.libraryWarning = warning
@@ -355,6 +358,10 @@ func (s *Service) warning() string {
 // LibraryWarningProfileRefused says the writer profile from another device could
 // not be stored here, and this device's stands.
 const LibraryWarningProfileRefused = "profile_refused"
+
+// LibraryWarningStyleRefused says part of the writer's default style from
+// another device is over this device's limits, and this device's stands.
+const LibraryWarningStyleRefused = "style_refused"
 
 // SyncLibrary takes and sends the library item.
 func (s *Service) SyncLibrary(ctx context.Context) error {

@@ -90,6 +90,12 @@ describe("VaultSection", () => {
     expect(await screen.findByTestId("vault-library-warning")).toHaveTextContent("settings.vault.profileRefused");
   });
 
+  it("says when another device's default style was refused", async () => {
+    rpc.status.mockResolvedValue(overview({ library_warning: "style_refused" }));
+    renderSection();
+    expect(await screen.findByTestId("vault-library-warning")).toHaveTextContent("settings.vault.styleRefused");
+  });
+
   it("says who may use Linetta Works inside its own section", async () => {
     renderSection();
     const section = await screen.findByTestId("vault-section");

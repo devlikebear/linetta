@@ -13,16 +13,21 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
+	"github.com/devlikebear/linetta/engine/internal/store"
 )
 
 const skillBody = "---\nname: %s\ndescription: 설명\nauthor: writer\n---\n"
 
 type lib struct {
 	db   *sql.DB
+	st   *store.Store
 	home string
 }
 
-func newLib(t *testing.T) lib { return lib{db: openLibrary(t), home: t.TempDir()} }
+func newLib(t *testing.T) lib {
+	st := openStore(t)
+	return lib{db: st.DB(), st: st, home: t.TempDir()}
+}
 
 func skillFile(home, name string) string {
 	return filepath.Join(GlobalSkillsDir(home), name, "SKILL.md")
