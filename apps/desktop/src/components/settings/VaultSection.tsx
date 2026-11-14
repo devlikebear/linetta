@@ -341,6 +341,9 @@ export function VaultSection({ available, onOpenPublish }: VaultSectionProps) {
         {overview.library_warning === "profile_refused" && (
           <p className="sd" role="alert" data-testid="vault-library-warning">{t("settings.vault.profileRefused")}</p>
         )}
+        {overview.library_warning === "style_refused" && (
+          <p className="sd" role="alert" data-testid="vault-library-warning">{t("settings.vault.styleRefused")}</p>
+        )}
         <div className="vault-usage">
           <p className="sd vault-usage-label">
             <span>{t("settings.vault.usage")}</span>

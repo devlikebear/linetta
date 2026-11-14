@@ -2175,7 +2175,7 @@ export interface VaultOverview {
   account: VaultAccount | null;
   items: VaultItemView[];
   /** Something the last library sync left the writer to know about. */
-  library_warning?: "profile_refused";
+  library_warning?: "profile_refused" | "style_refused";
 }
 
 export interface SyncWork {

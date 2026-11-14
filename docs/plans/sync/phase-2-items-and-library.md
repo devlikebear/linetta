@@ -26,7 +26,7 @@ _상태: 계획_
 | `history` | 버전 이력 | `node_snapshots` | 켜짐 |
 | `work_agent` | 작품 스킬과 메모리 | `files/skills/`, `files/memory/`, `agent_memory`의 `work_notes` | 켜짐 |
 | `global_skills` | 전역 스킬 | `<home>/skills/<name>/` (`works/` 제외) | 켜짐 |
-| `writer_profile` | 작가 프로필 | `agent_memory`의 `writer_profile` | 켜짐 |
+| `writer_profile` | 작가 프로필과 기본 문체 | `agent_memory`의 `writer_profile`, `writer_style`, `writer_style_draft` | 켜짐 |
 
 화면에는 항목별 현재 크기를 함께 보여 준다. 삽화가 대부분을 차지한다는 것을 작가가 눈으로 보고 고르게 한다.
 

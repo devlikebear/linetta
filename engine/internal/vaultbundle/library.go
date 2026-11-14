@@ -22,14 +22,24 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/atomicfile"
 )
 
-// LibraryFormat is the layout of a library item, separate from a work's.
-const LibraryFormat = 1
+// LibraryFormat is the newest layout of a library item this app reads,
+// separate from a work's. Format 2 added the writer's default style; an item
+// without it is still written as 1, so a device that cannot read the style
+// keeps syncing until the writer has one.
+const LibraryFormat = 2
+
+const libraryFormatNoStyle = 1
 
 const (
 	librarySettingsPart = "settings"
 	libraryProfilePart  = "profile"
 	librarySkillPrefix  = "skills/"
-	worksSkillDir       = "works"
+	// The writer's default style travels under CategoryWriterProfile: its
+	// checkable rules, its prose notes and an agent's pending draft of them.
+	libraryStyleRulesPart = "style/rules"
+	libraryStyleNotesPart = "style/notes"
+	libraryStyleDraftPart = "style/draft"
+	worksSkillDir         = "works"
 )
 
 // LibrarySettings is the writer's choice of what to carry. Omit is a list of
@@ -53,15 +63,16 @@ func SameWorkCategories(a, b []string) bool {
 // of the hash: two devices with the same text are in step, whenever they wrote
 // it.
 type LibraryMeta struct {
-	Format           int              `json:"format"`
-	Settings         LibrarySettings  `json:"settings"`
-	ProfileUpdatedAt int64            `json:"profile_updated_at,omitempty"`
-	FileTimes        map[string]int64 `json:"file_times,omitempty"`
+	Format           int             `json:"format"`
+	Settings         LibrarySettings `json:"settings"`
+	ProfileUpdatedAt int64           `json:"profile_updated_at,omitempty"`
+	// FileTimes is each skill file's and each style part's time, in unix millis.
+	FileTimes map[string]int64 `json:"file_times,omitempty"`
 }
 
 // LibraryBundle holds everything that lives outside any work. Its parts are
-// "settings", "profile" and "skills/<name>/<file>", moved the same way a work's
-// are. Provider keys, tokens and agreements have no part here and never will:
+// "settings", "profile", "style/rules", "style/notes", "style/draft" and
+// "skills/<name>/<file>", moved the same way a work's are. Provider keys, tokens and agreements have no part here and never will:
 // they belong to one device.
 type LibraryBundle struct {
 	Bundle
@@ -101,7 +112,7 @@ func ExportLibrary(ctx context.Context, db *sql.DB, home string, selection Libra
 			Manifest: Manifest{Format: FormatVersion, CreatedAt: now.UnixMilli()},
 			Parts:    map[string][]byte{},
 		},
-		Meta: LibraryMeta{Format: LibraryFormat, Settings: selection, FileTimes: map[string]int64{}},
+		Meta: LibraryMeta{Format: libraryFormatNoStyle, Settings: selection, FileTimes: map[string]int64{}},
 	}
 	omit := slices.Clone(selection.Omit)
 	slices.Sort(omit)
@@ -122,6 +133,9 @@ func ExportLibrary(ctx context.Context, db *sql.DB, home string, selection Libra
 		if doc.Body != "" {
 			bundle.add(libraryProfilePart, []byte(doc.Body))
 			bundle.Meta.ProfileUpdatedAt = doc.UpdatedAt
+		}
+		if err := exportWriterStyle(ctx, db, bundle); err != nil {
+			return nil, err
 		}
 	}
 	if !selection.Omits(CategoryGlobalSkills) {
@@ -210,7 +224,7 @@ func ValidateLibrary(bundle *LibraryBundle) error {
 // checkLibraryPart keeps a part inside the writer's own skills. It refuses the
 // works directory by name: a library item must not reach into a work.
 func checkLibraryPart(name string) error {
-	if name == librarySettingsPart || name == libraryProfilePart {
+	if name == librarySettingsPart || name == libraryProfilePart || isStylePart(name) {
 		return nil
 	}
 	rel, ok := strings.CutPrefix(name, librarySkillPrefix)
@@ -225,11 +239,13 @@ func checkLibraryPart(name string) error {
 }
 
 // LibraryApplied says what taking a library bundle did. ProfileRefused means the
-// other device's writer profile could not be stored here and this one stands.
+// other device's writer profile could not be stored here and this one stands;
+// StyleRefused the same for a part of the writer's default style.
 type LibraryApplied struct {
 	Taken          []string
 	Removed        []string
 	ProfileRefused bool
+	StyleRefused   bool
 }
 
 // ApplyLibrary merges a library bundle into this library. base holds each part's
@@ -259,11 +275,7 @@ func ApplyLibrary(ctx context.Context, db *sql.DB, home string, remote *LibraryB
 		if name == librarySettingsPart {
 			continue
 		}
-		category := CategoryGlobalSkills
-		if name == libraryProfilePart {
-			category = CategoryWriterProfile
-		}
-		if skip(category) {
+		if skip(libraryPartCategory(name)) {
 			continue
 		}
 		verdict := mergePart(localHashes[name], remoteHashes[name], base[name], current.partTime(name), remote.partTime(name))
@@ -275,6 +287,14 @@ func ApplyLibrary(ctx context.Context, db *sql.DB, home string, remote *LibraryB
 		}
 	}
 	return out, nil
+}
+
+// libraryPartCategory is the category a writer leaves a library part out under.
+func libraryPartCategory(name string) string {
+	if name == libraryProfilePart || isStylePart(name) {
+		return CategoryWriterProfile
+	}
+	return CategoryGlobalSkills
 }
 
 func (b *LibraryBundle) partTime(name string) int64 {
@@ -325,6 +345,9 @@ type libraryApplier struct {
 func (a libraryApplier) part(name string, verdict mergeVerdict, out *LibraryApplied) error {
 	if name == libraryProfilePart {
 		return a.profile(verdict, out)
+	}
+	if isStylePart(name) {
+		return a.style(name, verdict, out)
 	}
 	skill, rel, _ := strings.Cut(strings.TrimPrefix(name, librarySkillPrefix), "/")
 	dir := filepath.Join(GlobalSkillsDir(a.home), skill)
@@ -441,11 +464,8 @@ func Sizes(ctx context.Context, db *sql.DB, home string, now time.Time) (map[str
 		return nil, err
 	}
 	for _, part := range library.Manifest.Parts {
-		switch {
-		case part.Name == libraryProfilePart:
-			sizes[CategoryWriterProfile] += int64(part.Size)
-		case strings.HasPrefix(part.Name, librarySkillPrefix):
-			sizes[CategoryGlobalSkills] += int64(part.Size)
+		if part.Name != librarySettingsPart {
+			sizes[libraryPartCategory(part.Name)] += int64(part.Size)
 		}
 	}
 	return sizes, nil
