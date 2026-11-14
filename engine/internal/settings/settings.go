@@ -85,7 +85,13 @@ func validCopyProfiles() []string { return []string{"plain", "munpia", "series",
 // one, load() moves it into the SecretStore and it is never written back.
 // Patches carry keys through ProviderPatch instead.
 type ProviderConfig struct {
-	Model       string `json:"model,omitempty"`
+	Model string `json:"model,omitempty"`
+	// PassModel is the model the agent's background passes use on this
+	// provider — the self-review, settlement, episode and impact reviews that
+	// run after a turn, unasked and unread. "" means the same model as Model:
+	// a writer who never sets it pays for nothing new. A lighter model here is
+	// the cheapest lever on what a working turn costs beyond its own reply.
+	PassModel   string `json:"pass_model,omitempty"`
 	APIKey      string `json:"api_key,omitempty"`
 	APIKeySet   bool   `json:"api_key_set,omitempty"`  // settings.get presence flag, never persisted
 	BaseURL     string `json:"base_url,omitempty"`     // openai only
@@ -96,6 +102,7 @@ type ProviderConfig struct {
 // field alone. An empty APIKey deletes the stored key; ConsentedAt 0 revokes.
 type ProviderPatch struct {
 	Model       *string `json:"model,omitempty"`
+	PassModel   *string `json:"pass_model,omitempty"`
 	BaseURL     *string `json:"base_url,omitempty"`
 	APIKey      *string `json:"api_key,omitempty"`
 	ConsentedAt *int64  `json:"consented_at,omitempty"`
@@ -197,6 +204,12 @@ type Config struct {
 	// resends, or 0 to let the engine choose for the provider. More means the
 	// agent loses less, and on a metered provider costs more on every message.
 	AgentHistoryBudget int `json:"agent_history_budget"`
+	// AgentReasoningEffort is how hard the built-in agent's model thinks
+	// before it answers: "low", "medium", "high", or "" for the model's own
+	// default. Thinking is most of a turn's wait on the large models, which
+	// default to their deepest setting, so this is the writer's speed knob.
+	// Providers without an effort control (the Claude Code CLI) ignore it.
+	AgentReasoningEffort string `json:"agent_reasoning_effort,omitempty"`
 	// MemoryToolsEnabled and SkillToolsEnabled are the writer's tool budget
 	// (#99). Every tool's whole JSON schema travels in every request, so the
 	// nineteen tools Linetta serves are a standing cost on every turn — the
@@ -399,6 +412,7 @@ type Patch struct {
 	CharCountPresets          *[]CharCountPreset       `json:"char_count_presets,omitempty"`
 	AgentMaxToolCalls         *int                     `json:"agent_max_tool_calls,omitempty"`
 	AgentHistoryBudget        *int                     `json:"agent_history_budget,omitempty"`
+	AgentReasoningEffort      *string                  `json:"agent_reasoning_effort,omitempty"`
 	VisualWriteToolsDisabled  *bool                    `json:"visual_write_tools_disabled,omitempty"`
 	MemoryToolsEnabled        *bool                    `json:"memory_tools_enabled,omitempty"`
 	SkillToolsEnabled         *bool                    `json:"skill_tools_enabled,omitempty"`
@@ -603,6 +617,9 @@ func (s *Store) load() error {
 	}
 	if validAgentHistoryBudget(disk.AgentHistoryBudget) {
 		s.cfg.AgentHistoryBudget = disk.AgentHistoryBudget
+	}
+	if validAgentReasoningEffort(disk.AgentReasoningEffort) {
+		s.cfg.AgentReasoningEffort = disk.AgentReasoningEffort
 	}
 	// The two tool-budget switches (#99), presence-guarded for the same
 	// reason: both default to true, so a plain assignment would read the
@@ -813,6 +830,21 @@ func (s *Store) AgentHistoryBudget() int {
 	return s.cfg.AgentHistoryBudget
 }
 
+// AgentReasoningEffort values the writer may choose. "" leaves the model's own
+// default in place.
+func validAgentReasoningEffort(effort string) bool {
+	return slices.Contains([]string{"", "low", "medium", "high"}, effort)
+}
+
+// AgentReasoningEffort reports the writer's thinking depth for the built-in
+// agent, "" for the model's default. Read once per turn, like
+// AgentMaxToolCalls.
+func (s *Store) AgentReasoningEffort() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg.AgentReasoningEffort
+}
+
 // AgentMaxToolCalls reports how many tool calls one turn of the built-in
 // agent may execute. Read per turn, like AgentSelfReviewEnabled.
 func (s *Store) AgentMaxToolCalls() int {
@@ -896,6 +928,9 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 			cfg := merged[id]
 			if pp.Model != nil {
 				cfg.Model = strings.TrimSpace(*pp.Model)
+			}
+			if pp.PassModel != nil {
+				cfg.PassModel = strings.TrimSpace(*pp.PassModel)
 			}
 			if pp.BaseURL != nil {
 				base := strings.TrimSpace(*pp.BaseURL)
@@ -1064,6 +1099,13 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 		}
 		next.AgentHistoryBudget = *p.AgentHistoryBudget
 	}
+	if p.AgentReasoningEffort != nil {
+		effort := strings.TrimSpace(*p.AgentReasoningEffort)
+		if !validAgentReasoningEffort(effort) {
+			return Config{}, fmt.Errorf("settings: unknown agent_reasoning_effort %q", effort)
+		}
+		next.AgentReasoningEffort = effort
+	}
 	if p.VisualWriteToolsDisabled != nil {
 		next.VisualWriteToolsDisabled = *p.VisualWriteToolsDisabled
 	}
@@ -1224,6 +1266,7 @@ func (s *Store) persistWith(next Config, legacy legacyPlaintextKeys) error {
 		StyleAvoidPhrases:         next.StyleAvoidPhrases,
 		AgentMaxToolCalls:         next.AgentMaxToolCalls,
 		AgentHistoryBudget:        next.AgentHistoryBudget,
+		AgentReasoningEffort:      next.AgentReasoningEffort,
 		VisualWriteToolsDisabled:  next.VisualWriteToolsDisabled,
 		MemoryToolsEnabled:        next.MemoryToolsEnabled,
 		SkillToolsEnabled:         next.SkillToolsEnabled,

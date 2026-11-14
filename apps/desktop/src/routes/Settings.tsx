@@ -37,6 +37,7 @@ import {
 } from "../components/onboarding/onboardingState";
 import "./Settings.css";
 import type {
+  AgentReasoningEffort,
   AppLanguage,
   OpsStatus,
   PlatformProfileId,
@@ -755,6 +756,31 @@ export function Settings() {
                     }}
                     disabled={saving}
                   />
+                </div>
+              )}
+              {/* The thinking depth. A choice, not a number: the providers
+                  speak in levels, and "the model's default" has to stay the
+                  first and the empty one so an unset file means it. */}
+              {agentAvailable && (
+                <div className="set-row">
+                  <span className="sk-wrap">
+                    <label className="sk" htmlFor="agent-reasoning-effort">{t("settings.tools.effort.title")}</label>
+                    <span className="sd">{t("settings.tools.effort.description")}</span>
+                  </span>
+                  <select
+                    id="agent-reasoning-effort"
+                    data-testid="agent-reasoning-effort"
+                    value={current.agent_reasoning_effort ?? ""}
+                    onChange={(e) =>
+                      apply({ agent_reasoning_effort: e.target.value as AgentReasoningEffort })
+                    }
+                    disabled={saving}
+                  >
+                    <option value="">{t("settings.tools.effort.default")}</option>
+                    <option value="low">{t("settings.tools.effort.low")}</option>
+                    <option value="medium">{t("settings.tools.effort.medium")}</option>
+                    <option value="high">{t("settings.tools.effort.high")}</option>
+                  </select>
                 </div>
               )}
               {agentAvailable && (

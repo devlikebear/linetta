@@ -19,7 +19,10 @@ type Status struct {
 	Configured bool   `json:"configured"`
 	Consented  bool   `json:"consented"`
 	Model      string `json:"model,omitempty"`
-	BaseURL    string `json:"base_url,omitempty"`
+	// PassModel is the model the agent's background passes use, "" for the
+	// same as Model.
+	PassModel string `json:"pass_model,omitempty"`
+	BaseURL   string `json:"base_url,omitempty"`
 	// CLIPath is where the Claude Code CLI was found, for the pane to show;
 	// empty when it was not. Set only for "cli" providers.
 	CLIPath string `json:"cli_path,omitempty"`
@@ -66,6 +69,7 @@ func (s *Source) List() []Status {
 			Configured: r.Configured(),
 			Consented:  r.Consented(),
 			Model:      r.Model,
+			PassModel:  r.PassModel,
 			BaseURL:    r.BaseURL,
 			CLIPath:    r.CLIPath,
 		})

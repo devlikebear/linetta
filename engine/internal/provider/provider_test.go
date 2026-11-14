@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -247,6 +248,58 @@ func TestClient_buildsWhenConfiguredAndConsented(t *testing.T) {
 	}
 	if seen.Provider != "anthropic" || seen.APIKey != "sk-ant-test" {
 		t.Errorf("factory saw %+v", seen)
+	}
+}
+
+// The pass client is the turn's provider, key and consent on the pass model,
+// and the turn's own model when no pass model is set. Client never sees the
+// pass model.
+func TestPassClient_usesThePassModelOnlyForPasses(t *testing.T) {
+	src, st, _ := newSource(t)
+	configure(t, st, "anthropic", "sk-ant-test", true)
+	model := "claude-opus-5-5"
+	if _, err := st.Set(context.Background(), settings.Patch{Providers: map[string]settings.ProviderPatch{
+		"anthropic": {Model: &model},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	var seen []string
+	src.WithFactory(func(opts llm.ProviderOptions) (llm.Client, error) {
+		seen = append(seen, opts.Model)
+		return fakeClient{ask: func(string) (string, error) { return "OK", nil }}, nil
+	})
+
+	_, r, err := src.PassClient(context.Background(), "")
+	if err != nil || r.Model != model {
+		t.Fatalf("PassClient with no pass model: model=%q err=%v", r.Model, err)
+	}
+
+	pass := "claude-haiku-5-5"
+	if _, err := st.Set(context.Background(), settings.Patch{Providers: map[string]settings.ProviderPatch{
+		"anthropic": {PassModel: &pass},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, r, err = src.PassClient(context.Background(), "anthropic"); err != nil || r.Model != pass {
+		t.Fatalf("PassClient: model=%q err=%v", r.Model, err)
+	}
+	if _, r, err = src.Client(context.Background(), "anthropic"); err != nil || r.Model != model {
+		t.Fatalf("Client after a pass model was set: model=%q err=%v", r.Model, err)
+	}
+	if want := []string{model, pass, model}; !slices.Equal(seen, want) {
+		t.Errorf("factory models = %q, want %q", seen, want)
+	}
+}
+
+func TestPassClient_refusesWithoutConsentLikeClient(t *testing.T) {
+	src, st, _ := newSource(t)
+	configure(t, st, "anthropic", "sk-ant-test", false)
+	src.WithFactory(func(llm.ProviderOptions) (llm.Client, error) {
+		t.Fatal("factory must not run without consent")
+		return nil, nil
+	})
+	if _, _, err := src.PassClient(context.Background(), "anthropic"); reasonOf(t, err) != rpc.ReasonProviderConsentRequired {
+		t.Errorf("reason = %v", err)
 	}
 }
 

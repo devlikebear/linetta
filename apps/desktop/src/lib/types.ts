@@ -551,6 +551,9 @@ export type AppLanguage = "ko" | "en" | "ja";
  *  arrives — api_key_set says whether one is stored. */
 export interface ProviderConfig {
   model?: string;
+  /** The model the agent's background passes (self-review, settlement and
+   *  the reviews after a turn) run on. Absent or "" means the same as model. */
+  pass_model?: string;
   api_key_set?: boolean;
   base_url?: string;
   /** Per-provider data-sharing consent, epoch ms; absent or 0 means none. */
@@ -561,10 +564,15 @@ export interface ProviderConfig {
  *  the stored key; consented_at 0 revokes. */
 export interface ProviderPatch {
   model?: string;
+  /** "" clears it back to "same as model". */
+  pass_model?: string;
   base_url?: string;
   api_key?: string;
   consented_at?: number;
 }
+
+/** settings.agent_reasoning_effort: "" leaves the model's own default. */
+export type AgentReasoningEffort = "" | "low" | "medium" | "high";
 
 /** providers.list — where each provider stands. Never carries a secret. */
 export interface ProviderStatus {
@@ -576,6 +584,8 @@ export interface ProviderStatus {
   configured: boolean;
   consented: boolean;
   model?: string;
+  /** See ProviderConfig.pass_model. */
+  pass_model?: string;
   base_url?: string;
   /** Where the Claude Code CLI was found; absent when it was not. */
   cli_path?: string;
@@ -1042,6 +1052,9 @@ export interface Settings {
    *  the engine choose for the provider; missing (an older engine) means the
    *  same. */
   agent_history_budget?: number;
+  /** How hard the agent's model thinks before answering. "" or missing is
+   *  the model's own default. */
+  agent_reasoning_effort?: AgentReasoningEffort;
   /** The writer's tool budget (#99): whether the memory tool and the two
    *  skills tools are offered to any agent at all. Both optional and both
    *  default ON, so — like agent_self_review_enabled above — every reader
@@ -1116,6 +1129,7 @@ export interface SettingsPatch {
   char_count_presets?: CharCountPreset[];
   agent_max_tool_calls?: number;
   agent_history_budget?: number;
+  agent_reasoning_effort?: AgentReasoningEffort;
   visual_write_tools_disabled?: boolean;
   memory_tools_enabled?: boolean;
   skill_tools_enabled?: boolean;

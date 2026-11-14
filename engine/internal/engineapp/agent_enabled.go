@@ -233,6 +233,8 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 		ImpactReviewEnabled:  deps.settings.AgentImpactReviewEnabled,
 		MaxToolCalls:         deps.settings.AgentMaxToolCalls,
 		HistoryBudget:        deps.settings.AgentHistoryBudget,
+		ReasoningEffort:      deps.settings.AgentReasoningEffort,
+		PassClient:           deps.src.PassClient,
 		ActiveProvider:       deps.settings.ActiveProvider,
 		// The tool budget (#99), and the ONLY place it is read on the agent's
 		// path. Run calls these once per turn and passes the one answer to

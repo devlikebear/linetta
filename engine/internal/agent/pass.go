@@ -73,7 +73,7 @@ func (s *Service) cliPass(ctx context.Context, st loopState, name string, msgs [
 		return passFailed
 	}
 	defer bridge.close()
-	_, err = st.client.Chat(ctx, msgs, llm.ChatOptions{
+	_, err = st.passer().Chat(ctx, msgs, llm.ChatOptions{
 		OnDelta:              func(string) {},
 		ClaudeCodeMCPServers: []llm.ClaudeCodeMCPServer{bridge.server()},
 		ClaudeCodeHarness:    &llm.ClaudeCodeHarnessOptions{MaxTurns: maxCalls + passTurnsOver},

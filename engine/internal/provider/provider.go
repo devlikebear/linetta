@@ -29,8 +29,11 @@ const codexAuthFile = "auth.json"
 // Resolved is one provider's effective configuration: settings plus the key
 // the settings store keeps outside settings.json.
 type Resolved struct {
-	ID          string
-	Model       string
+	ID    string
+	Model string
+	// PassModel is the model background passes run on, "" for Model's own.
+	// See Source.PassClient.
+	PassModel   string
 	APIKey      string
 	BaseURL     string
 	CodexHome   string // openai-codex only: the directory holding auth.json
@@ -229,6 +232,7 @@ func (s *Source) Resolve(id string) (Resolved, error) {
 	r := Resolved{
 		ID:          id,
 		Model:       cfg.Model,
+		PassModel:   cfg.PassModel,
 		APIKey:      cfg.APIKey,
 		BaseURL:     cfg.BaseURL,
 		ConsentedAt: cfg.ConsentedAt,
@@ -254,9 +258,25 @@ func (s *Source) Resolve(id string) (Resolved, error) {
 // For Codex with no model chosen, the returned Resolved carries the model the
 // account's list picked (see codexModel), so the caller logs what was used.
 func (s *Source) Client(ctx context.Context, id string) (llm.Client, Resolved, error) {
+	return s.client(ctx, id, false)
+}
+
+// PassClient is Client for the built-in agent's background passes — the
+// self-review and the settlement, episode and impact reviews that follow a
+// turn. Same provider, credential and consent; the model is the provider's
+// pass model when the writer chose one, and otherwise the same model Client
+// would use. The returned Resolved's Model is the model actually used.
+func (s *Source) PassClient(ctx context.Context, id string) (llm.Client, Resolved, error) {
+	return s.client(ctx, id, true)
+}
+
+func (s *Source) client(ctx context.Context, id string, pass bool) (llm.Client, Resolved, error) {
 	r, err := s.Resolve(id)
 	if err != nil {
 		return nil, Resolved{}, err
+	}
+	if pass && r.PassModel != "" {
+		r.Model = r.PassModel
 	}
 	if !r.Configured() {
 		return nil, r, &rpc.ReasonError{

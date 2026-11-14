@@ -189,6 +189,8 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 		groups:        groups,
 		language:      s.language(),
 		maxToolCalls:  s.maxToolCalls(),
+		effort:        s.reasoningEffort(),
+		passClient:    s.passClient(ctx, client, resolved),
 		historyBudget: s.replayBudget(resolved.ID),
 		brief:         newBriefGate(schemas),
 		plan:          newPlanGate(s.deps.Plans, schemas),
@@ -224,6 +226,32 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 	return runID, nil
 }
 
+// reasoningEffort is the thinking depth for the turn about to start, "" for
+// the model's own default.
+func (s *Service) reasoningEffort() string {
+	if s.deps.ReasoningEffort == nil {
+		return ""
+	}
+	return strings.TrimSpace(s.deps.ReasoningEffort())
+}
+
+// passClient is the client this turn's background passes run on: the
+// provider's pass model when the writer chose one, otherwise the turn's own
+// client. A pass client that cannot be built costs the passes their lighter
+// model, never the turn — they fall back to the turn's client.
+func (s *Service) passClient(ctx context.Context, turn llm.Client, resolved provider.Resolved) llm.Client {
+	pass := strings.TrimSpace(resolved.PassModel)
+	if s.deps.PassClient == nil || pass == "" || pass == resolved.Model {
+		return turn
+	}
+	c, _, err := s.deps.PassClient(ctx, resolved.ID)
+	if err != nil {
+		logf("agent: pass model %q on %s unavailable, passes use the turn's model: %v", pass, resolved.ID, err)
+		return turn
+	}
+	return c
+}
+
 // maxToolCalls is the cap for the turn about to start.
 func (s *Service) maxToolCalls() int {
 	if s.deps.MaxToolCalls != nil {
@@ -256,8 +284,15 @@ type loopState struct {
 	provider string
 	client   llm.Client
 	model    string
-	session  *toolSession
-	schemas  []llm.ToolSchema
+	// passClient is what the background passes after this turn call (see
+	// Service.passClient), or nil for client — a pass with no turn before it,
+	// the sample check, is set up without one and runs on the writer's model.
+	passClient llm.Client
+	// effort is the turn's thinking depth (settings.agent_reasoning_effort),
+	// read once in Run; "" leaves the model's default.
+	effort  string
+	session *toolSession
+	schemas []llm.ToolSchema
 	// groups is the tool budget this turn was started with (#99), read once
 	// in Run. session was built for it and schemas is the tool list that came
 	// back from it, so a prompt built from this same value is the only way
@@ -281,6 +316,14 @@ type loopState struct {
 	// settlement catch-up (settlement.go). A pointer for the same reason as
 	// brief: the loop and the CLI bridge pass copies of the state around.
 	caughtUp *catchUpOnce
+}
+
+// passer is the client a background pass calls.
+func (st loopState) passer() llm.Client {
+	if st.passClient != nil {
+		return st.passClient
+	}
+	return st.client
 }
 
 // releaseSession drops one reference and logs a close that failed. A helper
@@ -387,8 +430,9 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 	for {
 		clearOldToolResults(msgs)
 		resp, err := st.client.Chat(ctx, msgs, llm.ChatOptions{
-			Tools:   st.schemas,
-			OnDelta: func(text string) { s.streamDelta(st, text) },
+			Tools:           st.schemas,
+			OnDelta:         func(text string) { s.streamDelta(st, text) },
+			ReasoningEffort: st.effort,
 		})
 		if err != nil {
 			s.endWithError(ctx, st, err)
@@ -572,9 +616,10 @@ func (s *Service) wrapUp(ctx context.Context, st loopState, msgs []llm.ChatMessa
 	// tool calls when no tools are declared — and the choice is what forbids
 	// them. A call that comes back anyway is simply not run.
 	resp, err := st.client.Chat(ctx, msgs, llm.ChatOptions{
-		Tools:      st.schemas,
-		ToolChoice: llm.ToolChoiceNone(),
-		OnDelta:    func(text string) { s.streamDelta(st, text) },
+		Tools:           st.schemas,
+		ToolChoice:      llm.ToolChoiceNone(),
+		OnDelta:         func(text string) { s.streamDelta(st, text) },
+		ReasoningEffort: st.effort,
 	})
 	// Whatever streamed is either about to become a transcript row or was cut
 	// off with the call; it is no longer the reply in progress.

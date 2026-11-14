@@ -108,6 +108,15 @@ type Deps struct {
 	// ActiveProvider names the provider the next turn would use, which is how
 	// opening the panel finds a turn's replay budget without building a client.
 	ActiveProvider func() string
+	// PassClient builds the client the background passes after a turn run on
+	// (provider.Source.PassClient): the turn's provider on its pass model.
+	// Asked only when the turn's provider names a pass model different from
+	// its own; nil, or a failure, leaves the passes on the turn's client.
+	PassClient func(ctx context.Context, providerID string) (llm.Client, provider.Resolved, error)
+	// ReasoningEffort reports how hard the model should think
+	// (settings.agent_reasoning_effort): "low", "medium", "high", or "" for
+	// the model's default. Read once at the top of each turn. Nil means "".
+	ReasoningEffort func() string
 	// HistoryBudget reports the writer's replay budget in runes
 	// (settings.agent_history_budget). Zero, or a nil func, leaves the choice
 	// to resolveHistoryBudget. Read once at the top of each turn.
