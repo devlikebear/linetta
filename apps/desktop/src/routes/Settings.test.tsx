@@ -77,6 +77,9 @@ vi.mock("../components/settings/ImageGenSection", () => ({
 vi.mock("../components/settings/WriterStyleSection", () => ({
   WriterStyleSection: () => <div data-testid="writer-style-section-stub">writer-style-section</div>,
 }));
+vi.mock("../components/settings/AgentUsageSection", () => ({
+  AgentUsageSection: () => <div data-testid="agent-usage-section-stub">agent-usage-section</div>,
+}));
 vi.mock("../components/settings/SummarizerSection", () => ({
   SummarizerSection: () => <div data-testid="summarizer-section-stub">summarizer-section</div>,
 }));

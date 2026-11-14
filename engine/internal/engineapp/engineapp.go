@@ -12,6 +12,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/agent"
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
+	"github.com/devlikebear/linetta/engine/internal/agentusage"
 	"github.com/devlikebear/linetta/engine/internal/appversion"
 	"github.com/devlikebear/linetta/engine/internal/backup"
 	"github.com/devlikebear/linetta/engine/internal/beat"
@@ -368,6 +369,12 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	// while the writer has that switched on. Wired before Start: the worker
 	// reads these fields without a lock.
 	summarizerUsage := summarizer.NewUsageRepo(st.DB())
+	// What the agent's requests cost, one row each. Rows past the retention
+	// go at start-up, so the table never outgrows what Settings can show.
+	agentUsage := agentusage.NewRepo(st.DB())
+	if err := agentUsage.Prune(ctx, clock()-agentusage.Retention); err != nil {
+		fmt.Fprintf(os.Stderr, "agent usage: prune: %v\n", err)
+	}
 	summarizerActivity := mcphost.NewActivityRepo(st.DB())
 	summ.WithModel(agent.NewSummaryModel(providerSrc, settingsStore.ActiveProvider),
 		settingsStore.SummarizerProviderEnabled, summarizerUsage,
@@ -476,6 +483,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		notify:   func(method string, params any) { _ = s.Notifier().Notify(method, params) },
 		clock:    clock,
 		logPath:  filepath.Join(home, "logs", "agent.log"),
+		usage:    agentUsage,
 	})
 	a.closers = append(a.closers, stopAgent)
 	a.agentCtrl = agentCtrl
@@ -721,6 +729,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	}))
 	s.Handle("continuity.sample_check", handlers.SampleCheck(continuityRepo, ledgerRepo, agentCtrl, clock))
 	s.Handle("agent.undo", handlers.AgentUndo(agentCtrl))
+	s.Handle("agent.usage", handlers.AgentUsage(agentUsage, clock))
 	s.Handle("snapshots.list_for_node", handlers.ListSnapshotsForNode(snaps))
 	s.Handle("snapshots.compare", handlers.CompareSnapshots(snaps))
 	s.Handle("snapshots.restore", handlers.RestoreSnapshot(nodes, snaps, clock))

@@ -1,5 +1,6 @@
 import type { CharacterVisualSheet, ReferenceImageMeta, ArtStyle, StyleApproveMode, StyleCheckResult, StyleDraftState, StyleRules, StyleRulesState, WriterStyleRules, WriterStyleState } from "./types";
 import type { ArchivedNote } from "./types";
+import type { AgentUsageSummary } from "./types";
 import type { WorksGalleryPage } from "./types";
 import type { ManuscriptPages, SubmissionReport } from "./types";
 import type { FocusState, SceneIntent, SceneIntentState } from "./types";
@@ -636,6 +637,8 @@ export const agent = {
   /** The panel's chips: the engine's MCP prompts, in the app's language and
    *  only those whose tools the agent has (#133). */
   prompts: () => rpcCall<{ prompts: AgentPrompt[] | null }>("agent.prompts"),
+  /** What the agent's requests cost over the last `days` days (30 unset). */
+  usage: (days?: number) => rpcCall<AgentUsageSummary>("agent.usage", { days }),
   /** Starts the conversation over from here. Nothing is deleted. */
   startFresh: (projectId: string) =>
     rpcCall<{ ok: true }>("agent.start_fresh", { project_id: projectId }),

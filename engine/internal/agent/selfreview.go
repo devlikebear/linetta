@@ -213,6 +213,7 @@ func (s *Service) boundedPass(ctx context.Context, st loopState, name string, ms
 		}
 		rounds++
 		resp, err := st.passer().Chat(ctx, msgs, llm.ChatOptions{Tools: tools, ReasoningEffort: st.effort})
+		s.recordUsage(ctx, st, usageKind(name), st.passerModel(), resp.Usage)
 		if err != nil {
 			// The writer asked for none of this and is not waiting on it, so a
 			// failed review is a log line, never an agent.error under a turn

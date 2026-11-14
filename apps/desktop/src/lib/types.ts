@@ -496,6 +496,26 @@ export interface SummarizerUsage {
   output: number;
 }
 
+/** One kind of agent request on one model, summed (agent.usage). The cache
+ *  fields are the provider's split: `cached` is part of `input`, `cache_read`
+ *  and `cache_write` come on top of it. */
+export interface AgentUsageRow {
+  kind: string;
+  provider: string;
+  model: string;
+  calls: number;
+  input: number;
+  output: number;
+  cached: number;
+  cache_read: number;
+  cache_write: number;
+}
+
+export interface AgentUsageSummary {
+  since: number;
+  rows: AgentUsageRow[];
+}
+
 export interface McpActivityEntry {
   id: string;
   at: number;

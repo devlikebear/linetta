@@ -73,11 +73,12 @@ func (s *Service) cliPass(ctx context.Context, st loopState, name string, msgs [
 		return passFailed
 	}
 	defer bridge.close()
-	_, err = st.passer().Chat(ctx, msgs, llm.ChatOptions{
+	resp, err := st.passer().Chat(ctx, msgs, llm.ChatOptions{
 		OnDelta:              func(string) {},
 		ClaudeCodeMCPServers: []llm.ClaudeCodeMCPServer{bridge.server()},
 		ClaudeCodeHarness:    &llm.ClaudeCodeHarnessOptions{MaxTurns: maxCalls + passTurnsOver},
 	})
+	s.recordUsage(ctx, st, usageKind(name), st.passerModel(), resp.Usage)
 	if err != nil {
 		// As in boundedPass: the writer is not waiting on this, so it is a log
 		// line, never an agent.error under a turn they have moved on from.

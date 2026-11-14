@@ -17,6 +17,7 @@ import { BackgroundSection } from "../components/settings/BackgroundSection";
 import { McpSection } from "../components/settings/McpSection";
 import { MemorySection } from "../components/settings/MemorySection";
 import { ProviderSection } from "../components/settings/ProviderSection";
+import { AgentUsageSection } from "../components/settings/AgentUsageSection";
 import { SummarizerSection } from "../components/settings/SummarizerSection";
 import { WriterStyleSection } from "../components/settings/WriterStyleSection";
 import { ImageGenSection } from "../components/settings/ImageGenSection";
@@ -816,6 +817,8 @@ export function Settings() {
             )}
 
             {tab === "agent" && agentPanes && <MemorySection />}
+
+            {tab === "agent" && agentPanes && <AgentUsageSection />}
 
             {tab === "agent" && agentPanes && (
             <>

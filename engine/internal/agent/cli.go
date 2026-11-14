@@ -258,6 +258,7 @@ func (s *Service) loopCLI(ctx context.Context, st loopState) {
 		// ignores the "stop" answer from going on forever.
 		ClaudeCodeHarness: &llm.ClaudeCodeHarnessOptions{MaxTurns: st.maxToolCalls + 8},
 	})
+	s.recordUsage(ctx, st, usageKindTurn, st.model, resp.Usage)
 
 	turn.mu.Lock()
 	// Nothing streamed but there is a reply: the CLI said it only in its
@@ -293,7 +294,8 @@ func (s *Service) loopCLI(ctx context.Context, st loopState) {
 	}
 	s.notify("agent.done", donePayload{
 		RunID: st.runID, ProjectID: st.projectID, Seq: s.runs.next(st.runID), Model: st.model,
-		Usage: usagePayload{Input: resp.Usage.InputTokens, Output: resp.Usage.OutputTokens},
+		Usage: usagePayload{Input: resp.Usage.InputTokens, Output: resp.Usage.OutputTokens,
+			CacheRead: resp.Usage.CacheReadTokens, CacheWrite: resp.Usage.CacheWriteTokens},
 	})
 	// No self-review: a second CLI turn the writer did not ask for is a cost on
 	// their Claude plan they cannot see. The passes below are the writer's own

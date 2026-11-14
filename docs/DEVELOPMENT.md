@@ -382,6 +382,26 @@ top-level summaries for a synopsis.
 - Engine shutdown cancels a request in flight and waits for the worker, which
   then writes nothing.
 
+## Agent usage
+
+Every request the built-in agent sends leaves one row in `agent_usage`. That
+includes the turn's round trips, its wrap-up, and each background pass after
+it. A row holds:
+
+- the run, the work, `kind`, the provider and the model;
+- the tokens as tars `llm.Usage` reports them. `cached_tokens` is part of
+  input (OpenAI style). `cache_read_tokens` and `cache_write_tokens` are on top
+  of input (Anthropic style).
+
+`kind` is `turn` for the writer's own turn. For a pass it is the pass's log
+name with `_` in place of spaces and hyphens, for example `self_review`,
+`settlement_catch_up` or `sample_check`. A pass row names the pass model when
+one is set.
+
+Settings → agent shows the last 30 days through `agent.usage`, by kind and
+model, with the cache hit rate. Rows older than 90 days are pruned at engine
+start. The table stays on the device and is not part of the vault.
+
 ## Versioning and builds
 
 Keep all app version surfaces aligned with:

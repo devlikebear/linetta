@@ -173,6 +173,7 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 		return "", err
 	}
 
+	passClient, passModel := s.passClient(ctx, client, resolved)
 	st := loopState{
 		runID: runID,
 		// The trimmed id — the same value runs.start and appendUser key on,
@@ -190,7 +191,8 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 		language:      s.language(),
 		maxToolCalls:  s.maxToolCalls(),
 		effort:        s.reasoningEffort(),
-		passClient:    s.passClient(ctx, client, resolved),
+		passClient:    passClient,
+		passModel:     passModel,
 		historyBudget: s.replayBudget(resolved.ID),
 		brief:         newBriefGate(schemas),
 		plan:          newPlanGate(s.deps.Plans, schemas),
@@ -238,18 +240,22 @@ func (s *Service) reasoningEffort() string {
 // passClient is the client this turn's background passes run on: the
 // provider's pass model when the writer chose one, otherwise the turn's own
 // client. A pass client that cannot be built costs the passes their lighter
-// model, never the turn — they fall back to the turn's client.
-func (s *Service) passClient(ctx context.Context, turn llm.Client, resolved provider.Resolved) llm.Client {
+// model, never the turn — they fall back to the turn's client. The model it
+// names is the one the usage rows record for the passes.
+func (s *Service) passClient(ctx context.Context, turn llm.Client, resolved provider.Resolved) (llm.Client, string) {
 	pass := strings.TrimSpace(resolved.PassModel)
 	if s.deps.PassClient == nil || pass == "" || pass == resolved.Model {
-		return turn
+		return turn, resolved.Model
 	}
-	c, _, err := s.deps.PassClient(ctx, resolved.ID)
+	c, built, err := s.deps.PassClient(ctx, resolved.ID)
 	if err != nil {
 		logf("agent: pass model %q on %s unavailable, passes use the turn's model: %v", pass, resolved.ID, err)
-		return turn
+		return turn, resolved.Model
 	}
-	return c
+	if built.Model != "" {
+		pass = built.Model
+	}
+	return c, pass
 }
 
 // maxToolCalls is the cap for the turn about to start.
@@ -288,6 +294,9 @@ type loopState struct {
 	// Service.passClient), or nil for client — a pass with no turn before it,
 	// the sample check, is set up without one and runs on the writer's model.
 	passClient llm.Client
+	// passModel names the model passClient runs, for the usage rows; "" means
+	// the turn's model.
+	passModel string
 	// effort is the turn's thinking depth (settings.agent_reasoning_effort),
 	// read once in Run; "" leaves the model's default.
 	effort  string
@@ -373,9 +382,21 @@ type toolPayload struct {
 	Ask *askCard `json:"ask,omitempty"`
 }
 
+// usagePayload is the turn's own token count on agent.done. The cache fields
+// are the provider's split (see agentusage.Entry): reads and writes on top of
+// input.
 type usagePayload struct {
-	Input  int `json:"input"`
-	Output int `json:"output"`
+	Input      int `json:"input"`
+	Output     int `json:"output"`
+	CacheRead  int `json:"cache_read,omitempty"`
+	CacheWrite int `json:"cache_write,omitempty"`
+}
+
+func (u *usagePayload) add(r llm.Usage) {
+	u.Input += r.InputTokens
+	u.Output += r.OutputTokens
+	u.CacheRead += r.CacheReadTokens
+	u.CacheWrite += r.CacheWriteTokens
 }
 
 type donePayload struct {
@@ -438,8 +459,8 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 			s.endWithError(ctx, st, err)
 			return
 		}
-		usage.Input += resp.Usage.InputTokens
-		usage.Output += resp.Usage.OutputTokens
+		usage.add(resp.Usage)
+		s.recordUsage(ctx, st, usageKindTurn, st.model, resp.Usage)
 
 		if text := strings.TrimSpace(resp.Message.Content); text != "" {
 			// Written with a context that survives the turn's own
@@ -628,6 +649,7 @@ func (s *Service) wrapUp(ctx context.Context, st loopState, msgs []llm.ChatMessa
 		logf("wrap-up for turn %s: %v", st.runID, err)
 		return
 	}
+	s.recordUsage(ctx, st, usageKindTurn, st.model, resp.Usage)
 	if strings.TrimSpace(resp.Message.Content) == "" {
 		return
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/agent"
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
+	"github.com/devlikebear/linetta/engine/internal/agentusage"
 	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/ledger"
 	"github.com/devlikebear/linetta/engine/internal/mcphost"
@@ -41,6 +42,7 @@ type agentDeps struct {
 	notify   func(method string, params any)
 	clock    func() int64
 	logPath  string
+	usage    *agentusage.Repo
 }
 
 // agentMemorySource adapts *agentmemory.Repo to agent.MemorySource. The two
@@ -235,6 +237,7 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 		HistoryBudget:        deps.settings.AgentHistoryBudget,
 		ReasoningEffort:      deps.settings.AgentReasoningEffort,
 		PassClient:           deps.src.PassClient,
+		Usage:                deps.usage,
 		ActiveProvider:       deps.settings.ActiveProvider,
 		// The tool budget (#99), and the ONLY place it is read on the agent's
 		// path. Run calls these once per turn and passes the one answer to
