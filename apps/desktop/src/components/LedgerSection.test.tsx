@@ -68,6 +68,24 @@ describe("LedgerSection", () => {
     expect(screen.getByText("until 3화")).toBeTruthy();
   });
 
+  it("says where a promise was paid and opens that scene", async () => {
+    mocks.list.mockResolvedValue({
+      entries: [entry({ id: "l5", status: "paid", paid_node_id: "n9", paid_quote: "문이 열렸다" })],
+      parts: [],
+      labels: { n1: "3화", n9: "9화" },
+    });
+    const onOpenNode = vi.fn();
+    const onOpenMap = vi.fn();
+    render(<I18nProvider><LedgerSection projectId="p" onOpenNode={onOpenNode} onOpenMap={onOpenMap} /></I18nProvider>);
+    fireEvent.click(await screen.findByRole("tab", { name: "Closed" }));
+    const paid = await screen.findByRole("button", { name: "Paid in 9화" });
+    expect(paid.getAttribute("title")).toBe("문이 열렸다");
+    fireEvent.click(paid);
+    expect(onOpenNode).toHaveBeenCalledWith("n9");
+    fireEvent.click(screen.getByTestId("ledger-open-map"));
+    expect(onOpenMap).toHaveBeenCalled();
+  });
+
   it("sets how far a promise reaches", async () => {
     await renderSection();
     const reach = (await screen.findAllByLabelText("Reach"))[0];

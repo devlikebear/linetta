@@ -181,6 +181,14 @@ planted after the open scene appears. If a change to the outline deletes a
 planned episode, its plan moves to the ledger's cut plans. The ledger and part
 arcs are in backups and travel with a restored work.
 
+**Foreshadowing map** (the ledger's button, or the command palette) lays what
+the work owes on its episode axis: one row per promise, running gag or reader's
+question, from the episode it was planted in to where it was paid, dropped, or
+— while still open — the latest written episode. Its due episode is marked, and
+a row whose due has passed is drawn in red, first in the list. Click a point and
+the scene opens with that entry's quote lit. The ledger list itself now says
+where each paid promise was paid.
+
 ### Reviewing finished episodes
 
 The agent reads an episode as a new reader before handing it over. "Review this

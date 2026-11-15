@@ -8,6 +8,7 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/ledger"
 	"github.com/devlikebear/linetta/engine/internal/node"
+	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 )
 
@@ -22,6 +23,35 @@ func ledgerError(err error) error {
 }
 
 // ListLedger returns a handler for ledger.list: every entry and part arc.
+// LedgerTimeline returns a handler for ledger.timeline (#386 A): what the
+// work owes, on its episode axis. kinds narrows it (the tracked kinds when
+// empty); node_id marks the episode the writer has open.
+func LedgerTimeline(repo *ledger.Repo, nodes *node.Repo, projects *project.Repo) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var in struct {
+			ProjectID string   `json:"project_id"`
+			Kinds     []string `json:"kinds,omitempty"`
+			NodeID    string   `json:"node_id,omitempty"`
+		}
+		if err := json.Unmarshal(params, &in); err != nil || strings.TrimSpace(in.ProjectID) == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: errIDRequired}
+		}
+		p, err := projects.Get(ctx, in.ProjectID)
+		if err != nil {
+			return nil, err
+		}
+		entries, err := repo.List(ctx, ledger.Filter{ProjectID: p.ID})
+		if err != nil {
+			return nil, ledgerError(err)
+		}
+		all, err := nodes.ListByProject(ctx, p.ID)
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(ledger.BuildTimeline(entries, all, p.OutlinePreset, in.Kinds, in.NodeID))
+	}
+}
+
 func ListLedger(repo *ledger.Repo, nodes *node.Repo) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var in struct {

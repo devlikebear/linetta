@@ -6,7 +6,7 @@ import type { WorksGalleryPage } from "./types";
 import type { ManuscriptPages, SubmissionReport } from "./types";
 import type { FocusState, SceneIntent, SceneIntentState } from "./types";
 import type { ContinuityCheck, ContinuityObservation, ContinuityOpenCounts, ContinuityStatus } from "./types";
-import type { KnowsAt, LedgerEntry, LedgerKind, LedgerState, LedgerStatus, PartArc, PendingSettlement, StoryTime } from "./types";
+import type { KnowsAt, LedgerEntry, LedgerKind, LedgerState, LedgerStatus, LedgerTimeline, PartArc, PendingSettlement, StoryTime } from "./types";
 import type {
   AcceptSuggestionsResult,
   ExtractionEstimate,
@@ -838,6 +838,10 @@ export const direction = {
 /** The work's ledger and part arcs (internal/ledger). */
 export const ledger = {
   list: (projectId: string) => rpcCall<LedgerState>("ledger.list", { project_id: projectId }),
+  /** The owed entries on the episode axis (#386 A); nodeId marks the open
+   *  scene's episode. */
+  timeline: (projectId: string, nodeId?: string, kinds?: LedgerKind[]) =>
+    rpcCall<LedgerTimeline>("ledger.timeline", { project_id: projectId, node_id: nodeId, kinds }),
   /** Scenes whose current prose the settlement pass has not recorded yet. */
   pendingSettlement: (projectId: string) =>
     rpcCall<PendingSettlement>("ledger.pending_settlement", { project_id: projectId }),

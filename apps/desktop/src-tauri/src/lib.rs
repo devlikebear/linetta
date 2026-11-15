@@ -103,6 +103,7 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
     "ledger.set_arc",
     "ledger.set_pinned",
     "ledger.story_time",
+    "ledger.timeline",
     "manuscript.replace_apply",
     "manuscript.replace_preview",
     "manuscript.search",

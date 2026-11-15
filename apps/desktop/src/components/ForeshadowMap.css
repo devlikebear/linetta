@@ -1,0 +1,73 @@
+.foreshadow-map {
+  width: min(1100px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.foreshadow-map .fm-head { display: flex; align-items: center; gap: 12px; }
+.foreshadow-map .fm-head h2 { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 18px; }
+.foreshadow-map .fm-counts { flex: 1; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.foreshadow-map .fm-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.foreshadow-map .fm-filters select { font: inherit; font-size: 12px; }
+.foreshadow-map .fm-empty { color: var(--muted); font-size: 13px; padding: 24px 0; text-align: center; }
+.foreshadow-map .fm-chart {
+  display: flex;
+  overflow: auto;
+  min-height: 120px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.foreshadow-map .fm-names {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-right: 1px solid var(--line-soft);
+}
+.foreshadow-map .fm-name {
+  border: 0;
+  background: transparent;
+  padding: 0 10px;
+  text-align: left;
+  font-size: 12px;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.foreshadow-map .fm-name.is-selected, .foreshadow-map .fm-name:hover { background: var(--accent-tint); }
+.foreshadow-map .fm-svg { flex: none; display: block; }
+.foreshadow-map .fm-part-line { stroke: var(--line); stroke-dasharray: 2 3; }
+.foreshadow-map .fm-part-label { font-size: 11px; fill: var(--ink-soft); }
+.foreshadow-map .fm-tick { font-size: 10px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.foreshadow-map .fm-current { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.foreshadow-map .fm-span { stroke: var(--ink-soft); stroke-width: 2; }
+.foreshadow-map .fm-paid .fm-span { stroke: var(--accent-deep); }
+.foreshadow-map .fm-dropped .fm-span { stroke: var(--muted); stroke-dasharray: 3 3; }
+.foreshadow-map .is-overdue .fm-span { stroke: var(--danger); }
+.foreshadow-map .fm-planted { fill: var(--surface); stroke: var(--ink); stroke-width: 2; }
+.foreshadow-map .fm-paid { fill: var(--accent-deep); }
+.foreshadow-map .fm-due { fill: var(--surface); stroke: var(--ink-soft); stroke-width: 1.5; }
+.foreshadow-map .is-overdue .fm-due { stroke: var(--danger); }
+.foreshadow-map .fm-arrow { font-size: 12px; fill: var(--ink-soft); }
+.foreshadow-map .is-overdue .fm-arrow { fill: var(--danger); }
+.foreshadow-map text.fm-dropped { font-size: 13px; fill: var(--muted); }
+.foreshadow-map .fm-marker { cursor: pointer; }
+.foreshadow-map .fm-marker:focus-visible { outline: 2px solid var(--accent); }
+.foreshadow-map .is-selected .fm-span { stroke-width: 3.5; }
+.foreshadow-map .fm-legend { margin: 0; font-size: 11px; color: var(--muted); }
+.foreshadow-map .fm-detail {
+  border-top: 1px solid var(--line-soft);
+  padding-top: 8px;
+  font-size: 13px;
+}
+.foreshadow-map .fm-detail p { margin: 0 0 6px; }
+.foreshadow-map .fm-detail-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.foreshadow-map .fm-overdue-tag { color: var(--danger); font-size: 12px; }
+.foreshadow-map .fm-open-for { font-size: 12px; color: var(--muted); }

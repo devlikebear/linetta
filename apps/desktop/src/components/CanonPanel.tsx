@@ -41,6 +41,8 @@ interface Props {
   onOpenWriterStyle?: () => void;
   /** Opens the Fact Book at a continuity observation's fact ref. */
   onOpenFact?: (factId: string) => void;
+  /** Opens the foreshadowing map (#386 A). */
+  onOpenForeshadowMap?: () => void;
   /** Opens a scene at a continuity observation's cited paragraph. */
   onRevealPassage?: (target: PassageTarget) => void;
   /** Opens the suggestions inbox (story-assist Phase 3). Omitted entirely
@@ -55,7 +57,7 @@ interface Props {
 
 export function CanonPanel({
   projectId, onOpenEntity, onClose, refreshKey = 0, nodeId, onOpenNode, onBeforeStyleCheck, onOpenWriterStyle, onOpenFact,
-  onOpenProposals, continuityFocusRequest, onRevealPassage,
+  onOpenProposals, continuityFocusRequest, onRevealPassage, onOpenForeshadowMap,
 }: Readonly<Props>) {
   const { t } = useI18n();
   const [all, setAll] = useState<Entity[]>([]);
@@ -156,7 +158,7 @@ export function CanonPanel({
           onOpenWriterStyle={onOpenWriterStyle}
         />
         <SettlementPending key={`settlement-${projectId}`} projectId={projectId} refreshKey={refreshKey} onOpenNode={onOpenNode} />
-        <LedgerSection key={`ledger-${projectId}`} projectId={projectId} nodeId={nodeId} onOpenNode={onOpenNode} />
+        <LedgerSection key={`ledger-${projectId}`} projectId={projectId} nodeId={nodeId} onOpenNode={onOpenNode} onOpenMap={onOpenForeshadowMap} />
         <ContinuitySection
           key={`continuity-${projectId}`}
           projectId={projectId}

@@ -598,6 +598,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("direction.get_scene_intent", handlers.GetSceneIntent(directionRepo))
 	s.Handle("direction.set_scene_intent", handlers.SetSceneIntent(directionRepo, clock))
 	s.Handle("ledger.list", handlers.ListLedger(ledgerRepo, nodes))
+	s.Handle("ledger.timeline", handlers.LedgerTimeline(ledgerRepo, nodes, projects))
 	s.Handle("ledger.save", handlers.SaveLedgerEntry(ledgerRepo, clock))
 	s.Handle("ledger.set_pinned", handlers.SetLedgerPinned(ledgerRepo, clock))
 	s.Handle("ledger.knows_at", handlers.KnowsAt(ledgerRepo, nodes, mentions))

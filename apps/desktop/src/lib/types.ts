@@ -1808,6 +1808,37 @@ export interface StyleRulesState extends StyleRules {
   writer_notes?: string;
 }
 export type LedgerKind = "promise" | "gag" | "question" | "decision" | "number" | "timeline" | "knowledge" | "cut_plan";
+
+/** ledger.timeline (#386 A). Mirrors ledger.Timeline (timeline.go): episode
+ *  ordinals are 1-based and computed by the engine. */
+export interface LedgerTimelinePoint {
+  episode: number;
+  node_id: string;
+  quote?: string;
+}
+
+export interface LedgerTimelineEntry {
+  id: string;
+  kind: string;
+  subject?: string;
+  body: string;
+  status: string;
+  planted?: LedgerTimelinePoint;
+  due?: LedgerTimelinePoint;
+  paid?: LedgerTimelinePoint;
+  overdue?: boolean;
+  open_for?: number;
+}
+
+export interface LedgerTimeline {
+  episodes: { ordinal: number; node_id: string; label: string; title?: string }[];
+  parts: { node_id: string; label: string; title?: string; from: number; to: number }[];
+  /** The last episode with any prose; 0 when none. */
+  latest: number;
+  /** The open scene's episode; 0 or absent when unknown. */
+  current?: number;
+  entries: LedgerTimelineEntry[];
+}
 export type LedgerStatus = "open" | "paid" | "dropped";
 export interface LedgerEntry {
   id: string;
