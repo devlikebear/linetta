@@ -336,27 +336,13 @@ type tree struct {
 }
 
 func newTree(all []node.Node) tree {
-	t := tree{byID: make(map[string]node.Node, len(all)), index: map[string]int{}}
-	children := map[string][]node.Node{}
+	t := tree{byID: make(map[string]node.Node, len(all)), index: map[string]int{}, leaves: node.ReadingOrder(all)}
 	for _, n := range all {
 		t.byID[n.ID] = n
-		key := ""
-		if n.ParentID != nil {
-			key = *n.ParentID
-		}
-		children[key] = append(children[key], n)
 	}
-	var walk func(string)
-	walk = func(parent string) {
-		for _, c := range children[parent] {
-			if c.Kind == node.KindLeaf {
-				t.index[c.ID] = len(t.leaves)
-				t.leaves = append(t.leaves, c)
-			}
-			walk(c.ID)
-		}
+	for i, n := range t.leaves {
+		t.index[n.ID] = i
 	}
-	walk("")
 	return t
 }
 

@@ -2,8 +2,12 @@ package proposals
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"github.com/devlikebear/linetta/engine/internal/node"
+	"github.com/devlikebear/linetta/engine/internal/relationship"
+	"github.com/devlikebear/linetta/engine/internal/storyops"
 	"github.com/devlikebear/linetta/engine/internal/style"
 )
 
@@ -86,4 +90,25 @@ func (l refLookup) SceneParagraphs(nodeID string) ([]string, bool) {
 		return []string{}, true
 	}
 	return style.Paragraphs(*n.ContentDoc), true
+}
+
+// relationshipChange checks a change_relationship item: the relationship is
+// this work's and still current, and node_id names the scene it changes in.
+// An inbox item has no current scene to fall back on, so the scene is
+// required here where linetta_apply_story_ops would take the open one.
+func (l refLookup) relationshipChange(op storyops.Op) error {
+	rel, err := relationship.NewRepo(l.s.store).Get(l.ctx, op.RelationshipID)
+	if err != nil || rel.ProjectID != l.projectID {
+		return fmt.Errorf("relationship_id %q not found in this work; find it with linetta_list_characters include_relationships", op.RelationshipID)
+	}
+	if rel.UntilNodeID != nil {
+		return relationship.ErrAlreadyChanged
+	}
+	if op.NodeID == "" {
+		return errors.New("change_relationship needs node_id, the scene the change happens in")
+	}
+	if !l.IsLeafNode(op.NodeID) {
+		return fmt.Errorf("node_id %q is not a leaf scene in this work", op.NodeID)
+	}
+	return nil
 }

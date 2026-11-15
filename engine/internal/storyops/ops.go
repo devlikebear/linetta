@@ -23,7 +23,7 @@ import (
 // and ValidOpTypes in step (a mcphost test enforces the pairing), or agents
 // are back to guessing names (#73).
 type Op struct {
-	Type string `json:"op" jsonschema:"one of: add_beat, close_thread, create_entity, create_fact_card, create_outline_node, create_relationship, create_scene, create_thread, delete_beat, delete_entity, delete_fact_card, delete_outline_node, delete_relationship, delete_thread, move_outline_node, remember, rename_outline_node, reopen_thread, set_outline, set_scene_text, update_beat, update_entity, update_fact_card, update_relationship, update_thread"`
+	Type string `json:"op" jsonschema:"one of: add_beat, close_thread, create_entity, create_fact_card, create_outline_node, change_relationship, create_relationship, create_scene, create_thread, delete_beat, delete_entity, delete_fact_card, delete_outline_node, delete_relationship, delete_thread, move_outline_node, remember, rename_outline_node, reopen_thread, set_outline, set_scene_text, update_beat, update_entity, update_fact_card, update_relationship, update_thread"`
 
 	// create_thread
 	// The world's delete ops (delete_entity, delete_fact_card,
@@ -78,7 +78,11 @@ type Op struct {
 	ParentNodeRef string `json:"parent_node_ref,omitempty"`
 	Direction     string `json:"direction,omitempty"`
 
-	// create_relationship / update_relationship / delete_relationship
+	// create_relationship / update_relationship / delete_relationship /
+	// change_relationship. change_relationship turns relationship_id into
+	// label from the scene node_id/node_ref (the current scene when left
+	// out) on; create_relationship with a scene starts the relationship
+	// there. Quote is the line in that scene the change rests on.
 	RelationshipID string `json:"relationship_id,omitempty"`
 	From           string `json:"from,omitempty"`
 	FromRef        string `json:"from_ref,omitempty"`
@@ -86,6 +90,7 @@ type Op struct {
 	ToRef          string `json:"to_ref,omitempty"`
 	Notes          string `json:"notes,omitempty"`
 	InverseLabel   string `json:"inverse_label,omitempty"`
+	Quote          string `json:"quote,omitempty"`
 
 	// create_fact_card / update_fact_card / delete_fact_card
 	FactID  string             `json:"fact_id,omitempty"`
@@ -122,6 +127,7 @@ var knownOps = map[string]bool{
 	"remember":       true,
 	"create_entity":  true, "update_entity": true, "delete_entity": true,
 	"create_relationship": true, "update_relationship": true, "delete_relationship": true,
+	"change_relationship": true,
 	"create_scene":        true,
 	"create_outline_node": true,
 	"rename_outline_node": true,
@@ -332,6 +338,10 @@ func ValidateProposal(p Proposal) error {
 		case "delete_relationship":
 			if op.RelationshipID == "" {
 				return fmt.Errorf("op[%d] delete_relationship: relationship_id required", i)
+			}
+		case "change_relationship":
+			if op.RelationshipID == "" || strings.TrimSpace(op.Label) == "" {
+				return fmt.Errorf("op[%d] change_relationship: relationship_id and label (the new one) required", i)
 			}
 		case "create_relationship":
 			if strings.TrimSpace(op.Label) == "" {

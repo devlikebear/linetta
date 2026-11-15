@@ -51,6 +51,7 @@ function groupKindFor(opType: ProposalOpType, op: { kind?: string }): GroupKind 
           return "character";
       }
     case "create_relationship":
+    case "change_relationship":
       return "relationship";
     case "create_fact_card":
       return "fact";
@@ -77,6 +78,7 @@ function editableFields(opType: ProposalOpType): Array<{ key: keyof ProposalOp; 
         { key: "summary", labelKey: "proposals.edit.summary", multiline: true },
       ];
     case "create_relationship":
+    case "change_relationship":
       return [{ key: "label", labelKey: "proposals.edit.label" }];
     case "create_fact_card":
       return [

@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/devlikebear/linetta/engine/internal/ledger"
+	"github.com/devlikebear/linetta/engine/internal/node"
+	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/storyops"
 )
 
@@ -82,6 +84,25 @@ func (s *Service) Summarize(ctx context.Context, op storyops.Op, siblings []Item
 			to = op.ToRef
 		}
 		return fmt.Sprintf("관계: %s → %s (%s)", resolveEntity(from), resolveEntity(to), op.Label)
+	case "change_relationship":
+		rel, err := relationship.NewRepo(s.store).Get(ctx, op.RelationshipID)
+		if err != nil {
+			return fmt.Sprintf("관계 변화: %s", op.Label)
+		}
+		was := rel.Label
+		scene := ""
+		if s.nodes != nil {
+			if n, err := s.nodes.Get(ctx, op.NodeID); err == nil {
+				scene = n.Title
+				if label := node.DisplayLabel(n.Label, "ko"); label != "" {
+					scene = label
+				}
+			}
+		}
+		if scene != "" {
+			return fmt.Sprintf("관계 변화: %s → %s (%s → %s, %s부터)", resolveEntity(rel.FromID), resolveEntity(rel.ToID), was, op.Label, scene)
+		}
+		return fmt.Sprintf("관계 변화: %s → %s (%s → %s)", resolveEntity(rel.FromID), resolveEntity(rel.ToID), was, op.Label)
 	case "create_fact_card":
 		return fmt.Sprintf("팩트: %s", op.Claim)
 	case "create_thread":

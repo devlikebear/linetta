@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 )
@@ -49,17 +50,35 @@ func CreatePairRelationship(repo *relationship.Repo) rpc.Handler {
 }
 
 type listByEntityParams struct {
-	EntityID string `json:"entity_id"`
+	EntityID       string `json:"entity_id"`
+	IncludeHistory bool   `json:"include_history,omitempty"`
+}
+
+// currentAt narrows rels to how they stand at the end of the story unless
+// the caller asked for history too: a relationship changed in a later
+// episode (#386) is one relationship to a list that does not show when.
+func currentAt(ctx context.Context, nodes *node.Repo, projectID string, rels []relationship.Relationship, history bool) ([]relationship.Relationship, error) {
+	if history || nodes == nil || len(rels) == 0 {
+		return rels, nil
+	}
+	all, err := nodes.ListByProject(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	return relationship.AsOf(rels, all, ""), nil
 }
 
 // ListRelationshipsByEntity handles relationships.list_by_entity.
-func ListRelationshipsByEntity(repo *relationship.Repo) rpc.Handler {
+func ListRelationshipsByEntity(repo *relationship.Repo, nodes *node.Repo) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var p listByEntityParams
 		if err := json.Unmarshal(params, &p); err != nil || p.EntityID == "" {
 			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "entity_id required"}
 		}
 		list, err := repo.ListByEntity(ctx, p.EntityID)
+		if err == nil && len(list) > 0 {
+			list, err = currentAt(ctx, nodes, list[0].ProjectID, list, p.IncludeHistory)
+		}
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
@@ -71,7 +90,8 @@ func ListRelationshipsByEntity(repo *relationship.Repo) rpc.Handler {
 }
 
 type listRelationshipsParams struct {
-	ProjectID string `json:"project_id"`
+	ProjectID      string `json:"project_id"`
+	IncludeHistory bool   `json:"include_history,omitempty"`
 }
 
 // ListRelationships handles relationships.list — every relationship in a work.
@@ -79,13 +99,16 @@ type listRelationshipsParams struct {
 // The per-entity list answers "who is this one tied to"; a browser showing the
 // whole cast at once needs the other question, "how connected is each of them",
 // and asking it one entity at a time is a round trip per row.
-func ListRelationships(repo *relationship.Repo) rpc.Handler {
+func ListRelationships(repo *relationship.Repo, nodes *node.Repo) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var p listRelationshipsParams
 		if err := json.Unmarshal(params, &p); err != nil || p.ProjectID == "" {
 			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project_id required"}
 		}
 		list, err := repo.ListByProject(ctx, p.ProjectID)
+		if err == nil {
+			list, err = currentAt(ctx, nodes, p.ProjectID, list, p.IncludeHistory)
+		}
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}

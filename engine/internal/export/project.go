@@ -200,9 +200,11 @@ func ExportProject(ctx context.Context, src Sources, projectID, language string)
 		}
 		sb.WriteString("\n")
 	}
-	if len(rels) > 0 {
+	// The appendix reads how things stand at the end; the frontmatter keeps
+	// every row a change ended, with where it held (#386).
+	if current := relationship.AsOf(rels, flat, ""); len(current) > 0 {
 		sb.WriteString("## " + relationshipsHeading + "\n\n")
-		for _, rel := range rels {
+		for _, rel := range current {
 			line := fmt.Sprintf("- **%s** → **%s**: %s",
 				entityNames[rel.FromID], entityNames[rel.ToID], rel.Label)
 			if rel.Notes != "" {
@@ -358,6 +360,11 @@ func buildMetadata(p project.Project, ents []entity.Entity, rels []relationship.
 			ToName:   entityNames[rel.ToID],
 			Label:    rel.Label,
 			Notes:    rel.Notes,
+
+			SinceNodeID:  deref(rel.SinceNodeID),
+			UntilNodeID:  deref(rel.UntilNodeID),
+			SinceQuote:   rel.SinceQuote,
+			SupersedesID: deref(rel.SupersedesID),
 		})
 	}
 	return mdmeta.Normalize(meta), entityNames
@@ -435,4 +442,11 @@ func slugify(s string) string {
 // folder and Git sync. Manual exports keep the shorter SuggestedFilename.
 func SyncFilename(title, projectID string) string {
 	return slugify(title) + "--" + slugify(projectID) + ".md"
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

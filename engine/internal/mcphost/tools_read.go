@@ -263,6 +263,12 @@ type relationshipRow struct {
 	Label          string `json:"label"`
 	Notes          string `json:"notes,omitempty"`
 	Paired         bool   `json:"paired,omitempty"` // has an inverse row; deleting either removes both
+	// Where it holds in the story (#386): from since_node_id (the start when
+	// empty) until until_node_id, where the row naming it in replaces takes
+	// over. A row with until_node_id is history; change the current one.
+	SinceNodeID string `json:"since_node_id,omitempty"`
+	UntilNodeID string `json:"until_node_id,omitempty"`
+	Replaces    string `json:"replaces,omitempty"`
 }
 
 type beatRow struct {
@@ -957,6 +963,7 @@ func (d ToolDeps) listCharacters(ctx context.Context, _ *mcp.CallToolRequest, in
 			rows = append(rows, relationshipRow{
 				RelationshipID: r.ID, FromID: r.FromID, ToID: r.ToID,
 				Label: r.Label, Notes: r.Notes, Paired: r.PairID != nil,
+				SinceNodeID: deref(r.SinceNodeID), UntilNodeID: deref(r.UntilNodeID), Replaces: deref(r.SupersedesID),
 			})
 		}
 		out.Relationships = rows

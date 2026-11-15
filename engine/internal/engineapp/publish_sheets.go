@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	"github.com/devlikebear/linetta/engine/internal/entity"
+	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/publish"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/visual"
@@ -17,6 +18,7 @@ import (
 type publishSheets struct {
 	entities      *entity.Repo
 	relationships *relationship.Repo
+	nodes         *node.Repo
 	visuals       *visual.Repo
 }
 
@@ -43,6 +45,13 @@ func (p publishSheets) ProjectSheets(ctx context.Context, projectID string) ([]p
 	if err != nil {
 		return nil, nil, err
 	}
+	// One line a relationship, as it stands now: the sheet has no episodes
+	// to say when a change happened (#386).
+	all, err := p.nodes.ListByProject(ctx, projectID)
+	if err != nil {
+		return nil, nil, err
+	}
+	rels = relationship.AsOf(rels, all, "")
 	relations := make([]publish.LocalRelation, 0, len(rels))
 	for _, r := range rels {
 		relations = append(relations, publish.LocalRelation{From: r.FromID, To: r.ToID, Label: r.Label})

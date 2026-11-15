@@ -1103,3 +1103,26 @@ func TestBuildFull_noPlannedBranchWhenNoneSelected(t *testing.T) {
 		t.Errorf("PlannedBranch = %+v, want nil when nothing is selected", got.Direction.PlannedBranch)
 	}
 }
+
+func TestBuildContext_readsRelationshipsAsOfTheScene(t *testing.T) {
+	ctx := context.Background()
+	s, pr, nodes, mr, tr, br, nr, rr, firstID, secondID := setupPrevSummaryFixture(t)
+	cur, _ := nodes.Get(ctx, secondID)
+	er := entity.NewRepo(s)
+	a, _ := er.Create(ctx, 1050, entity.NewInput{ProjectID: cur.ProjectID, Kind: "character", Name: "해진", Role: "주인공"})
+	b, _ := er.Create(ctx, 1060, entity.NewInput{ProjectID: cur.ProjectID, Kind: "character", Name: "아지", Role: "빌런"})
+	pair, _ := rr.CreatePair(ctx, relationship.NewPairInput{ProjectID: cur.ProjectID, FromID: a.ID, ToID: b.ID, Label: "동료", InverseLabel: "동료"})
+	if _, err := rr.Change(ctx, relationship.ChangeInput{ID: pair[0].ID, AtNodeID: secondID, Label: "적", InverseLabel: "적"}); err != nil {
+		t.Fatal(err)
+	}
+	builder := NewContextBuilder(pr, nodes, mr, tr, br, nr, rr)
+	for at, want := range map[string]string{firstID: "동료", secondID: "적"} {
+		got, err := builder.Build(ctx, at, "이어쓰기", "", Options{})
+		if err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+		if len(got.Relationships) != 1 || got.Relationships[0].Label != want {
+			t.Fatalf("at %s relationships = %+v, want one %s", at, got.Relationships, want)
+		}
+	}
+}

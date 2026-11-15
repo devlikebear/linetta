@@ -33,7 +33,7 @@ func kindForOp(opType string) string {
 	switch opType {
 	case "create_entity", "update_entity":
 		return "entity"
-	case "create_relationship":
+	case "create_relationship", "change_relationship":
 		return "relationship"
 	case "create_fact_card":
 		return "fact"
@@ -839,6 +839,13 @@ func (s *Service) validateEditedOp(lookup refLookup, seeded storyops.Refs, op st
 			return op, err
 		}
 		if err := resolveEntity(op.To, op.ToRef, "to/to_ref"); err != nil {
+			return op, err
+		}
+		if op.NodeID != "" && !lookup.IsLeafNode(op.NodeID) {
+			return op, fmt.Errorf("node_id %q is not a leaf scene in this work", op.NodeID)
+		}
+	case "change_relationship":
+		if err := lookup.relationshipChange(op); err != nil {
 			return op, err
 		}
 	case "add_beat":

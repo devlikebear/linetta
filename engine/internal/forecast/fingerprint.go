@@ -294,9 +294,13 @@ func Inputs(ctx context.Context, deps Deps, projectID string) (InputHashes, erro
 	}
 	out.Relationships = make(map[string]string, len(rels))
 	for _, rel := range rels {
-		out.Relationships[rel.ID] = hashLine(strings.Join([]string{
-			rel.ID, rel.FromID, rel.ToID, rel.Label, rel.Notes,
-		}, field))
+		parts := []string{rel.ID, rel.FromID, rel.ToID, rel.Label, rel.Notes}
+		// Only a relationship placed in the story hashes where: a saved
+		// forecast's fingerprint from before #386 still matches.
+		if rel.SinceNodeID != nil || rel.UntilNodeID != nil {
+			parts = append(parts, deref(rel.SinceNodeID), deref(rel.UntilNodeID))
+		}
+		out.Relationships[rel.ID] = hashLine(strings.Join(parts, field))
 	}
 
 	facts, err := deps.Facts.List(ctx, fact.ListFilter{ProjectID: projectID, Limit: allFacts})
@@ -410,4 +414,11 @@ func hashLine(s string) string {
 	h := sha256.New()
 	h.Write([]byte(s))
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
