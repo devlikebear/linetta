@@ -100,6 +100,10 @@ export interface ManuscriptSearchHit {
   breadcrumb: string;
   snippet: string;
   updated_at?: number;
+  /** Where in the scene the match is: 1-based, inclusive, numbered like the
+   * engine's style.Paragraphs. Absent when it could not be placed. */
+  paragraph_from?: number;
+  paragraph_to?: number;
 }
 
 export interface ReplaceCandidate {

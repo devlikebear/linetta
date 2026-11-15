@@ -21,6 +21,11 @@ type Hit struct {
 	Breadcrumb string `json:"breadcrumb"`
 	Snippet    string `json:"snippet"`
 	UpdatedAt  int64  `json:"updated_at,omitempty"`
+	// ParagraphFrom and ParagraphTo are where in the scene the match is,
+	// 1-based and inclusive, numbered as linetta_read_scene numbered=true
+	// prints them. Both are 0 when the match could not be placed.
+	ParagraphFrom int `json:"paragraph_from,omitempty"`
+	ParagraphTo   int `json:"paragraph_to,omitempty"`
 }
 
 type Searcher struct {
@@ -55,6 +60,15 @@ func (s *Searcher) Query(ctx context.Context, projectID, q string, limit int) ([
 	}
 
 	terms := ftsquery.Terms(query)
+	hits, err := s.queryScenes(ctx, projectID, terms, limit)
+	if err != nil {
+		return nil, err
+	}
+	s.locate(ctx, terms, hits)
+	return hits, nil
+}
+
+func (s *Searcher) queryScenes(ctx context.Context, projectID string, terms []string, limit int) ([]Hit, error) {
 	match, ok := ftsquery.TrigramMatch(terms)
 	if !ok {
 		return s.queryLike(ctx, projectID, terms, limit)
