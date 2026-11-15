@@ -68,8 +68,12 @@ const (
 	ReasonThreadNotFound       = "thread_not_found"
 	ReasonBeatNotFound         = "beat_not_found"
 	ReasonRelationshipNotFound = "relationship_not_found"
-	ReasonNoteNotFound         = "note_not_found"
-	ReasonFactCardNotFound     = "fact_card_not_found"
+	// relationships.change (#386) at or before where the relationship
+	// starts, or on a row a later change already ended.
+	ReasonRelationshipChangeBeforeStart = "relationship_change_before_start"
+	ReasonRelationshipAlreadyChanged    = "relationship_already_changed"
+	ReasonNoteNotFound                  = "note_not_found"
+	ReasonFactCardNotFound              = "fact_card_not_found"
 
 	// The built-in agent's provider layer (#90). The first two are states the
 	// settings pane fixes; the rest are what the provider said, reduced to

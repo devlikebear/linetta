@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
+	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 )
 
@@ -195,5 +197,37 @@ func TestListRelationshipsShowsHistoryOnlyWhenAsked(t *testing.T) {
 	_ = json.Unmarshal(res, &list)
 	if len(list) != 1 || list[0].Label != "적" {
 		t.Fatalf("by entity = %+v, want the current row", list)
+	}
+}
+
+func TestChangeRelationshipHandler(t *testing.T) {
+	f := newRelFixture(t)
+	ctx := context.Background()
+	pair, _ := f.rr.CreatePair(ctx, relationship.NewPairInput{ProjectID: f.pID, FromID: f.a, ToID: f.b, Label: "동료", InverseLabel: "동료"})
+	second, err := f.nr.CreateSibling(ctx, f.scene, "leaf", "", "2화", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := ChangeRelationship(f.rr, f.nr)
+	res, err := h(ctx, json.RawMessage(`{"id":"`+pair[0].ID+`","at_node_id":"`+second.ID+`","label":" 적 ","quote":"넌 적이야."}`))
+	if err != nil {
+		t.Fatalf("change: %v", err)
+	}
+	var rows []relationship.Relationship
+	_ = json.Unmarshal(res, &rows)
+	if len(rows) != 2 || rows[0].Label != "적" || rows[1].Label != "동료" || rows[0].SinceQuote != "넌 적이야." {
+		t.Fatalf("successors = %+v", rows)
+	}
+	// Ended rows and scenes at or before the start are refused as bad input.
+	for _, params := range []string{
+		`{"id":"` + pair[0].ID + `","at_node_id":"` + second.ID + `","label":"친구"}`,
+		`{"id":"` + rows[0].ID + `","at_node_id":"` + f.scene + `","label":"친구"}`,
+		`{"id":"` + rows[0].ID + `","at_node_id":"elsewhere","label":"친구"}`,
+	} {
+		_, err := h(ctx, json.RawMessage(params))
+		var me *rpc.MethodError
+		if !errors.As(err, &me) || me.Code != rpc.CodeInvalidParams {
+			t.Fatalf("%s: err = %v, want invalid params", params, err)
+		}
 	}
 }

@@ -651,6 +651,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("plot.spine_panel", handlers.PlotSpinePanel(plotBuilder))
 	s.Handle("relationships.create_one", handlers.CreateOneRelationship(relationships))
 	s.Handle("relationships.create_pair", handlers.CreatePairRelationship(relationships))
+	s.Handle("relationships.change", handlers.ChangeRelationship(relationships, nodes))
 	s.Handle("relationships.list", handlers.ListRelationships(relationships, nodes))
 	s.Handle("relationships.list_by_entity", handlers.ListRelationshipsByEntity(relationships, nodes))
 	s.Handle("relationships.update", handlers.UpdateRelationship(relationships))

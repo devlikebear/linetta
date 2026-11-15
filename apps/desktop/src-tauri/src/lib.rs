@@ -183,6 +183,7 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
     "publish.sheets_sync",
     "publish.work_status",
     "publish.work_upsert",
+    "relationships.change",
     "relationships.create_one",
     "relationships.create_pair",
     "relationships.delete",

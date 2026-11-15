@@ -1,9 +1,10 @@
 import { CharacterVisualSection } from "./CharacterVisualSection";
 import { rpcErrorMessage } from "../lib/rpcMessage";
 import { useCallback, useEffect, useState } from "react";
-import type { CharacterVisualSheet, Entity, EntityKind, Relationship, SceneMention, UpdateEntityInput } from "../lib/types";
+import type { CharacterVisualSheet, Entity, EntityKind, SceneMention, UpdateEntityInput } from "../lib/types";
 import { entities, relationships, visuals } from "../lib/rpc";
 import { RelationshipPicker } from "./RelationshipPicker";
+import { relationshipChains, type RelationshipChain } from "../lib/relationshipHistory";
 import { SheetPublishToggle } from "./SheetPublishToggle";
 import { X, Plus, User, MapPin, Box, Lightbulb, Search } from "../lib/icons";
 import { displayNodeLabel, entityAttributePresets, entityKindLabel, entityRolePresets, useI18n } from "../lib/i18n";
@@ -19,6 +20,13 @@ interface Props {
    *  sheet offers no delete. */
   confirm?: (title: string) => Promise<boolean>;
   onDeleted?: (entityId: string) => void;
+  /** The scene open in the editor: a relationship can change from there on
+   *  (#386). Without it the sheet offers no change. */
+  currentSceneId?: string;
+  /** How a scene is named in "3화 · 씬 2부터". */
+  sceneLabel?: (nodeId: string) => string | undefined;
+  /** Opens the scene a change happened in, lighting the line it rests on. */
+  onReveal?: (nodeId: string, quote?: string) => void;
 }
 
 const KIND_META: Record<EntityKind, { color: string; Icon: typeof User }> = {
@@ -28,7 +36,7 @@ const KIND_META: Record<EntityKind, { color: string; Icon: typeof User }> = {
   concept: { color: "var(--t-plum)", Icon: Lightbulb },
 };
 
-export function EntitySheet({ entityId, onClose, onSaved, onNavigate, onContextChange, confirm, onDeleted }: Props) {
+export function EntitySheet({ entityId, onClose, onSaved, onNavigate, onContextChange, confirm, onDeleted, currentSceneId, sceneLabel, onReveal }: Props) {
   const { language, t } = useI18n();
   const [entity, setEntity] = useState<Entity | null>(null);
   const [draft, setDraft] = useState<UpdateEntityInput | null>(null);
@@ -37,14 +45,16 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate, onContextC
   const [visualDirty, setVisualDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [rels, setRels] = useState<Relationship[]>([]);
+  const [rels, setRels] = useState<RelationshipChain[]>([]);
+  // The relationship being changed from the open scene, and its new labels.
+  const [changing, setChanging] = useState<{ id: string; label: string; inverse: string } | null>(null);
   const [relTargets, setRelTargets] = useState<Record<string, Entity>>({});
   const [pickerOpen, setPickerOpen] = useState(false);
   const [scenes, setScenes] = useState<SceneMention[]>([]);
 
   const refreshRels = useCallback(async (eid: string) => {
-    const list = await relationships.listByEntity(eid);
-    setRels(list);
+    const list = await relationships.listByEntity(eid, true);
+    setRels(relationshipChains(list));
     const ids = Array.from(new Set(list.map((r) => r.to_id)));
     setRelTargets((cur) => {
       // skip ids we already have
@@ -328,26 +338,112 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate, onContextC
               {rels.length === 0 && <p className="sec-empty">{t("entity.noRelationships")}</p>}
               {rels.length > 0 && (
                 <ul className="rel-list">
-                  {rels.map((r) => {
+                  {rels.map(({ current: r, steps }) => {
                     const target = relTargets[r.to_id];
+                    const placed = steps.some((step) => step.since_node_id);
                     return (
-                      <li className="rel-row" key={r.id}>
-                        <span className="rel-target">
-                          {target ? target.name : r.to_id.slice(0, 6)}
-                        </span>
-                        <span className="gap" />
-                        <span className="rel-label">{r.label}</span>
-                        <button
-                          type="button"
-                          className="attr-del"
-                          aria-label={t("workspace.delete")}
-                          onClick={async () => {
-                            await relationships.delete(r.id);
-                            if (entity) await refreshRels(entity.id);
-                          }}
-                        >
-                          <X size={13} />
-                        </button>
+                      <li className="rel-item" key={r.id} data-testid={`rel-${r.id}`}>
+                        <div className="rel-row">
+                          <span className="rel-target">
+                            {target ? target.name : r.to_id.slice(0, 6)}
+                          </span>
+                          <span className="gap" />
+                          <span className="rel-label">{r.label}</span>
+                          {currentSceneId && (
+                            <button
+                              type="button"
+                              className="rel-change"
+                              title={t("entity.relationshipChange.hint")}
+                              onClick={() => {
+                                setError(null);
+                                setChanging({ id: r.id, label: "", inverse: "" });
+                              }}
+                            >
+                              {t("entity.relationshipChange")}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="attr-del"
+                            aria-label={t("workspace.delete")}
+                            onClick={async () => {
+                              // The whole relationship, the rows it went
+                              // through included: a change ended them, they
+                              // are not relationships of their own.
+                              for (const step of [...steps].reverse()) await relationships.delete(step.id);
+                              if (entity) await refreshRels(entity.id);
+                            }}
+                          >
+                            <X size={13} />
+                          </button>
+                        </div>
+                        {placed && (
+                          <div className="rel-history" data-testid="rel-history">
+                            {steps.map((step, i) => (
+                              <span key={step.id} className="rel-step">
+                                {i > 0 && <span className="rel-arrow">→</span>}
+                                <span>{step.label}</span>
+                                {step.since_node_id && (
+                                  <button
+                                    type="button"
+                                    className="rel-since"
+                                    title={step.since_quote || undefined}
+                                    disabled={!onReveal}
+                                    onClick={() => onReveal?.(step.since_node_id!, step.since_quote || undefined)}
+                                  >
+                                    {t("entity.relationshipSince", { scene: sceneLabel?.(step.since_node_id) ?? "?" })}
+                                  </button>
+                                )}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {changing?.id === r.id && currentSceneId && (
+                          <form
+                            className="rel-change-form"
+                            onSubmit={async (e) => {
+                              e.preventDefault();
+                              if (!changing.label.trim()) return;
+                              try {
+                                await relationships.change({
+                                  id: r.id,
+                                  at_node_id: currentSceneId,
+                                  label: changing.label.trim(),
+                                  inverse_label: changing.inverse.trim() || undefined,
+                                });
+                                setChanging(null);
+                                if (entity) await refreshRels(entity.id);
+                              } catch (err) {
+                                setError(rpcErrorMessage(err, t));
+                              }
+                            }}
+                          >
+                            <span className="rel-change-where">
+                              {t("entity.relationshipChange.from", { scene: sceneLabel?.(currentSceneId) ?? "?" })}
+                            </span>
+                            <input
+                              autoFocus
+                              aria-label={t("entity.relationshipChange.label")}
+                              placeholder={t("entity.relationshipChange.label")}
+                              value={changing.label}
+                              onChange={(e) => setChanging({ ...changing, label: e.target.value })}
+                            />
+                            {r.pair_id && (
+                              <input
+                                aria-label={t("entity.relationshipChange.inverse")}
+                                placeholder={t("entity.relationshipChange.inverse")}
+                                value={changing.inverse}
+                                onChange={(e) => setChanging({ ...changing, inverse: e.target.value })}
+                              />
+                            )}
+                            <button type="submit" className="btn accent" disabled={!changing.label.trim()}>
+                              {t("entity.relationshipChange.save")}
+                            </button>
+                            <button type="button" className="btn ghost" onClick={() => setChanging(null)}>
+                              {t("common.cancel")}
+                            </button>
+                          </form>
+                        )}
                       </li>
                     );
                   })}

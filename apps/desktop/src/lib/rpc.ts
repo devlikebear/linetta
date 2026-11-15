@@ -107,6 +107,7 @@ import type {
   UpdateNoteInput,
   UpdateProjectInput,
   UpdateRelationshipInput,
+  ChangeRelationshipInput,
   UpdateThreadInput,
   WritingStatsDay,
   WritingStatsSummary,
@@ -772,8 +773,14 @@ export const relationships = {
     rpcCall<Relationship[]>("relationships.create_pair", input),
   list: (projectId: string) =>
     rpcCall<Relationship[]>("relationships.list", { project_id: projectId }),
-  listByEntity: (entityId: string) =>
-    rpcCall<Relationship[]>("relationships.list_by_entity", { entity_id: entityId }),
+  /** How each relationship stands at the end of the story; with history,
+   *  the rows a change ended too (#386). */
+  listByEntity: (entityId: string, includeHistory = false) =>
+    rpcCall<Relationship[]>("relationships.list_by_entity", { entity_id: entityId, include_history: includeHistory }),
+  /** Turns a relationship, and its pair, into `label` from a scene on.
+   *  Returns the new rows. */
+  change: (input: ChangeRelationshipInput) =>
+    rpcCall<Relationship[]>("relationships.change", input),
   update: (input: UpdateRelationshipInput) =>
     rpcCall<Relationship>("relationships.update", input),
   delete: (id: string) => rpcCall<{ ok: true }>("relationships.delete", { id }),

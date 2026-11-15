@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
@@ -155,4 +156,49 @@ func DeleteRelationship(repo *relationship.Repo) rpc.Handler {
 		}
 		return json.Marshal(map[string]bool{"ok": true})
 	}
+}
+
+// ChangeRelationship handles relationships.change (#386): the relationship,
+// and its pair, turn into in.Label from the scene in.AtNodeID on. The rows it
+// returns are the successors, [the row's, its partner's when paired].
+func ChangeRelationship(repo *relationship.Repo, nodes *node.Repo) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var in relationship.ChangeInput
+		if err := json.Unmarshal(params, &in); err != nil || in.ID == "" || in.AtNodeID == "" || strings.TrimSpace(in.Label) == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id, at_node_id, label required"}
+		}
+		in.Label, in.InverseLabel, in.Quote = strings.TrimSpace(in.Label), strings.TrimSpace(in.InverseLabel), strings.TrimSpace(in.Quote)
+		rel, err := repo.Get(ctx, in.ID)
+		if errors.Is(err, relationship.ErrNotFound) {
+			return nil, rpc.NotFound(rpc.ReasonRelationshipNotFound, "relationship not found")
+		}
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		all, err := nodes.ListByProject(ctx, rel.ProjectID)
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		if err := relationship.SceneAfter(all, in.AtNodeID, rel.SinceNodeID); err != nil {
+			return nil, changeError(err)
+		}
+		rows, err := repo.Change(ctx, in)
+		if err != nil {
+			return nil, changeError(err)
+		}
+		return json.Marshal(rows)
+	}
+}
+
+// changeError names a refused change for the sheet to explain.
+func changeError(err error) error {
+	switch {
+	case errors.Is(err, relationship.ErrChangeBeforeStart):
+		return rpc.NotFound(rpc.ReasonRelationshipChangeBeforeStart, err.Error())
+	case errors.Is(err, relationship.ErrAlreadyChanged):
+		return rpc.NotFound(rpc.ReasonRelationshipAlreadyChanged, err.Error())
+	case errors.Is(err, relationship.ErrSceneNotInWork):
+		return rpc.NotFound(rpc.ReasonNodeNotFound, err.Error())
+	}
+	return &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 }
