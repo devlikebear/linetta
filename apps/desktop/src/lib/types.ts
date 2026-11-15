@@ -1222,7 +1222,7 @@ export interface ExportPayload {
 
 /** What the export dialog writes (#383). Markdown goes through
  *  export.project / export.node; the other two through export.document. */
-export type ExportFormat = "docx" | "txt" | "md";
+export type ExportFormat = "docx" | "hwpx" | "txt" | "md";
 
 /** export.document's layout choices. Mirrors export.DocumentOptions
  *  (engine/internal/export/document.go); a field left out takes the engine's
@@ -1241,7 +1241,7 @@ export interface ExportDocumentOptions {
 export interface ExportDocumentRequest {
   project_id: string;
   node_id?: string;
-  format: "docx" | "txt";
+  format: "docx" | "hwpx" | "txt";
   options?: ExportDocumentOptions;
   /** Count only: scenes and characters, no file. */
   preview?: boolean;

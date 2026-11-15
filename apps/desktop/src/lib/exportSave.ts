@@ -23,8 +23,9 @@ export async function saveExportedMarkdown(payload: ExportPayload): Promise<stri
   return path;
 }
 
-const FILE_FILTERS: Record<"docx" | "txt", { name: string; extensions: string[] }> = {
+const FILE_FILTERS: Record<"docx" | "hwpx" | "txt", { name: string; extensions: string[] }> = {
   docx: { name: "Word", extensions: ["docx"] },
+  hwpx: { name: "Hangul", extensions: ["hwpx"] },
   txt: { name: "Text", extensions: ["txt"] },
 };
 

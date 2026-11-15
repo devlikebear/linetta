@@ -73,6 +73,20 @@ describe("ExportDialog", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it("exports a Hangul file with the same layout choices", async () => {
+    renderDialog();
+    fireEvent.click(screen.getByTestId("export-format-hwpx"));
+    expect(screen.getByTestId("export-layout")).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("export-run"));
+    });
+    expect(mocks.document).toHaveBeenLastCalledWith(expect.objectContaining({
+      format: "hwpx",
+      options: expect.objectContaining({ font: "함초롬바탕", size_pt: 10 }),
+    }));
+    expect(mocks.saveFile).toHaveBeenCalledWith(expect.anything(), "hwpx");
+  });
+
   it("offers Markdown only for the whole work or a scene", async () => {
     renderDialog();
     fireEvent.click(screen.getByTestId("export-scope-1"));

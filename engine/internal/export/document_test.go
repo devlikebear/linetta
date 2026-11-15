@@ -106,6 +106,23 @@ func TestExportDocumentWritesOneEpisodeAsDOCX(t *testing.T) {
 	}
 }
 
+func TestExportDocumentWritesHWPX(t *testing.T) {
+	_, req, run, _ := documentFixture(t)
+	req.Format = FormatHWPX
+	out, err := run(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := decode(t, out)
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil || zr.File[0].Name != "mimetype" || zr.File[0].Method != zip.Store {
+		t.Fatalf("not a Hangul package: err=%v", err)
+	}
+	if out.MIME != "application/hwp+zip" || !strings.HasSuffix(out.SuggestedFilename, ".hwpx") || out.Scenes != 3 {
+		t.Fatalf("payload = %+v", out)
+	}
+}
+
 func TestExportDocumentPreviewCountsWithoutWriting(t *testing.T) {
 	_, req, run, episodeID := documentFixture(t)
 	req.Preview, req.NodeID = true, episodeID

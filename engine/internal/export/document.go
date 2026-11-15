@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/devlikebear/linetta/engine/internal/export/docx"
+	"github.com/devlikebear/linetta/engine/internal/export/hwpx"
 	"github.com/devlikebear/linetta/engine/internal/export/manuscriptir"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
@@ -17,6 +18,7 @@ import (
 // path (export.project, export.node), which carries frontmatter for import.
 const (
 	FormatDOCX = "docx"
+	FormatHWPX = "hwpx"
 	FormatTXT  = "txt"
 )
 
@@ -68,8 +70,8 @@ func bad(format string, args ...any) error {
 // Nothing is written to disk here: the app saves the bytes where the writer
 // chooses, the same way the Markdown export does.
 func ExportDocument(ctx context.Context, projects *project.Repo, nr *node.Repo, req DocumentRequest, language string) (DocumentPayload, error) {
-	if req.Format != FormatDOCX && req.Format != FormatTXT {
-		return DocumentPayload{}, bad("format %q is not docx or txt", req.Format)
+	if req.Format != FormatDOCX && req.Format != FormatHWPX && req.Format != FormatTXT {
+		return DocumentPayload{}, bad("format %q is not docx, hwpx or txt", req.Format)
 	}
 	opts, err := docxOptions(req.Options, language)
 	if err != nil {
@@ -106,6 +108,17 @@ func ExportDocument(ctx context.Context, projects *project.Repo, nr *node.Repo, 
 			return DocumentPayload{}, err
 		}
 		out.MIME = docx.MIME
+	case FormatHWPX:
+		// The same layout choices: the two documents are meant to read alike.
+		data, err = hwpx.Write(doc, hwpx.Options{
+			Font: opts.Font, SizePt: opts.SizePt, LineSpacingPct: opts.LineSpacingPct,
+			FirstLineIndent: opts.FirstLineIndent, PageBreakPerSection: opts.PageBreakPerSection,
+			SceneBreak: opts.SceneBreak, Illustrations: opts.Illustrations, IllustrationLabel: opts.IllustrationLabel,
+		})
+		if err != nil {
+			return DocumentPayload{}, err
+		}
+		out.MIME = hwpx.MIME
 	case FormatTXT:
 		data = []byte(manuscriptir.Text(doc, manuscriptir.TextOptions{
 			SceneBreak: opts.SceneBreak, Illustrations: opts.Illustrations, IllustrationLabel: opts.IllustrationLabel,
