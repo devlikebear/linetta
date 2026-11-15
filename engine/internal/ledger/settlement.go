@@ -75,7 +75,7 @@ func (r *Settlements) Record(ctx context.Context, projectID, nodeID string, vers
 	}
 	hash := ""
 	if n, err := r.nodes.Get(ctx, nodeID); err == nil && n.ContentVersion == version {
-		hash = proseHash(n.ContentDoc)
+		hash = ProseHash(n.ContentDoc)
 	}
 	_, err := r.s.DB().ExecContext(ctx, `
 INSERT INTO scene_settlements (node_id, project_id, content_version, outcome, settled_at, text_hash)
@@ -93,9 +93,9 @@ WHERE NOT (scene_settlements.outcome = 'done'
 	return err
 }
 
-// proseHash identifies a scene's words, not its document: relinking a name as
+// ProseHash identifies a scene's words, not its document: relinking a name as
 // a mention changes the document but reads the same, so it hashes the same.
-func proseHash(doc *string) string {
+func ProseHash(doc *string) string {
 	if doc == nil {
 		return ""
 	}
@@ -150,7 +150,7 @@ func (r *Settlements) Pending(ctx context.Context, projectID, beforeNodeID strin
 		if n.WordCount == 0 || n.UpdatedAt < since {
 			continue
 		}
-		if d, ok := done[n.ID]; ok && (d.version == n.ContentVersion || (d.hash != "" && d.hash == proseHash(n.ContentDoc))) {
+		if d, ok := done[n.ID]; ok && (d.version == n.ContentVersion || (d.hash != "" && d.hash == ProseHash(n.ContentDoc))) {
 			continue
 		}
 		out = append(out, n.ID)

@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Search, Command as CommandIcon, Maximize2, ArrowLeft, BookOpen, Library, Replace, Menu, Keyboard, Bot, Cloud, Image as ImageIcon } from "lucide-react";
-import { syncApi, nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, stats as statsApi, diagnostics as diagnosticsApi, publishApi, vaultApi, illustrations as illustrationsApi, illustrationRequests as illustrationRequestsApi } from "../lib/rpc";
-import { reasonMessage, saveErrorMessage } from "../lib/rpcMessage";
+import { organizeEpisode } from "../lib/organizeEpisode";
+import { agent as agentApi, syncApi, nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, stats as statsApi, diagnostics as diagnosticsApi, publishApi, vaultApi, illustrations as illustrationsApi, illustrationRequests as illustrationRequestsApi } from "../lib/rpc";
+import { reasonMessage, rpcErrorMessage, saveErrorMessage } from "../lib/rpcMessage";
 import { McpToggle } from "../components/McpToggle";
 import { sceneEditorExtensions } from "../components/editor/sceneExtensions";
 import { NotePopover } from "../components/NotePopover";
@@ -1123,6 +1124,21 @@ export function Workspace() {
     debouncedSave.flush();
     await sceneSaveQueue.idle();
   }, [debouncedSave, sceneSaveQueue]);
+
+  /** Asks for the open scene's episode to be read for what the record lacks
+   *  (#387). It runs in the background; what it finds lands in the inbox. */
+  const organizeOpenEpisode = useCallback(async () => {
+    const current = loadRef.current;
+    if (!current) return;
+    await organizeEpisode(current.project.id, current.node.id, {
+      organize: agentApi.organize,
+      flush: flushPendingSave,
+      confirm: confirmDialog,
+      toast: showToast,
+      t,
+      errorMessage: (e) => rpcErrorMessage(e, t),
+    });
+  }, [flushPendingSave, confirmDialog, showToast, t]);
   // Leaving a work hands it to automatic sync, once what was typed has landed.
   // Going to the background sends it too; coming back looks for what arrived.
   const flushRef = useRef(flushPendingSave);
@@ -1842,6 +1858,13 @@ export function Workspace() {
       run: () => setRelationshipGraphOpen(true),
     });
     cmds.push({
+      id: "organize-episode",
+      section: sectionProject,
+      label: t("workspace.command.organizeEpisode"),
+      keywords: ["organize", "suggest", "extract", "정리", "제안", "추출", "인물", "복선"],
+      run: () => { void organizeOpenEpisode(); },
+    });
+    cmds.push({
       id: "export-document",
       section: sectionExport,
       label: t("workspace.command.exportDocument"),
@@ -1983,7 +2006,7 @@ export function Workspace() {
       run: () => setShortcutsOpen(true),
     });
     return cmds;
-  }, [load, navigateToNode, navigate, promptDialog, enterZen, focus, railCollapsed, outlinePreset, handleCreateSceneFromOutline, handleCreateChapterFromOutline, requestInlineRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline, copyNodeText, showToast, language, t, toggleFactBook, toggleContextualEdit, toggleCanon, gitSyncAvailable, toggleAgent, agentAvailable, flushPendingSave, publishAvailable, openPublish, vaultAvailable, openVault]);
+  }, [load, navigateToNode, navigate, promptDialog, enterZen, focus, railCollapsed, outlinePreset, handleCreateSceneFromOutline, handleCreateChapterFromOutline, requestInlineRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline, copyNodeText, showToast, language, t, toggleFactBook, toggleContextualEdit, toggleCanon, gitSyncAvailable, toggleAgent, agentAvailable, flushPendingSave, publishAvailable, openPublish, vaultAvailable, openVault, organizeOpenEpisode]);
 
   // Breadcrumb chain: ancestor container labels + the current scene label.
   const crumbChain = useMemo(() => {

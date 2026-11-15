@@ -2612,3 +2612,13 @@ export interface ManuscriptPages {
   lines: number;
   pages: number;
 }
+
+/** agent.organize (#387): what was asked of the pass. Not started when every
+ *  long enough scene of the episode was already read as it is. */
+export interface OrganizeResult {
+  started: boolean;
+  episode_label: string;
+  scenes: number;
+  unchanged: number;
+  short: number;
+}

@@ -39,6 +39,10 @@ type fakeAgent struct {
 	undoErr    error
 	undone     string
 	undoneSnap string
+
+	organizeErr error
+	organized   *OrganizeStart
+	organizeEnd func(ctx context.Context, outcome string)
 }
 
 func (f *fakeAgent) Run(_ context.Context, projectID, nodeID, prompt, selection string, images []AgentImage, ask bool) (string, error) {
@@ -62,6 +66,14 @@ func (f *fakeAgent) Status(_ context.Context, projectID string) (json.RawMessage
 
 func (f *fakeAgent) StartSampleCheck(_ context.Context, projectID, request string, maxCalls int) error {
 	f.sampleProject, f.sampleRequest, f.sampleCalls = projectID, request, maxCalls
+	return nil
+}
+
+func (f *fakeAgent) StartOrganize(_ context.Context, req OrganizeStart, done func(ctx context.Context, outcome string)) error {
+	if f.organizeErr != nil {
+		return f.organizeErr
+	}
+	f.organized, f.organizeEnd = &req, done
 	return nil
 }
 

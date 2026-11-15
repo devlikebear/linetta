@@ -92,6 +92,9 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   // budget of tool calls (or the same tool kept failing) and was cut off
   // partway, with the reply saying how far it got.
   agent_busy: "errors.agentBusy",
+  organize_trial: "errors.organizeTrial",
+  organize_unavailable: "errors.organizeUnavailable",
+  organize_not_in_episode: "errors.organizeNotInEpisode",
   agent_iteration_limit: "errors.agentIterationLimit",
   // A panic inside the turn goroutine (#93 fix round 1). The engine's English
   // Message carries the raw Go panic value for logs — this mapping is what

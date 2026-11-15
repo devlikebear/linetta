@@ -342,6 +342,27 @@ func (c *agentController) StartSampleCheck(ctx context.Context, projectID, reque
 	return c.svc.StartSampleCheck(ctx, projectID, request, maxCalls)
 }
 
+// StartOrganize turns the handler's plan into the agent's request, and the
+// agent's refusals into reasons the app explains.
+func (c *agentController) StartOrganize(ctx context.Context, req handlers.OrganizeStart, done func(ctx context.Context, outcome string)) error {
+	scenes := make([]agent.OrganizeScene, 0, len(req.Scenes))
+	for _, sc := range req.Scenes {
+		scenes = append(scenes, agent.OrganizeScene{NodeID: sc.NodeID, LedgerSettled: sc.LedgerSettled})
+	}
+	err := c.svc.StartOrganize(ctx, agent.OrganizeRequest{
+		ProjectID: req.ProjectID, EpisodeLabel: req.EpisodeLabel, Language: req.Language, Scenes: scenes,
+	}, done)
+	switch {
+	case errors.Is(err, agent.ErrOrganizeTrial):
+		return &rpc.ReasonError{Reason: rpc.ReasonOrganizeTrial, Err: err}
+	case errors.Is(err, agent.ErrOrganizeUnavailable):
+		return &rpc.ReasonError{Reason: rpc.ReasonOrganizeUnavailable, Err: err}
+	case errors.Is(err, agent.ErrTurnRunning):
+		return &rpc.ReasonError{Reason: rpc.ReasonAgentBusy, Err: err}
+	}
+	return err
+}
+
 func (c *agentController) Clear(ctx context.Context, projectID string) error {
 	return c.svc.Clear(ctx, projectID)
 }
