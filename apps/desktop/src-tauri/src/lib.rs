@@ -64,6 +64,7 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
     "entities.update",
     "export.companion_history",
     "export.node",
+    "export.nodeText",
     "export.project",
     "facts.create",
     "facts.create_from_url",
@@ -970,6 +971,9 @@ mod security_boundary_tests {
     fn renderer_rpc_allowlist_rejects_internal_and_unknown_methods() {
         assert!(is_renderer_engine_method("projects.list"));
         assert!(is_renderer_engine_method("export.companion_history"));
+        // The webnovel "copy episode text" command calls this; it was missing
+        // and the command was silently refused.
+        assert!(is_renderer_engine_method("export.nodeText"));
         for method in [
             "vault.delete_item",
             "vault.items_get",

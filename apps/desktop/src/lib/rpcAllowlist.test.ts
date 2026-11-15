@@ -14,7 +14,7 @@ async function callers(): Promise<string[]> {
   const src = await readSource("lib/rpc.ts");
   const found = new Set<string>();
   // Every call site is a literal: `rpcCall<T>("some.method", …)`.
-  for (const m of src.matchAll(/rpcCall<[^>]*>\(\s*"([a-z0-9_.]+)"/g)) {
+  for (const m of src.matchAll(/rpcCall<[^>]*>\(\s*"([A-Za-z0-9_.]+)"/g)) {
     found.add(m[1]);
   }
   return [...found].sort();
@@ -26,7 +26,7 @@ async function allowed(): Promise<string[]> {
     src.indexOf("const RENDERER_ENGINE_METHODS"),
     src.indexOf("];", src.indexOf("const RENDERER_ENGINE_METHODS")),
   );
-  return [...block.matchAll(/"([a-z0-9_.]+)"/g)].map((m) => m[1]);
+  return [...block.matchAll(/"([A-Za-z0-9_.]+)"/g)].map((m) => m[1]);
 }
 
 describe("renderer engine method allowlist", () => {
