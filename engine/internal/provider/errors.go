@@ -77,23 +77,28 @@ func Classify(id string, err error) error {
 	return &rpc.ReasonError{Reason: reason, Err: fmt.Errorf("%s: %s", id, firstLine(err))}
 }
 
-// trialReason reads the trial proxy's own error code from an OpenAI-shaped
-// body. Only the trial's answers are read this way: another provider's body
-// that happens to carry the same word stays whatever its status says.
+// trialReason reads the trial proxy's own error code from its body: the
+// Anthropic error shape puts it in error.type, the proxy's earlier OpenAI shape
+// in error.code. Only the trial's answers are read this way: another
+// provider's body that happens to carry the same word stays whatever its
+// status says.
 func trialReason(body string) string {
 	var e struct {
 		Error struct {
+			Type string `json:"type"`
 			Code string `json:"code"`
 		} `json:"error"`
 	}
 	if json.Unmarshal([]byte(body), &e) != nil {
 		return ""
 	}
-	switch e.Error.Code {
-	case "trial_exhausted":
-		return rpc.ReasonProviderTrialExhausted
-	case "trial_paused":
-		return rpc.ReasonProviderTrialPaused
+	for _, code := range []string{e.Error.Type, e.Error.Code} {
+		switch code {
+		case "trial_exhausted":
+			return rpc.ReasonProviderTrialExhausted
+		case "trial_paused":
+			return rpc.ReasonProviderTrialPaused
+		}
 	}
 	return ""
 }

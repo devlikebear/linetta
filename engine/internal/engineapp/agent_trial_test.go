@@ -17,8 +17,8 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 )
 
-// trialSite stands in for Linetta Works' trial proxy: an OpenAI-compatible
-// chat endpoint under /api/trial/v1 that records what each request carried.
+// trialSite stands in for Linetta Works' trial proxy: an Anthropic Messages
+// endpoint at /api/trial/v1/messages that records what each request carried.
 type trialSite struct {
 	srv *httptest.Server
 
@@ -43,15 +43,13 @@ func newTrialSite(t *testing.T) *trialSite {
 			Model  string `json:"model"`
 			Stream bool   `json:"stream"`
 			Tools  []struct {
-				Function struct {
-					Name string `json:"name"`
-				} `json:"function"`
+				Name string `json:"name"`
 			} `json:"tools"`
 		}
 		_ = json.Unmarshal(raw, &body)
-		req := trialRequest{path: r.URL.Path, auth: r.Header.Get("Authorization"), model: body.Model}
+		req := trialRequest{path: r.URL.Path, auth: r.Header.Get("x-api-key"), model: body.Model}
 		for _, tool := range body.Tools {
-			req.tools = append(req.tools, tool.Function.Name)
+			req.tools = append(req.tools, tool.Name)
 		}
 		s.mu.Lock()
 		s.requests = append(s.requests, req)
@@ -60,18 +58,25 @@ func newTrialSite(t *testing.T) *trialSite {
 		if exhausted {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusTooManyRequests)
-			_, _ = io.WriteString(w, `{"error":{"code":"trial_exhausted","message":"체험 한도를 다 썼습니다."}}`)
+			_, _ = io.WriteString(w, `{"type":"error","error":{"type":"trial_exhausted","message":"체험 한도를 다 썼습니다."}}`)
 			return
 		}
 		if !body.Stream {
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = io.WriteString(w, `{"choices":[{"index":0,"message":{"role":"assistant","content":"네."},"finish_reason":"stop"}]}`)
+			_, _ = io.WriteString(w, `{"id":"msg_1","type":"message","role":"assistant","model":"claude-haiku-5-5","content":[{"type":"text","text":"네."}],"stop_reason":"end_turn","usage":{"input_tokens":10,"output_tokens":2}}`)
 			return
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
-		_, _ = io.WriteString(w, `data: {"choices":[{"index":0,"delta":{"role":"assistant","content":"네."},"finish_reason":null}]}`+"\n\n")
-		_, _ = io.WriteString(w, `data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":2,"total_tokens":12}}`+"\n\n")
-		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+		for _, ev := range []string{
+			`event: message_start` + "\n" + `data: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude-haiku-5-5","content":[],"stop_reason":null,"usage":{"input_tokens":10,"output_tokens":0}}}`,
+			`event: content_block_start` + "\n" + `data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`,
+			`event: content_block_delta` + "\n" + `data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"네."}}`,
+			`event: content_block_stop` + "\n" + `data: {"type":"content_block_stop","index":0}`,
+			`event: message_delta` + "\n" + `data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2}}`,
+			`event: message_stop` + "\n" + `data: {"type":"message_stop"}`,
+		} {
+			_, _ = io.WriteString(w, ev+"\n\n")
+		}
 	}))
 	t.Cleanup(s.srv.Close)
 	return s
@@ -128,8 +133,8 @@ func runTrialTurn(t *testing.T, app *App) *notificationLog {
 }
 
 // A turn on the trial goes to the connected site's trial proxy with the
-// publish token, through tars' real OpenAI-compatible client, holding the
-// trial's twenty tools.
+// publish token, through tars' real Anthropic client, holding the trial's
+// twenty tools.
 func TestAgentRun_onTheTrialGoesToTheSiteWithThePublishToken(t *testing.T) {
 	site := newTrialSite(t)
 	app := openTrialApp(t, site.srv.URL, "lwk_trial_token")
@@ -141,14 +146,14 @@ func TestAgentRun_onTheTrialGoesToTheSiteWithThePublishToken(t *testing.T) {
 		t.Fatal("the trial turn never reached the site")
 	}
 	first := seen[0]
-	if first.path != "/api/trial/v1/chat/completions" {
-		t.Errorf("path = %q, want the trial proxy's chat endpoint", first.path)
+	if first.path != "/api/trial/v1/messages" {
+		t.Errorf("path = %q, want the trial proxy's messages endpoint", first.path)
 	}
-	if first.auth != "Bearer lwk_trial_token" {
-		t.Errorf("Authorization = %q, want the publish token", first.auth)
+	if first.auth != "lwk_trial_token" {
+		t.Errorf("x-api-key = %q, want the publish token", first.auth)
 	}
-	if first.model != "linetta-trial" {
-		t.Errorf("model = %q, want linetta-trial", first.model)
+	if first.model != "claude-haiku-5-5" {
+		t.Errorf("model = %q, want claude-haiku-5-5", first.model)
 	}
 	if len(first.tools) != 20 {
 		t.Errorf("the trial turn held %d tools, want 20: %s", len(first.tools), strings.Join(first.tools, ", "))

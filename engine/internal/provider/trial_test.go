@@ -44,10 +44,10 @@ func TestResolveTrial_borrowsThePublishConnection(t *testing.T) {
 		t.Fatalf("not Configured with a connection: %v", r)
 	}
 	opts := Options(r)
-	if opts.Provider != "openai" {
-		t.Errorf("tars provider = %q, want openai", opts.Provider)
+	if opts.Provider != "anthropic" {
+		t.Errorf("tars provider = %q, want anthropic", opts.Provider)
 	}
-	if opts.BaseURL != "https://works.example.com/api/trial/v1" {
+	if opts.BaseURL != "https://works.example.com/api/trial" {
 		t.Errorf("BaseURL = %q", opts.BaseURL)
 	}
 	if opts.APIKey != "lwk_secret" {
@@ -55,6 +55,9 @@ func TestResolveTrial_borrowsThePublishConnection(t *testing.T) {
 	}
 	if opts.Model != TrialModel {
 		t.Errorf("Model = %q, want %q", opts.Model, TrialModel)
+	}
+	if opts.MaxTokens != anthropicOutputCeiling {
+		t.Errorf("MaxTokens = %d, want %d: tars' default cuts a scene rewrite off", opts.MaxTokens, anthropicOutputCeiling)
 	}
 	if strings.Contains(r.String(), "lwk_secret") {
 		t.Errorf("String leaks the token: %s", r.String())
