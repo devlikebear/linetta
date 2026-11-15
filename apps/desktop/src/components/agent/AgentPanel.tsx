@@ -10,7 +10,9 @@ import { IMAGE_ACCEPT, ImageFileProblem, imageFiles, readImageFile } from "../..
 import type { ReadImage } from "../../lib/imageFile";
 import { useEngineEvent } from "../../hooks/useEngineEvent";
 import { useSmoothStream } from "../../hooks/useSmoothStream";
-import { isProviderReady } from "../../lib/providers";
+import { isProviderReady, isTrial } from "../../lib/providers";
+import { formatMillions, TRIAL_LOW_TOKENS, useTrialStatus } from "../../hooks/useTrialStatus";
+import { AgentSetup } from "./AgentSetup";
 import { AskCard } from "./AskCard";
 import { Markdown } from "./Markdown";
 import { ProviderPicker } from "./ProviderPicker";
@@ -494,6 +496,10 @@ export function AgentPanel({
   // The rows `ready` was read from, kept for the provider picker under the
   // composer. Only ever replaced by a whole providers.list response.
   const [providerRows, setProviderRows] = useState<ProviderStatus[]>([]);
+  // The Linetta trial: its remaining tokens sit in the header while it is the
+  // provider in use, read again after every turn it runs.
+  const onTrial = isTrial(providerRows.find((row) => row.active)?.id);
+  const { status: trialStatus, refresh: refreshTrial } = useTrialStatus(Boolean(ready && onTrial));
   const [lines, setLines] = useState<Line[]>([]);
   // Whether the current run is still producing text. Feeds useSmoothStream:
   // while true the reply reveals gradually; once false it snaps to the full
@@ -1006,6 +1012,7 @@ export function AgentPanel({
 
   useEngineEvent<AgentDonePayload>("agent-done", whileNotSending<AgentDonePayload>((payload) => {
     if (!acceptRun(payload.run_id)) return;
+    if (onTrial) refreshTrial();
     setRunning(false);
     setComposing(null);
     // The composer's send control returns from "stop" to "send" once this
@@ -1036,6 +1043,7 @@ export function AgentPanel({
   // read — agent_internal_error's carries a raw Go panic value.
   useEngineEvent<AgentErrorPayload>("agent-error", whileNotSending<AgentErrorPayload>((payload) => {
     if (!acceptRun(payload.run_id)) return;
+    if (onTrial) refreshTrial();
     setRunning(false);
     setComposing(null);
     setTurn(null);
@@ -1300,6 +1308,17 @@ export function AgentPanel({
     handleSend();
   }
 
+  // After the trial is set up from the empty state: the active row changed.
+  function reloadProviders() {
+    providersApi
+      .list()
+      .then((rows) => {
+        setProviderRows(rows);
+        setReady(isProviderReady(rows.find((row) => row.active)));
+      })
+      .catch(() => setReady(false));
+  }
+
   useEffect(() => {
     let cancelled = false;
     providersApi
@@ -1543,6 +1562,14 @@ export function AgentPanel({
     <aside className="panel agent-panel" onMouseDown={(e) => e.stopPropagation()}>
       <div className="panel-head">
         <span className="ttl"><span className="ic"><Bot size={16} /></span> {t("agentPanel.title")}</span>
+        {ready && onTrial && trialStatus && (trialStatus.state === "available" || trialStatus.state === "not_started") ? (
+          <span
+            className={`agent-trial-remaining${trialStatus.remaining_tokens < TRIAL_LOW_TOKENS ? " is-low" : ""}`}
+            data-testid="agent-trial-remaining"
+          >
+            {t("agentPanel.trial.remaining", { amount: formatMillions(trialStatus.remaining_tokens) })}
+          </span>
+        ) : null}
         {ready && lines.length > 0 && longformPrompts.length > 0 && (
           <button
             type="button"
@@ -1678,7 +1705,9 @@ export function AgentPanel({
                     ? t("agentPanel.historyCut")
                     : line.variant === "cancelled"
                       ? t("agentPanel.cancelled")
-                      : reasonMessage(line.reason, t);
+                      : onTrial && line.reason === "provider_auth_failed"
+                        ? t("agentPanel.trial.authFailed")
+                        : reasonMessage(line.reason, t);
               return (
                 <div
                   key={line.id}
@@ -1690,7 +1719,18 @@ export function AgentPanel({
                   {line.variant === "error" && line.reason === "provider_auth_failed" ? (
                     <>
                       {" "}
-                      <Link to="/settings">{t("agentPanel.openSettings")}</Link>
+                      <Link to="/settings">
+                        {onTrial ? t("agentPanel.trial.reconnect") : t("agentPanel.openSettings")}
+                      </Link>
+                    </>
+                  ) : null}
+                  {line.variant === "error" &&
+                  (line.reason === "provider_trial_exhausted" || line.reason === "provider_trial_paused") ? (
+                    <>
+                      {" "}
+                      <Link to="/settings" data-testid="agent-trial-own-key">
+                        {t("agentPanel.trial.connectOwnKey")}
+                      </Link>
                     </>
                   ) : null}
                 </div>
@@ -1973,10 +2013,7 @@ export function AgentPanel({
         </div>
         </>
       ) : (
-        <p className="agent-empty" data-testid="agent-unconfigured">
-          {t("agentPanel.unconfigured")}{" "}
-          <Link to="/settings">{t("agentPanel.openSettings")}</Link>
-        </p>
+        <AgentSetup rows={providerRows} onStarted={reloadProviders} />
       )}
     </aside>
   );

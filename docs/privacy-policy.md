@@ -1,12 +1,12 @@
 # Linetta 개인정보 처리방침 / Privacy Policy
 
-_최종 업데이트 / Last updated / 最終更新: 2026-11-13_
+_최종 업데이트 / Last updated / 最終更新: 2026-11-15_
 
 ---
 
 ## 한국어
 
-Linetta("앱")는 장편소설·웹소설 집필을 위한 앱입니다. 개발자(Changheon Shin / devlikebear)는 앱을 위한 분석·광고·계정 서버를 운영하지 않으며 사용자 데이터를 수집하지 않습니다. 원고가 기기를 떠나는 경로는 사용자가 직접 설정한 것뿐입니다. 사용자가 연결한 AI 프로바이더로 원고를 보내는 내장 에이전트, 사용자가 고른 이미지 프로바이더로 프롬프트와 참조 이미지를 보내는 삽화 생성, 사용자가 직접 실행하는 외부 MCP 클라이언트, 사용자가 지정한 git 원격으로 푸시하는 GitHub 동기화, 사용자가 지정한 폴더(예: 클라우드 드라이브 폴더)로 복사하는 폴더 동기화, 사용자가 고른 회차와 시트·표지만 웹소설 사이트 Linetta Works에 올리는 게시, 그리고 사용자가 올리기로 고른 작품을 기기에서 암호화해 맡기는 Linetta Works 동기화이며, 아래 3항에서 모두 설명합니다. 이 가운데 게시와 Linetta Works 동기화만 개발자가 운영하는 서버로 보냅니다. Linetta Works 동기화로 가는 것은 개발자가 읽을 수 없는 암호문입니다.
+Linetta("앱")는 장편소설·웹소설 집필을 위한 앱입니다. 개발자(Changheon Shin / devlikebear)는 앱을 위한 분석·광고·계정 서버를 운영하지 않으며 사용자 데이터를 수집하지 않습니다. 원고가 기기를 떠나는 경로는 사용자가 직접 설정한 것뿐입니다. 사용자가 연결한 AI 프로바이더로 원고를 보내는 내장 에이전트, 사용자가 고른 이미지 프로바이더로 프롬프트와 참조 이미지를 보내는 삽화 생성, 사용자가 직접 실행하는 외부 MCP 클라이언트, 사용자가 지정한 git 원격으로 푸시하는 GitHub 동기화, 사용자가 지정한 폴더(예: 클라우드 드라이브 폴더)로 복사하는 폴더 동기화, 사용자가 고른 회차와 시트·표지만 웹소설 사이트 Linetta Works에 올리는 게시, 사용자가 올리기로 고른 작품을 기기에서 암호화해 맡기는 Linetta Works 동기화, 그리고 사용자가 고른 경우 내장 에이전트의 요청을 Linetta Works를 거쳐 AI 모델로 보내는 리네타 체험이며, 아래 3항에서 모두 설명합니다. 이 가운데 게시, Linetta Works 동기화, 리네타 체험만 개발자가 운영하는 서버로 보냅니다. Linetta Works 동기화로 가는 것은 개발자가 읽을 수 없는 암호문입니다.
 
 ### 1. 수집하는 정보
 **개발자가 수집하는 정보는 없습니다.** 앱은 다음을 하지 않습니다.
@@ -56,7 +56,7 @@ Linetta의 내장 에이전트는 사용자가 프로바이더를 직접 연결�
 - **자격 증명.** 2항에 적은 대로 보관합니다. API 키는 운영체제의 보안 저장소에, ChatGPT(Codex) 로그인은 `<앱 데이터>/codex/auth.json`에 보관합니다. 자격 증명은 요청의 일부로 해당 프로바이더에만 전송됩니다. Claude Code의 로그인은 CLI가 직접 관리하며 Linetta는 저장하지 않습니다.
 - **프로바이더가 그 데이터로 무엇을 하는지**는 그 회사의 개인정보 처리방침과 약관 소관이며, 텍스트를 보관하는지 학습에 사용하는지도 여기에 포함됩니다. Linetta가 그 회사를 대신해 약속할 수 없으니, 선택한 프로바이더의 방침을 직접 확인하시기 바랍니다.
 - **에이전트는 원고를 직접 바꿉니다.** 씬을 쓰는 것도, 아웃라인을 재구성하는 것도 포함됩니다. 이 권한은 "외부 에이전트 연결 (MCP)"을 읽기 전용으로 두거나 꺼도 바뀌지 않습니다 — 그 설정은 외부 클라이언트에만 적용됩니다. 에이전트가 호출한 모든 툴은 외부 클라이언트의 호출과 함께 활동 기록에 남고, 어느 쪽이 호출했는지도 기록되어 설정의 MCP 항목에서 확인할 수 있습니다.
-- 개발자는 이 데이터를 수신·중계·저장하지 않습니다. 데이터는 사용자의 기기에서 사용자의 프로바이더로 바로 갑니다.
+- 개발자는 이 데이터를 수신·중계·저장하지 않습니다. 데이터는 사용자의 기기에서 사용자의 프로바이더로 바로 갑니다. 리네타 체험을 프로바이더로 고른 경우만 예외이며, 3.8항에서 설명합니다.
 
 #### 3.2 외부 에이전트 연결 (MCP)
 사용자가 `설정 → 외부 에이전트 연결(MCP)`에서 명시적으로 동의하고 켜면, 앱이 `127.0.0.1`에만 바인딩되는 로컬 엔드포인트를 엽니다. 사용자가 자기 기기에서 실행하는 MCP 클라이언트(예: Claude Code, Claude Desktop, Codex CLI, Gemini CLI)가 여기에 접속해 원고·작품 구조·팩트 카드를 읽고, 전체 접근 모드에서는 수정할 수 있습니다.
@@ -121,8 +121,17 @@ Linetta Works 동기화는 운영자가 허가한 Linetta Works 계정만 쓸 �
 - **해제와 삭제.** `설정 → 동기화 → Linetta Works`에서 작품을 하나씩 서버에서 지울 수 있고, 사이트의 동기화 화면에서 해지하면 서버의 동기화 데이터가 모두 지워집니다. 사이트 연결을 해제하는 것만으로는 서버의 데이터가 지워지지 않습니다. 서버에 얼마나 남는지와 동의 기록은 Linetta Works의 개인정보처리방침을 따릅니다.
 - **보장.** 무료 베타 기능이며 데이터가 유실될 수 있습니다. Linetta Works를 유일한 사본으로 삼지 마십시오.
 
+#### 3.8 리네타 체험
+리네타 체험은 API 키 없이 내장 에이전트를 써 볼 수 있게, Linetta Works가 개발자의 키로 AI 모델을 대신 불러 주는 프로바이더입니다. 사용자가 브라우저로 Linetta Works 계정을 이 기기에 연결하고(3.5항과 같은 연결), 체험 전송 안내에 동의하고, 프로바이더로 리네타 체험을 고르기 전까지는 아무것도 보내지 않습니다. 계정마다 정해진 토큰 수만큼 한 번만 쓸 수 있습니다.
+
+- **어디로 가나.** 개발자가 운영하는 Linetta Works 서버를 거쳐 Upstage(Solar 모델)로 갑니다. 그 밖의 어디로도 가지 않습니다.
+- **무엇이 가나.** 3.1항에서 내장 에이전트가 프로바이더로 보내는 것과 같습니다. 체험으로 도는 턴은 쓸 수 있는 툴이 줄어들고, 턴이 끝난 뒤의 자체 검토와 회차 검토 같은 추가 요청을 보내지 않습니다.
+- **서버가 남기는 것.** Linetta Works는 요청과 응답의 내용을 저장하지 않고 로그에도 남기지 않습니다. 계정, 기기, 사용한 토큰 수(추정 비용 포함), 시각, 결과만 기록합니다. 보관 기간은 Linetta Works의 개인정보처리방침을 따릅니다.
+- **Upstage가 그 데이터로 무엇을 하는지**는 Upstage의 개인정보 처리방침과 약관 소관입니다.
+- **언제든 끄기.** 다른 프로바이더를 고르거나 체험 동의를 해제하면 바로 보내지 않습니다. `설정 → 게시`에서 Linetta Works 연결을 해제하면 체험도 함께 끊깁니다.
+
 ### 4. 데이터 판매·공유
-개발자는 사용자 데이터를 판매하거나 자체 목적으로 공유하지 않습니다. 원고가 다른 곳에 닿는 경로는 사용자가 직접 켜는 것뿐입니다. 내장 에이전트는 사용자가 연결한 프로바이더에 원고를 보내고, 삽화 생성은 사용자가 고른 이미지 프로바이더에 프롬프트와 참조 이미지를 보내며, 사용자가 실행하는 MCP 클라이언트는 원고를 읽어 가며, GitHub 동기화는 사용자의 git 원격으로 원고를 푸시하고, 폴더 동기화는 사용자가 지정한 폴더로 원고를 복사하며, 게시는 사용자가 고른 회차와 시트·표지를 Linetta Works에 공개하고, Linetta Works 동기화는 사용자가 고른 작품의 암호문을 Linetta Works에 맡깁니다. 모두 위 3항과 같습니다.
+개발자는 사용자 데이터를 판매하거나 자체 목적으로 공유하지 않습니다. 원고가 다른 곳에 닿는 경로는 사용자가 직접 켜는 것뿐입니다. 내장 에이전트는 사용자가 연결한 프로바이더에 원고를 보내고, 삽화 생성은 사용자가 고른 이미지 프로바이더에 프롬프트와 참조 이미지를 보내며, 사용자가 실행하는 MCP 클라이언트는 원고를 읽어 가며, GitHub 동기화는 사용자의 git 원격으로 원고를 푸시하고, 폴더 동기화는 사용자가 지정한 폴더로 원고를 복사하며, 게시는 사용자가 고른 회차와 시트·표지를 Linetta Works에 공개하고, Linetta Works 동기화는 사용자가 고른 작품의 암호문을 Linetta Works에 맡기며, 리네타 체험은 에이전트의 요청을 Linetta Works를 거쳐 Upstage로 보냅니다. 모두 위 3항과 같습니다.
 
 ### 5. 아동의 개인정보
 개발자는 아동을 포함한 사용자의 개인정보를 수집하지 않습니다. 아동 사용자는 연결하는 AI 프로바이더와 이미지 프로바이더, MCP로 연결하는 클라이언트, 푸시하는 git 호스트, 동기화 폴더를 제공하는 클라우드 서비스, 그리고 게시하거나 동기화를 쓰는 Linetta Works 각각의 연령 요건 및 보호자 동의 요건도 충족해야 합니다.
@@ -137,7 +146,7 @@ Linetta Works 동기화는 운영자가 허가한 Linetta Works 계정만 쓸 �
 
 ## English
 
-Linetta (the "App") is an app for writing long-form fiction. The developer (Changheon Shin / devlikebear) operates no analytics, advertising, or account server for the App and does not collect user data. The App takes your writing off this device only along paths you set up yourself: the built-in agent, which sends it to an AI provider you connect; illustration generation, which sends a prompt and reference images to an image provider you choose; an MCP client you run yourself; GitHub Sync, which pushes it to a git remote you choose; Folder Sync, which copies it into a folder you choose, such as a cloud drive folder; Publishing, which puts only the episodes, sheets and cover you choose on Linetta Works, a site for reading web fiction; and Linetta Works sync, which seals a work you choose to upload on this device and keeps it there. Section 3 describes each of them. Of these, only Publishing and Linetta Works sync send anything to a server the developer operates, and what goes through Linetta Works sync is ciphertext the developer cannot read.
+Linetta (the "App") is an app for writing long-form fiction. The developer (Changheon Shin / devlikebear) operates no analytics, advertising, or account server for the App and does not collect user data. The App takes your writing off this device only along paths you set up yourself: the built-in agent, which sends it to an AI provider you connect; illustration generation, which sends a prompt and reference images to an image provider you choose; an MCP client you run yourself; GitHub Sync, which pushes it to a git remote you choose; Folder Sync, which copies it into a folder you choose, such as a cloud drive folder; Publishing, which puts only the episodes, sheets and cover you choose on Linetta Works, a site for reading web fiction; Linetta Works sync, which seals a work you choose to upload on this device and keeps it there; and the Linetta trial, which, if you choose it, sends the built-in agent's requests through Linetta Works to an AI model. Section 3 describes each of them. Of these, only Publishing, Linetta Works sync and the Linetta trial send anything to a server the developer operates, and what goes through Linetta Works sync is ciphertext the developer cannot read.
 
 ### 1. Information We Collect
 **The developer collects none.** The App:
@@ -187,7 +196,7 @@ Linetta's built-in agent has nothing to call until you connect a provider yourse
 - **Your credential.** Kept as described in Section 2: an API key in your operating system's secure store, a ChatGPT (Codex) sign-in in `<app data>/codex/auth.json`. It is sent only to that provider, as part of the request. The CLI manages your Claude Code sign-in itself; Linetta does not store it.
 - **What the provider does with that data** is governed by that company's privacy policy and terms, including whether it retains the text or trains on it. Linetta cannot promise anything on that company's behalf; read the policy of the provider you choose.
 - **It writes, too.** The agent can write scenes and restructure the outline directly, not only read. This is unaffected by setting "Connect an external agent (MCP)" to read-only or turning it off — that setting governs external clients only. Every tool call the agent makes is recorded in the same activity log as an external client's calls, tagged with which one made it, and viewable under the MCP section of Settings.
-- The developer does not receive, relay, or store this data. It goes from your device straight to your provider.
+- The developer does not receive, relay, or store this data. It goes from your device straight to your provider. The one exception is choosing the Linetta trial as your provider, described in Section 3.8.
 
 #### 3.2 Connecting an External Agent (MCP)
 When you explicitly consent and enable it under `Settings → Connect an external agent (MCP)`, the App opens a local endpoint bound to `127.0.0.1`. An MCP client you run on the same machine (such as Claude Code, Claude Desktop, Codex CLI, or Gemini CLI) can then read your manuscript, story structure, and fact cards, and in full-access mode modify them.
@@ -252,8 +261,17 @@ Linetta Works sync is available only to Linetta Works accounts the operator has 
 - **Removal and deletion.** Under `Settings → Sync → Linetta Works` you can delete works from the server one at a time, and closing sync on the site's sync page deletes all your sync data there. Disconnecting from the site does not delete anything on the server. How long the server keeps data, and consent records, are covered by the Linetta Works privacy policy.
 - **No guarantee.** This is a free beta and data can be lost. Do not make it your only copy.
 
+#### 3.8 The Linetta Trial
+The Linetta trial is a provider through which Linetta Works calls an AI model with the developer's key, so you can try the built-in agent without an API key. Nothing is sent until you connect your Linetta Works account to this device in the browser (the same connection as Section 3.5), agree to the trial's notice, and choose the Linetta trial as your provider. Each account can use a fixed number of tokens, once.
+
+- **Where it goes.** Through the Linetta Works server the developer operates, to Upstage (its Solar model), and nowhere else.
+- **What goes.** The same as what the built-in agent sends a provider in Section 3.1. A turn on the trial has fewer tools available, and sends none of the extra requests after a turn, such as the self-review or the episode review.
+- **What the server keeps.** Linetta Works neither stores nor logs the content of requests and replies. It records only the account, the device, the number of tokens used (with an estimated cost), the time and the outcome. How long it keeps them is governed by the Linetta Works privacy policy.
+- **What Upstage does with that data** is governed by Upstage's privacy policy and terms.
+- **Turning it off.** Choose another provider or untick the trial's consent and the App stops sending at once. Disconnecting Linetta Works under `Settings → Publishing` ends the trial too.
+
 ### 4. Selling or Sharing Data
-The developer does not sell user data or share it for the developer's own purposes. The only ways your writing reaches anyone else are the ones you turn on yourself: the built-in agent sends it to the provider you connected, illustration generation sends a prompt and reference images to the image provider you chose, an MCP client you run reads it, GitHub Sync pushes it to your git remote, Folder Sync copies it into the folder you chose, Publishing makes the episodes, sheets and cover you choose public on Linetta Works, and Linetta Works sync keeps the ciphertext of works you choose on Linetta Works. Each is described in Section 3.
+The developer does not sell user data or share it for the developer's own purposes. The only ways your writing reaches anyone else are the ones you turn on yourself: the built-in agent sends it to the provider you connected, illustration generation sends a prompt and reference images to the image provider you chose, an MCP client you run reads it, GitHub Sync pushes it to your git remote, Folder Sync copies it into the folder you chose, Publishing makes the episodes, sheets and cover you choose public on Linetta Works, Linetta Works sync keeps the ciphertext of works you choose on Linetta Works, and the Linetta trial sends the agent's requests through Linetta Works to Upstage. Each is described in Section 3.
 
 ### 5. Children's Privacy
 The developer collects no personal data from users, including children. Child users must also satisfy the age and parental-consent requirements of any AI or image provider they connect, any client they connect over MCP, the git host they push to, any cloud service whose folder they sync into, and Linetta Works if they publish there or use its vault.
@@ -268,7 +286,7 @@ Contact: devlikebear@gmail.com
 
 ## 日本語
 
-Linetta（以下「本アプリ」）は、長編小説・Web小説の執筆のためのアプリです。開発者（Changheon Shin / devlikebear）は、本アプリのための分析・広告・アカウント用サーバーを運営せず、ユーザーデータを収集しません。本アプリが原稿を端末の外に出すのは、ユーザー自身が設定した経路に限られます。ユーザーが接続した AI プロバイダーへ原稿を送信する内蔵エージェント、ユーザーが選んだ画像プロバイダーへプロンプトと参照画像を送信する挿絵生成、ユーザー自身が実行する外部 MCP クライアント、ユーザーが指定した git リモートへプッシュする GitHub 同期、ユーザーが指定したフォルダ（例: クラウドドライブのフォルダ）へコピーするフォルダ同期、ユーザーが選んだエピソードとシート・表紙だけを Web 小説サイト Linetta Works に公開する公開機能、そしてユーザーがアップロードを選んだ作品を端末で暗号化して預ける Linetta Works 同期で、いずれも第3項で説明します。このうち公開機能とLinetta Works 同期だけが、開発者の運営するサーバーへ送信します。Linetta Works 同期へ送られるのは、開発者が読めない暗号文です。
+Linetta（以下「本アプリ」）は、長編小説・Web小説の執筆のためのアプリです。開発者（Changheon Shin / devlikebear）は、本アプリのための分析・広告・アカウント用サーバーを運営せず、ユーザーデータを収集しません。本アプリが原稿を端末の外に出すのは、ユーザー自身が設定した経路に限られます。ユーザーが接続した AI プロバイダーへ原稿を送信する内蔵エージェント、ユーザーが選んだ画像プロバイダーへプロンプトと参照画像を送信する挿絵生成、ユーザー自身が実行する外部 MCP クライアント、ユーザーが指定した git リモートへプッシュする GitHub 同期、ユーザーが指定したフォルダ（例: クラウドドライブのフォルダ）へコピーするフォルダ同期、ユーザーが選んだエピソードとシート・表紙だけを Web 小説サイト Linetta Works に公開する公開機能、ユーザーがアップロードを選んだ作品を端末で暗号化して預ける Linetta Works 同期、そしてユーザーが選んだ場合に内蔵エージェントのリクエストを Linetta Works 経由で AI モデルへ送る Linetta お試しで、いずれも第3項で説明します。このうち公開機能、Linetta Works 同期、Linetta お試しだけが、開発者の運営するサーバーへ送信します。Linetta Works 同期へ送られるのは、開発者が読めない暗号文です。
 
 ### 1. 収集する情報
 **開発者が収集する情報はありません。** 本アプリは以下を行いません。
@@ -318,7 +336,7 @@ Linetta の内蔵エージェントは、ユーザー自身がプロバイダー
 - **認証情報。** 第2項に記載のとおり保管します。API キーは OS のセキュアストアに、ChatGPT（Codex）のサインインは `<アプリデータ>/codex/auth.json` に保管します。認証情報はリクエストの一部として当該プロバイダーにのみ送信されます。Claude Code のサインインは CLI 自身が管理し、Linetta は保存しません。
 - **プロバイダーがそのデータをどう扱うか**は、その企業のプライバシーポリシーおよび利用規約に従い、テキストを保持するか学習に使用するかもここに含まれます。Linetta がその企業に代わって約束することはできませんので、選んだプロバイダーの方針をご自身でご確認ください。
 - **書き込みも行います。** エージェントは読み取るだけでなく、シーンを直接執筆し、アウトラインを再構成することもできます。この権限は「外部エージェント接続 (MCP)」を読み取り専用にしても、オフにしても変わりません — その設定は外部クライアントにのみ適用されます。エージェントが呼び出したすべてのツールは、外部クライアントの呼び出しと同じ活動ログに記録され、どちらが呼び出したかも記録されるため、設定の MCP 項目で確認できます。
-- 開発者はこのデータを受信・中継・保存しません。データはユーザーの端末からユーザーのプロバイダーへ直接送られます。
+- 開発者はこのデータを受信・中継・保存しません。データはユーザーの端末からユーザーのプロバイダーへ直接送られます。Linetta お試しをプロバイダーに選んだ場合だけは例外で、第3.8項で説明します。
 
 #### 3.2 外部エージェントの接続 (MCP)
 `設定 → 外部エージェント接続 (MCP)` で明示的に同意して有効にすると、`127.0.0.1` のみにバインドされるローカルエンドポイントが開きます。同じ端末で実行している MCP クライアント（Claude Code、Claude Desktop、Codex CLI、Gemini CLI など）が接続し、原稿・作品構造・ファクトカードを読み取り、フルアクセスモードでは変更できます。
@@ -382,8 +400,17 @@ Linetta Works 同期は、運営者が許可した Linetta Works アカウント
 - **解除と削除。** `設定 → 同期 → Linetta Works` で作品を一つずつサーバーから削除でき、サイトの同期画面で解約するとサーバーの同期データがすべて削除されます。サイトとの接続を解除するだけではサーバーのデータは削除されません。サーバーでの保管期間と同意記録については Linetta Works のプライバシーポリシーに従います。
 - **保証。** 無料ベータ機能であり、データが失われることがあります。Linetta Works を唯一のコピーにしないでください。
 
+#### 3.8 Linetta お試し
+Linetta お試しは、API キーなしで内蔵エージェントを試せるよう、Linetta Works が開発者のキーで AI モデルを代わりに呼び出すプロバイダーです。ユーザーがブラウザで Linetta Works のアカウントをこの端末に接続し（第3.5項と同じ接続）、お試しの送信についての説明に同意し、プロバイダーとして Linetta お試しを選ぶまで、何も送信しません。アカウントごとに決まったトークン数まで、一度だけ使えます。
+
+- **送信先.** 開発者が運営する Linetta Works サーバーを経由して Upstage（Solar モデル）へ送られます。それ以外へは送られません。
+- **送信される内容.** 第3.1項で内蔵エージェントがプロバイダーへ送るものと同じです。お試しで動くターンは使えるツールが少なく、ターンの後のセルフレビューや話のレビューのような追加のリクエストを送りません。
+- **サーバーが残すもの.** Linetta Works はリクエストと応答の内容を保存せず、ログにも残しません。アカウント、端末、使用したトークン数（推定費用を含む）、時刻、結果だけを記録します。保存期間は Linetta Works のプライバシーポリシーに従います。
+- **Upstage がそのデータをどう扱うか**は、Upstage のプライバシーポリシーと利用規約に従います。
+- **いつでも止める.** 別のプロバイダーを選ぶか、お試しへの同意を外すと、すぐに送信を止めます。`設定 → 公開`で Linetta Works の接続を解除すると、お試しも終わります。
+
 ### 4. データの販売・共有
-開発者はユーザーデータを販売せず、開発者自身の目的で共有しません。原稿が他者に届く経路は、ユーザー自身が有効にするものだけです。内蔵エージェントはユーザーが接続したプロバイダーへ原稿を送信し、挿絵生成はユーザーが選んだ画像プロバイダーへプロンプトと参照画像を送信し、ユーザーが実行する MCP クライアントは原稿を読み取り、GitHub 同期はユーザーの git リモートへ原稿をプッシュし、フォルダ同期はユーザーが指定したフォルダへ原稿をコピーし、公開機能はユーザーが選んだエピソードとシート・表紙を Linetta Works で公開し、Linetta Works 同期はユーザーが選んだ作品の暗号文を Linetta Works に預けます。いずれも第3項のとおりです。
+開発者はユーザーデータを販売せず、開発者自身の目的で共有しません。原稿が他者に届く経路は、ユーザー自身が有効にするものだけです。内蔵エージェントはユーザーが接続したプロバイダーへ原稿を送信し、挿絵生成はユーザーが選んだ画像プロバイダーへプロンプトと参照画像を送信し、ユーザーが実行する MCP クライアントは原稿を読み取り、GitHub 同期はユーザーの git リモートへ原稿をプッシュし、フォルダ同期はユーザーが指定したフォルダへ原稿をコピーし、公開機能はユーザーが選んだエピソードとシート・表紙を Linetta Works で公開し、Linetta Works 同期はユーザーが選んだ作品の暗号文を Linetta Works に預け、Linetta お試しはエージェントのリクエストを Linetta Works 経由で Upstage へ送ります。いずれも第3項のとおりです。
 
 ### 5. 子どものプライバシー
 開発者は子どもを含むユーザーの個人情報を収集しません。子どもの利用者は、接続する AI プロバイダーと画像プロバイダー、MCP で接続するクライアント、プッシュ先の git ホスト、同期先フォルダを提供するクラウドサービス、そして公開先または同期先として使う Linetta Works それぞれの年齢要件および保護者同意要件も満たす必要があります。

@@ -8,7 +8,8 @@ import {
   settings as settingsApi,
 } from "../../lib/rpc";
 import { reasonOf, rpcErrorMessage } from "../../lib/rpcMessage";
-import { nameKeyFor, offeredProviders, takesApiKey } from "../../lib/providers";
+import { isTrial, nameKeyFor, offeredProviders, takesApiKey } from "../../lib/providers";
+import { TrialSetup } from "../trial/TrialSetup";
 import type { CodexStatus, ProviderID, ProviderStatus } from "../../lib/types";
 
 /** Connect an AI provider (BYOK).
@@ -928,100 +929,114 @@ export function ProviderSection() {
         </div>
       ) : null}
 
-      <div className="modal-field" data-testid="provider-model">
-        <label htmlFor="provider-model-input">{t("settings.providers.model")}</label>
-        <input
-          id="provider-model-input"
-          list="provider-model-list"
-          value={drafts.model}
-          placeholder={t("settings.providers.model.default")}
-          disabled={busy}
-          onChange={(e) => dispatch({ type: "typed", field: "model", value: e.target.value })}
-          onBlur={() => void saveModel()}
-          data-testid="provider-model-input"
+      {isTrial(active) ? (
+        // The trial has no key, model or connection test: the Works
+        // connection is its credential, the site picks the model, and a test
+        // would spend the writer's trial tokens.
+        <TrialSetup
+          mode="settings"
+          consented={consented}
+          onConsentChange={(c) => saveConsent(c)}
+          onConnectionChange={() => void guard(refresh)}
         />
-        <datalist id="provider-model-list">
-          {models.map((m) => (
-            <option key={m} value={m} />
-          ))}
-        </datalist>
-        <button
-          type="button"
-          className="btn ghost sm"
-          disabled={busy || !current?.configured}
-          onClick={() => void loadModels()}
-          data-testid="provider-model-refresh"
-        >
-          {t("settings.providers.model.refresh")}
-        </button>
-        {modelsError ? (
-          // Leads with what actually failed and what to do about it. The
-          // reason sentence alone reads as a verdict on the credential — for
-          // auth_failed it says "sign in again", which is the wrong advice
-          // when the login works and only the list does not (#126). The
-          // reason still follows, because a 401 or a dead network is worth
-          // knowing; it just is not the headline.
-          <p className="sd" data-testid="provider-model-error">
-            {t("settings.providers.model.listFailed")} {rpcErrorMessage(modelsError, t)}
-          </p>
-        ) : null}
-      </div>
+      ) : (
+        <>
+        <div className="modal-field" data-testid="provider-model">
+          <label htmlFor="provider-model-input">{t("settings.providers.model")}</label>
+          <input
+            id="provider-model-input"
+            list="provider-model-list"
+            value={drafts.model}
+            placeholder={t("settings.providers.model.default")}
+            disabled={busy}
+            onChange={(e) => dispatch({ type: "typed", field: "model", value: e.target.value })}
+            onBlur={() => void saveModel()}
+            data-testid="provider-model-input"
+          />
+          <datalist id="provider-model-list">
+            {models.map((m) => (
+              <option key={m} value={m} />
+            ))}
+          </datalist>
+          <button
+            type="button"
+            className="btn ghost sm"
+            disabled={busy || !current?.configured}
+            onClick={() => void loadModels()}
+            data-testid="provider-model-refresh"
+          >
+            {t("settings.providers.model.refresh")}
+          </button>
+          {modelsError ? (
+            // Leads with what actually failed and what to do about it. The
+            // reason sentence alone reads as a verdict on the credential — for
+            // auth_failed it says "sign in again", which is the wrong advice
+            // when the login works and only the list does not (#126). The
+            // reason still follows, because a 401 or a dead network is worth
+            // knowing; it just is not the headline.
+            <p className="sd" data-testid="provider-model-error">
+              {t("settings.providers.model.listFailed")} {rpcErrorMessage(modelsError, t)}
+            </p>
+          ) : null}
+        </div>
 
-      <div className="modal-field" data-testid="provider-pass-model">
-        <label htmlFor="provider-pass-model-input">{t("settings.providers.passModel")}</label>
-        <input
-          id="provider-pass-model-input"
-          list="provider-model-list"
-          value={passDraft}
-          placeholder={t("settings.providers.passModel.default")}
-          disabled={busy}
-          onChange={(e) => setPassDraft(e.target.value)}
-          onBlur={() => void savePassModel()}
-          data-testid="provider-pass-model-input"
-        />
-        <p className="sd">{t("settings.providers.passModel.hint")}</p>
-      </div>
+        <div className="modal-field" data-testid="provider-pass-model">
+          <label htmlFor="provider-pass-model-input">{t("settings.providers.passModel")}</label>
+          <input
+            id="provider-pass-model-input"
+            list="provider-model-list"
+            value={passDraft}
+            placeholder={t("settings.providers.passModel.default")}
+            disabled={busy}
+            onChange={(e) => setPassDraft(e.target.value)}
+            onBlur={() => void savePassModel()}
+            data-testid="provider-pass-model-input"
+          />
+          <p className="sd">{t("settings.providers.passModel.hint")}</p>
+        </div>
 
-      <label className="modal-field modal-check">
-        <input
-          type="checkbox"
-          checked={consented}
-          disabled={busy}
-          onChange={(e) => void saveConsent(e.target.checked)}
-          data-testid="provider-consent"
-        />
-        {t("settings.providers.consent", { provider: consentDestination })}
-      </label>
+        <label className="modal-field modal-check">
+          <input
+            type="checkbox"
+            checked={consented}
+            disabled={busy}
+            onChange={(e) => void saveConsent(e.target.checked)}
+            data-testid="provider-consent"
+          />
+          {t("settings.providers.consent", { provider: consentDestination })}
+        </label>
 
-      <div className="modal-field provider-test">
-        <button
-          type="button"
-          className="btn ghost sm"
-          disabled={busy || !consented || !configured}
-          onClick={() => void runTest()}
-          data-testid="provider-test"
-        >
-          {t("settings.providers.test")}
-        </button>
-        {/* <output>, not a bare span with role="status": a screen reader
-            announced the failure and said nothing at all about the success,
-            so the one outcome that means "you can start writing" was the one
-            nobody heard. <output> carries that polite, non-interrupting
-            status semantics natively rather than borrowing it from an
-            explicit role, and is the better-supported way to say it. */}
-        {shownTest?.ok ? (
-          <output className="provider-test-ok" data-testid="provider-test-ok">{t("settings.providers.test.ok")}</output>
-        ) : null}
-        {shownTest?.error ? (
-          <span className="provider-test-error" role="alert" data-testid="provider-test-error">
-            {/* The shared sentence says to re-enter an API key, and this
-                provider has no key field: its login lives in the terminal. */}
-            {active === "claude-code" && reasonOf(shownTest.error) === "provider_auth_failed"
-              ? t("settings.providers.cli.signedOut")
-              : rpcErrorMessage(shownTest.error, t)}
-          </span>
-        ) : null}
-      </div>
+        <div className="modal-field provider-test">
+          <button
+            type="button"
+            className="btn ghost sm"
+            disabled={busy || !consented || !configured}
+            onClick={() => void runTest()}
+            data-testid="provider-test"
+          >
+            {t("settings.providers.test")}
+          </button>
+          {/* <output>, not a bare span with role="status": a screen reader
+              announced the failure and said nothing at all about the success,
+              so the one outcome that means "you can start writing" was the one
+              nobody heard. <output> carries that polite, non-interrupting
+              status semantics natively rather than borrowing it from an
+              explicit role, and is the better-supported way to say it. */}
+          {shownTest?.ok ? (
+            <output className="provider-test-ok" data-testid="provider-test-ok">{t("settings.providers.test.ok")}</output>
+          ) : null}
+          {shownTest?.error ? (
+            <span className="provider-test-error" role="alert" data-testid="provider-test-error">
+              {/* The shared sentence says to re-enter an API key, and this
+                  provider has no key field: its login lives in the terminal. */}
+              {active === "claude-code" && reasonOf(shownTest.error) === "provider_auth_failed"
+                ? t("settings.providers.cli.signedOut")
+                : rpcErrorMessage(shownTest.error, t)}
+            </span>
+          ) : null}
+        </div>
+        </>
+      )}
 
       {error ? (
         <p className="sd" role="alert" data-testid="provider-error">

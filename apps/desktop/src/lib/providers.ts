@@ -8,6 +8,7 @@ import type { ProviderID, ProviderStatus } from "./types";
  *  by the settings pane and the agent panel's picker, so the two can never
  *  name the same provider differently. */
 export const PROVIDER_ORDER: { id: ProviderID; labelKey: MessageKey }[] = [
+  { id: "linetta-trial", labelKey: "settings.providers.name.linetta-trial" },
   { id: "openai-codex", labelKey: "settings.providers.name.openai-codex" },
   { id: "anthropic", labelKey: "settings.providers.name.anthropic" },
   { id: "gemini-native", labelKey: "settings.providers.name.gemini-native" },
@@ -26,8 +27,14 @@ export const offeredProviders = (rows: ProviderStatus[]) =>
     : PROVIDER_ORDER.filter((p) => p.id !== "claude-code");
 
 /** Whether a provider takes an API key typed into the settings pane. Codex
- *  signs in through the browser and Claude Code through its own CLI. */
-export const takesApiKey = (id: ProviderID) => id !== "openai-codex" && id !== "claude-code";
+ *  signs in through the browser, Claude Code through its own CLI, and the
+ *  trial through the Linetta Works connection. */
+export const takesApiKey = (id: ProviderID) =>
+  id !== "openai-codex" && id !== "claude-code" && id !== "linetta-trial";
+
+/** The Linetta trial: the site picks the model and every request spends the
+ *  writer's trial tokens, so it has no model choice and no connection test. */
+export const isTrial = (id: ProviderID | undefined) => id === "linetta-trial";
 
 /** The i18n key naming one provider, for interpolation into a sentence that
  *  has to say which company it means. */

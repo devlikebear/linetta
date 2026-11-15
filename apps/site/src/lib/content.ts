@@ -678,7 +678,7 @@ export const en: Translation = {
       },
       {
         q: 'Is there AI inside the app?',
-        a: 'Optionally. A built-in agent can write for you once you connect a provider — a ChatGPT sign-in, the Claude Code CLI, Anthropic, Google Gemini or an OpenAI-compatible endpoint — and consent to it, provider by provider. Or skip that entirely and connect your own agent, such as Claude Code or Codex CLI, over the MCP server instead. Illustrations are a separate choice, with their own consent.'
+        a: 'Optionally. A built-in agent can write for you once you connect a provider — a ChatGPT sign-in, the Claude Code CLI, Anthropic, Google Gemini or an OpenAI-compatible endpoint — and consent to it, provider by provider. With no provider of your own, connect a Linetta Works account and try the agent on the Linetta trial: a fixed number of tokens, once per account, sent through Linetta Works to Upstage’s Solar model, which keeps none of the text. Or skip that entirely and connect your own agent, such as Claude Code or Codex CLI, over the MCP server instead. Illustrations are a separate choice, with their own consent.'
       },
       {
         q: 'Can I bring an existing manuscript?',
@@ -686,7 +686,7 @@ export const en: Translation = {
       },
       {
         q: 'Is my writing uploaded anywhere?',
-        a: 'Not by default. It leaves this device only once you turn something on: the built-in agent sends what it works on to the provider you connected, an MCP client you run reads it, the image provider you chose receives a prompt and any reference images when you press Generate, an episode you publish goes to Linetta Works for anyone to read, a work you upload through Linetta Works sync goes to the same operator’s server sealed so nobody there can read it, and GitHub Sync or Folder Sync, once configured, export your whole library on a daily tick and at every launch, along with a sealed copy if you choose them as a sync target.'
+        a: 'Not by default. It leaves this device only once you turn something on: the built-in agent sends what it works on to the provider you connected (on the Linetta trial, through Linetta Works to Upstage, which records only the tokens used), an MCP client you run reads it, the image provider you chose receives a prompt and any reference images when you press Generate, an episode you publish goes to Linetta Works for anyone to read, a work you upload through Linetta Works sync goes to the same operator’s server sealed so nobody there can read it, and GitHub Sync or Folder Sync, once configured, export your whole library on a daily tick and at every launch, along with a sealed copy if you choose them as a sync target.'
       },
       {
         q: 'What about iPhone, iPad and Android?',
@@ -1235,7 +1235,7 @@ export const ko: Translation = {
       },
       {
         q: '앱 안에 AI가 들어 있나요?',
-        a: '선택적으로요. 프로바이더 — ChatGPT 로그인, Claude Code CLI, Anthropic, Google Gemini, 또는 OpenAI 호환 엔드포인트 — 를 연결하고 각각 동의하면 내장 에이전트가 대신 씁니다. 아니면 그것 없이 Claude Code나 Codex CLI 같은 에이전트를 MCP 서버로 직접 연결할 수도 있습니다. 삽화는 따로 고르고 따로 동의합니다.'
+        a: '선택적으로요. 프로바이더 — ChatGPT 로그인, Claude Code CLI, Anthropic, Google Gemini, 또는 OpenAI 호환 엔드포인트 — 를 연결하고 각각 동의하면 내장 에이전트가 대신 씁니다. 내 프로바이더가 없으면 Linetta Works 계정을 연결해 리네타 체험으로 써 볼 수 있습니다. 계정마다 한 번, 정해진 토큰만큼이며, Linetta Works를 거쳐 Upstage의 Solar 모델로 가고 내용은 저장하지 않습니다. 아니면 그것 없이 Claude Code나 Codex CLI 같은 에이전트를 MCP 서버로 직접 연결할 수도 있습니다. 삽화는 따로 고르고 따로 동의합니다.'
       },
       {
         q: '쓰던 원고를 가져올 수 있나요?',
@@ -1243,7 +1243,7 @@ export const ko: Translation = {
       },
       {
         q: '제 글이 어딘가로 업로드되나요?',
-        a: '기본값으로는 아닙니다. 무언가를 켰을 때만 이 기기를 벗어납니다 — 내장 에이전트는 작업 중인 내용을 연결한 프로바이더로 보내고, 직접 실행한 MCP 클라이언트는 그것을 읽으며, 고른 이미지 프로바이더는 생성을 누를 때 프롬프트와 참조 이미지를 받고, 게시한 회차는 누구나 읽도록 Linetta Works로 가고, Linetta Works 동기화로 올린 작품은 같은 운영자의 서버로 가되 아무도 읽을 수 없게 암호화되어 가며, GitHub 동기화나 폴더 동기화를 설정하면 하루 한 번과 실행할 때마다 전체 서재를 내보내고, 동기화 대상으로 고르면 암호화된 사본도 함께 둡니다.'
+        a: '기본값으로는 아닙니다. 무언가를 켰을 때만 이 기기를 벗어납니다 — 내장 에이전트는 작업 중인 내용을 연결한 프로바이더로 보내고(리네타 체험이면 Linetta Works를 거쳐 Upstage로 가며 사용한 토큰 수만 기록됩니다), 직접 실행한 MCP 클라이언트는 그것을 읽으며, 고른 이미지 프로바이더는 생성을 누를 때 프롬프트와 참조 이미지를 받고, 게시한 회차는 누구나 읽도록 Linetta Works로 가고, Linetta Works 동기화로 올린 작품은 같은 운영자의 서버로 가되 아무도 읽을 수 없게 암호화되어 가며, GitHub 동기화나 폴더 동기화를 설정하면 하루 한 번과 실행할 때마다 전체 서재를 내보내고, 동기화 대상으로 고르면 암호화된 사본도 함께 둡니다.'
       },
       {
         q: 'iPhone, iPad, Android는요?',
@@ -1790,7 +1790,7 @@ export const ja: Translation = {
       },
       {
         q: 'アプリの中に AI は入っていますか。',
-        a: '任意で入っています。プロバイダー — ChatGPT サインイン、Claude Code CLI、Anthropic、Google Gemini、または OpenAI 互換エンドポイント — をつないでそれぞれ同意すれば、内蔵エージェントが代わりに書きます。それをせずに、Claude Code や Codex CLI のようなエージェントを MCP サーバーで直接つなぐこともできます。挿絵は別に選び、別に同意します。'
+        a: '任意で入っています。プロバイダー — ChatGPT サインイン、Claude Code CLI、Anthropic、Google Gemini、または OpenAI 互換エンドポイント — をつないでそれぞれ同意すれば、内蔵エージェントが代わりに書きます。自分のプロバイダーがなければ、Linetta Works のアカウントをつないで Linetta お試しで試せます。アカウントごとに一度、決まったトークン数までで、Linetta Works を経由して Upstage の Solar モデルへ送られ、内容は保存されません。それをせずに、Claude Code や Codex CLI のようなエージェントを MCP サーバーで直接つなぐこともできます。挿絵は別に選び、別に同意します。'
       },
       {
         q: '書きかけの原稿を持ち込めますか。',
@@ -1798,7 +1798,7 @@ export const ja: Translation = {
       },
       {
         q: '書いたものはどこかにアップロードされますか。',
-        a: '既定ではされません。何かをオンにしたときだけこの端末を離れます — 内蔵エージェントは作業中の内容をつないだプロバイダーへ送り、自分で動かす MCP クライアントはそれを読み、選んだ画像プロバイダーは生成を押したときにプロンプトと参照画像を受け取り、公開した話は誰でも読めるよう Linetta Works へ送られ、Linetta Works 同期でアップロードした作品は同じ運営者のサーバーへ送られますが誰にも読めないよう暗号化されており、GitHub 同期やフォルダ同期を設定すると毎日一回と起動のたびに書庫全体を書き出し、同期先に選ぶと暗号化したコピーも一緒に置きます。'
+        a: '既定ではされません。何かをオンにしたときだけこの端末を離れます — 内蔵エージェントは作業中の内容をつないだプロバイダーへ送り（Linetta お試しなら Linetta Works を経由して Upstage へ送られ、使用したトークン数だけが記録されます）、自分で動かす MCP クライアントはそれを読み、選んだ画像プロバイダーは生成を押したときにプロンプトと参照画像を受け取り、公開した話は誰でも読めるよう Linetta Works へ送られ、Linetta Works 同期でアップロードした作品は同じ運営者のサーバーへ送られますが誰にも読めないよう暗号化されており、GitHub 同期やフォルダ同期を設定すると毎日一回と起動のたびに書庫全体を書き出し、同期先に選ぶと暗号化したコピーも一緒に置きます。'
       },
       {
         q: 'iPhone、iPad、Android はどうですか。',
