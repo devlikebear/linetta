@@ -51,12 +51,13 @@ describe("RelationshipGraph", () => {
     render(<RelationshipGraph projectId="p1" nodeId="s2" onClose={vi.fn()} />);
     expect(await screen.findByTestId("relationship-graph-episode")).toHaveTextContent("2화");
     expect(mocks.graph).toHaveBeenCalledWith("p1", { nodeId: "s2" });
-    const edge = screen.getByTestId("relationship-graph-edge-r2");
+    // The layout lands a tick after the data: the edges draw once it has.
+    const edge = await screen.findByTestId("relationship-graph-edge-r2");
     expect(edge.getAttribute("class")).toContain("is-changed");
     expect(edge.textContent).toBe("◆ 적 / 원수");
     // Places are off by default; 서진 has not appeared yet.
     expect(screen.queryByTestId("relationship-graph-node-p")).toBeNull();
-    expect(screen.getByTestId("relationship-graph-node-c").getAttribute("class")).toContain("is-pending");
+    expect((await screen.findByTestId("relationship-graph-node-c")).getAttribute("class")).toContain("is-pending");
   });
 
   it("moves through the episodes and keeps everyone where they were", async () => {
