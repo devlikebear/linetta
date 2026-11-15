@@ -1,0 +1,152 @@
+{
+  "doc": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "인용 앞"
+          }
+        ]
+      },
+      {
+        "type": "blockquote",
+        "content": [
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "인용 첫 문단"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "content": [
+              {
+                "type": "text",
+                "text": "인용 둘째 문단"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "bulletList",
+        "content": [
+          {
+            "type": "listItem",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "항목 하나"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "listItem",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "항목 둘"
+                  }
+                ]
+              },
+              {
+                "type": "orderedList",
+                "attrs": {
+                  "start": 1
+                },
+                "content": [
+                  {
+                    "type": "listItem",
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "안쪽 항목"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "codeBlock",
+        "attrs": {
+          "language": null
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "코드 첫 줄\n\n코드 셋째 줄"
+          }
+        ]
+      },
+      {
+        "type": "codeBlock",
+        "attrs": {
+          "language": null
+        }
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "끝 문단"
+          }
+        ]
+      }
+    ]
+  },
+  "paragraphs": [
+    "인용 앞",
+    "인용 첫 문단",
+    "인용 둘째 문단",
+    "항목 하나",
+    "항목 둘",
+    "안쪽 항목",
+    "코드 첫 줄",
+    "코드 셋째 줄",
+    "끝 문단"
+  ],
+  "quotes": [
+    {
+      "from": 7,
+      "to": 8,
+      "quote": "코드 첫 줄 코드 셋째 줄",
+      "found": true
+    },
+    {
+      "from": 5,
+      "to": 6,
+      "quote": "둘 안쪽",
+      "found": true
+    },
+    {
+      "from": 9,
+      "to": 9,
+      "quote": "인용",
+      "found": false
+    }
+  ]
+}

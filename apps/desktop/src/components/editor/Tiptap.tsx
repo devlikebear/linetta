@@ -1,11 +1,13 @@
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import type { Schema } from "@tiptap/pm/model";
+import { TextSelection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
 import { Placeholder } from "@tiptap/extensions";
 import { IllustrationExtension } from "./IllustrationExtension";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { FocusExtension, focusKey } from "./FocusExtension";
-import { SearchHighlightExtension, SearchHighlightPluginKey } from "./SearchHighlightExtension";
+import { RevealHighlightPluginKey, SearchHighlightExtension, SearchHighlightPluginKey } from "./SearchHighlightExtension";
+import { findQuoteInParagraphs, paragraphRanges } from "../../lib/paragraphRanges";
 import "./Tiptap.css";
 import { countDocChars, DEFAULT_CHAR_COUNT_BASIS } from "../../lib/charCount";
 import type { CharCountBasis } from "../../lib/types";
@@ -35,10 +37,22 @@ export interface TiptapHandle {
   removeNoteMarker: (noteId: string) => void;
   /** Insert a gallery illustration as a block at the selection. */
   insertIllustration: (id: string, caption: string) => void;
+  /** Scroll to paragraphs [from, to] (numbered as the engine numbers them),
+   *  put the cursor there and light the quote, or the paragraphs when the
+   *  quote is not in them. See RevealResult for what was found. */
+  revealParagraph: (from: number, to: number, quote?: string) => RevealResult;
   /** Underlying Tiptap Editor instance (null until first mount). Used by
    *  ghost-text + Cmd+I AI prompt bar to read selection and dispatch commands. */
   editor: Editor | null;
 }
+
+/** What revealParagraph could show: the quote (in the cited paragraphs, or
+ *  elsewhere in the scene when its paragraphs moved), only the cited
+ *  paragraphs, or nothing because the scene no longer has them. */
+export type RevealResult = "quote" | "paragraph" | "missing";
+
+/** How long a revealed passage stays lit; Tiptap.css fades it over the same time. */
+const REVEAL_MS = 3000;
 
 export interface TiptapFindResult {
   count: number;
@@ -86,10 +100,13 @@ interface Props {
   /** Hint drawn in an empty scene, so a writer on a touch screen — where the
    *  editor does not take focus on its own — can see where the text goes. */
   placeholder?: string;
+  /** Fired once the editor has finished opening (autofocus included) and the
+   *  handle can be used, e.g. to reveal a passage in a scene opened for it. */
+  onReady?: () => void;
 }
 
 export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEditor(
-  { initialDoc, onChange, onCharCount, charCountBasis = DEFAULT_CHAR_COUNT_BASIS, typewriter, onManualSave, extensions, onMentionDoubleClick, focus, onSelectionContextMenu, contentErrorNotice, placeholder },
+  { initialDoc, onChange, onCharCount, charCountBasis = DEFAULT_CHAR_COUNT_BASIS, typewriter, onManualSave, extensions, onMentionDoubleClick, focus, onSelectionContextMenu, contentErrorNotice, placeholder, onReady },
   ref,
 ) {
   // Stable reference for the initial doc to avoid resetting on every render.
@@ -110,6 +127,9 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
   // Read at draw time, so a language change shows without recreating the editor.
   const placeholderRef = useRef(placeholder ?? "");
   placeholderRef.current = placeholder ?? "";
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
+  const revealTimerRef = useRef<number | undefined>(undefined);
 
   const editor = useEditor(
     {
@@ -204,6 +224,24 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
     return () => window.removeEventListener("keydown", handler);
   }, [editor, onManualSave]);
 
+  // Ready once Tiptap has run its autofocus ("create"), which comes a tick
+  // after mount: a passage revealed before that would have its cursor and
+  // scroll thrown to the end of the scene.
+  useEffect(() => {
+    if (!editor) return;
+    const ready = () => onReadyRef.current?.();
+    if (editor.isInitialized) {
+      ready();
+      return;
+    }
+    editor.on("create", ready);
+    return () => {
+      editor.off("create", ready);
+    };
+  }, [editor]);
+
+  useEffect(() => () => window.clearTimeout(revealTimerRef.current), []);
+
   // Expose a tiny imperative API so parents can refocus the editor (e.g. after
   // the outline auto-retracts or a dialog closes).
   useImperativeHandle(
@@ -287,6 +325,33 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
       },
       removeNoteMarker: (noteId: string) => {
         (editor?.commands as any)?.removeNoteMarker?.(noteId);
+      },
+      revealParagraph: (from, to, quote) => {
+        if (!editor) return "missing";
+        const ranges = paragraphRanges(editor.state.doc);
+        const inRange = from >= 1 && to >= from && to <= ranges.length;
+        const cited = quote?.trim() ?? "";
+        // The quote where it was cited; failing that, anywhere in the scene,
+        // since an edit above it shifts every paragraph number below.
+        const found = cited
+          ? findQuoteInParagraphs(ranges, from, to, cited)
+            ?? findQuoteInParagraphs(ranges, 1, ranges.length, cited)
+          : null;
+        let target: { from: number; to: number; kind: "quote" | "paragraph" } | null = null;
+        if (found) target = { ...found, kind: "quote" };
+        else if (inRange) target = { from: ranges[from - 1].from, to: ranges[to - 1].to, kind: "paragraph" };
+        if (!target) return "missing";
+
+        window.clearTimeout(revealTimerRef.current);
+        editor.view.dispatch(editor.state.tr
+          .setSelection(TextSelection.create(editor.state.doc, target.from))
+          .setMeta(RevealHighlightPluginKey, target));
+        editor.view.focus();
+        scrollPositionIntoView(editor, target.from);
+        revealTimerRef.current = window.setTimeout(() => {
+          if (!editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta(RevealHighlightPluginKey, null));
+        }, REVEAL_MS);
+        return target.kind;
       },
       editor,
     }),
@@ -398,6 +463,27 @@ function TypewriterScroll({ editor, enabled }: { editor: Editor | null; enabled:
     };
   }, [editor, enabled]);
   return null;
+}
+
+/** Scrolls the editor's scroller so `pos` sits a third of the way down,
+ *  where a reader's eye goes first, once layout has settled. */
+function scrollPositionIntoView(editor: Editor, pos: number) {
+  window.requestAnimationFrame(() => {
+    if (editor.isDestroyed) return;
+    // Measuring needs a laid-out view; without one there is nothing to scroll.
+    try {
+      const scroller = findScrollableParent(editor.view.dom);
+      if (!scroller) {
+        editor.commands.scrollIntoView();
+        return;
+      }
+      const coords = editor.view.coordsAtPos(pos);
+      const rect = scroller.getBoundingClientRect();
+      scroller.scrollBy({ top: coords.top - (rect.top + rect.height / 3), behavior: "smooth" });
+    } catch {
+      // Not laid out (a hidden pane, a test DOM): the selection is still set.
+    }
+  });
 }
 
 function findScrollableParent(el: HTMLElement | null): HTMLElement | null {

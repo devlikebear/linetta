@@ -317,3 +317,112 @@ describe("TiptapEditor", () => {
     expect(ref.current?.editor?.state.doc.textContent).toBe("새로 쓴 문장. 처음 원고");
   });
 });
+
+describe("TiptapEditor revealParagraph", () => {
+  // Paragraph 2 holds the quote across two marks; the blank paragraph between
+  // 1 and 2 does not count, as in the engine's numbering.
+  const citedDoc = {
+    type: "doc",
+    content: [
+      { type: "paragraph", content: [{ type: "text", text: "비가 내렸다." }] },
+      { type: "paragraph" },
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "수아는 " },
+          { type: "text", marks: [{ type: "bold" }], text: "은빛" },
+          { type: "text", text: " 열쇠를 쥐었다." },
+        ],
+      },
+      { type: "paragraph", content: [{ type: "text", text: "마지막 문단." }] },
+    ],
+  };
+
+  async function mount(onReady?: () => void) {
+    const ref = createRef<TiptapHandle>();
+    const view = render(<TiptapEditor ref={ref} initialDoc={citedDoc} onChange={vi.fn()} onReady={onReady} />);
+    await waitFor(() => expect(ref.current?.editor).toBeTruthy());
+    return { ref, container: view.container };
+  }
+
+  it("tells the parent when the handle can be used", async () => {
+    const onReady = vi.fn();
+    await mount(onReady);
+    expect(onReady).toHaveBeenCalledTimes(1);
+  });
+
+  it("reveals from onReady after the editor's own autofocus, which would move the cursor to the end", async () => {
+    const ref = createRef<TiptapHandle>();
+    let result: string | undefined;
+    render(
+      <TiptapEditor
+        ref={ref}
+        initialDoc={citedDoc}
+        onChange={vi.fn()}
+        onReady={() => {
+          result = ref.current?.revealParagraph(3, 3, "마지막 문단");
+        }}
+      />,
+    );
+    await waitFor(() => expect(result).toBe("quote"));
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+    const selection = ref.current!.getSelection()!;
+    expect(ref.current!.editor!.state.doc.textBetween(selection.from, selection.from + 3)).toBe("마지막");
+  });
+
+  it("lights the quote across mark boundaries, puts the cursor there, and lets it fade", async () => {
+    const { ref, container } = await mount();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      let result: string | undefined;
+      act(() => {
+        result = ref.current?.revealParagraph(2, 2, "은빛  열쇠를");
+      });
+      expect(result).toBe("quote");
+      const lit = [...container.querySelectorAll(".tiptap-reveal-quote")].map((el) => el.textContent).join("");
+      expect(lit).toBe("은빛 열쇠를");
+      const selection = ref.current!.getSelection()!;
+      expect(ref.current!.editor!.state.doc.textBetween(selection.from, selection.from + 2)).toBe("은빛");
+
+      act(() => {
+        vi.advanceTimersByTime(3000);
+      });
+      expect(container.querySelector(".tiptap-reveal")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("finds the quote elsewhere in the scene when its paragraph number moved", async () => {
+    const { ref, container } = await mount();
+    let result: string | undefined;
+    act(() => {
+      result = ref.current?.revealParagraph(1, 1, "마지막 문단");
+    });
+    expect(result).toBe("quote");
+    expect(container.querySelector(".tiptap-reveal-quote")?.textContent).toBe("마지막 문단");
+  });
+
+  it("lights the cited paragraphs when the quote is gone", async () => {
+    const { ref, container } = await mount();
+    let result: string | undefined;
+    act(() => {
+      result = ref.current?.revealParagraph(2, 3, "지워진 문장");
+    });
+    expect(result).toBe("paragraph");
+    const lit = [...container.querySelectorAll(".tiptap-reveal-paragraph")].map((el) => el.textContent).join("|");
+    expect(lit).toContain("수아는");
+    expect(lit).toContain("마지막 문단.");
+    expect(lit).not.toContain("비가 내렸다.");
+  });
+
+  it("reports a paragraph the scene no longer has", async () => {
+    const { ref, container } = await mount();
+    let result: string | undefined;
+    act(() => {
+      result = ref.current?.revealParagraph(9, 9, "없는 문장");
+    });
+    expect(result).toBe("missing");
+    expect(container.querySelector(".tiptap-reveal")).toBeNull();
+  });
+});

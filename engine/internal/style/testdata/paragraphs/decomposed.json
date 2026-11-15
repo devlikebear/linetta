@@ -1,0 +1,55 @@
+{
+  "doc": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "한글 자모로 풀어 쓴 문장"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "é accent"
+          }
+        ]
+      }
+    ]
+  },
+  "paragraphs": [
+    "한글 자모로 풀어 쓴 문장",
+    "é accent"
+  ],
+  "quotes": [
+    {
+      "from": 1,
+      "to": 1,
+      "quote": "자모로 풀어",
+      "found": true
+    },
+    {
+      "from": 1,
+      "to": 1,
+      "quote": "풀어 쓴",
+      "found": true
+    },
+    {
+      "from": 2,
+      "to": 2,
+      "quote": "é accent",
+      "found": true
+    },
+    {
+      "from": 1,
+      "to": 1,
+      "quote": "자모 로",
+      "found": false
+    }
+  ]
+}

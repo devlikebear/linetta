@@ -1,0 +1,122 @@
+{
+  "doc": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "hardBreak"
+          },
+          {
+            "type": "text",
+            "text": "앞의 줄바꿈은 지워진다."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "한 줄"
+          },
+          {
+            "type": "hardBreak"
+          },
+          {
+            "type": "text",
+            "text": "두 줄"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "빈 줄 앞"
+          },
+          {
+            "type": "hardBreak"
+          },
+          {
+            "type": "hardBreak"
+          },
+          {
+            "type": "text",
+            "text": "빈 줄 뒤"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "끝에 줄바꿈"
+          },
+          {
+            "type": "hardBreak"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "다음 문단"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "끝"
+          },
+          {
+            "type": "hardBreak"
+          },
+          {
+            "type": "hardBreak"
+          },
+          {
+            "type": "hardBreak"
+          }
+        ]
+      }
+    ]
+  },
+  "paragraphs": [
+    "앞의 줄바꿈은 지워진다.",
+    "한 줄\n두 줄",
+    "빈 줄 앞",
+    "빈 줄 뒤",
+    "끝에 줄바꿈",
+    "\n다음 문단",
+    "끝"
+  ],
+  "quotes": [
+    {
+      "from": 2,
+      "to": 2,
+      "quote": "한 줄 두 줄",
+      "found": true
+    },
+    {
+      "from": 6,
+      "to": 6,
+      "quote": "다음 문단",
+      "found": true
+    },
+    {
+      "from": 3,
+      "to": 4,
+      "quote": "빈 줄 앞 빈 줄 뒤",
+      "found": true
+    }
+  ]
+}

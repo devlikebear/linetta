@@ -63,7 +63,7 @@ import { normalizePlatformProfile, transformPlatformText } from "../lib/platform
 import { SceneSaveQueue } from "../lib/sceneSaveQueue";
 import { useMcpChanges } from "../hooks/useMcpChanges";
 import { useEngineEvent } from "../hooks/useEngineEvent";
-import type { ProposalsChangedPayload, VaultWorkState } from "../lib/types";
+import type { PassageTarget, ProposalsChangedPayload, VaultWorkState } from "../lib/types";
 import { vaultNeedsAttention } from "../lib/vault";
 import { WorkSyncBanner } from "../components/WorkSyncBanner";
 import { useSyncStatus } from "../hooks/useSyncStatus";
@@ -1439,6 +1439,48 @@ export function Workspace() {
     setFactBookHighlightId(factId);
   }, []);
 
+  // A passage asked for in a scene that is not open yet waits here until
+  // that scene's editor is ready (handleEditorReady).
+  const pendingRevealRef = useRef<PassageTarget | null>(null);
+
+  const applyReveal = useCallback((target: PassageTarget) => {
+    const result = editorRef.current?.revealParagraph(
+      target.paragraphFrom,
+      target.paragraphTo ?? target.paragraphFrom,
+      target.quote,
+    );
+    if (result === "missing") {
+      showToast(t("workspace.toast.passageMissing"));
+    } else if (result === "paragraph" && target.quote?.trim()) {
+      showToast(t("workspace.toast.passageQuoteMissing"));
+    }
+  }, [showToast, t]);
+
+  /** Opens a scene at a cited paragraph and lights the quote (#385). */
+  const revealPassage = useCallback(async (target: PassageTarget) => {
+    if (loadRef.current?.node.id === target.nodeId && editorRef.current?.editor) {
+      applyReveal(target);
+      return;
+    }
+    pendingRevealRef.current = target;
+    try {
+      await navigateToNode({ id: target.nodeId } as NodeRow);
+    } catch (e) {
+      pendingRevealRef.current = null;
+      showToast(t("workspace.toast.passageMissing"));
+      console.warn("revealPassage", e);
+    }
+  }, [applyReveal, navigateToNode, showToast, t]);
+
+  // Called with the scene the ready editor shows, taken from the render that
+  // mounted it. A passage waiting for some other scene is dropped: the writer
+  // went elsewhere before it opened, and it should not jump out at them later.
+  const handleEditorReady = useCallback((nodeId: string) => {
+    const target = pendingRevealRef.current;
+    pendingRevealRef.current = null;
+    if (target?.nodeId === nodeId) applyReveal(target);
+  }, [applyReveal]);
+
 
   const runSelectionAskAgent = useCallback(() => {
     if (!selectionMenu || selectionMenu.kind !== "selection" || !load) return;
@@ -2316,6 +2358,7 @@ export function Workspace() {
               extensions={sceneExtensions}
               contentErrorNotice={t("editor.contentUnreadable")}
               placeholder={t("editor.placeholder")}
+              onReady={() => handleEditorReady(load.node.id)}
               onMentionDoubleClick={(id) => {
                 setContextualEditOpen(false);
                 setEntitySheetId(id);
@@ -2487,6 +2530,7 @@ export function Workspace() {
             }}
             onOpenEntity={(entityId) => setEntitySheetId(entityId)}
             onOpenFact={openFactFromContinuity}
+            onRevealPassage={(target) => { void revealPassage(target); }}
             continuityFocusRequest={continuityFocusRequest}
             onOpenProposals={() => {
               setCanonOpen(false);

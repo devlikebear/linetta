@@ -3,7 +3,7 @@ import { useEngineEvent } from "../hooks/useEngineEvent";
 import type { McpChangedPayload } from "../hooks/useMcpChanges";
 import { changesContinuity } from "../lib/agentTools";
 import { continuity as continuityApi } from "../lib/rpc";
-import type { ContinuityCheck, ContinuityObservation, ContinuityRef, ContinuityStatus } from "../lib/types";
+import type { ContinuityCheck, ContinuityObservation, ContinuityRef, ContinuityStatus, PassageTarget } from "../lib/types";
 import { useI18n } from "../lib/i18n";
 import type { MessageKey } from "../lib/i18n";
 import { rpcErrorMessage } from "../lib/rpcMessage";
@@ -30,6 +30,8 @@ interface Props {
   onOpenEntity?: (entityId: string) => void;
   /** Opens the Fact Book scrolled to and highlighting the fact ref's own card. */
   onOpenFact?: (factId: string) => void;
+  /** Opens a scene at a cited paragraph and lights the quote. */
+  onRevealPassage?: (target: PassageTarget) => void;
   /** Bumped by the caller (ContextPanel's open-observations badge, via
    *  Workspace) to pull this section open, scope it to the current scene
    *  and switch to the open tab — so clicking "열린 관찰 N" actually shows
@@ -93,6 +95,7 @@ export function ContinuitySection({
   onOpenNode,
   onOpenEntity,
   onOpenFact,
+  onRevealPassage,
   focusRequest,
 }: Readonly<Props>) {
   const { t } = useI18n();
@@ -259,6 +262,7 @@ export function ContinuitySection({
           onOpenNode={onOpenNode}
           onOpenEntity={onOpenEntity}
           onOpenFact={onOpenFact}
+          onRevealPassage={onRevealPassage}
           onSetStatus={setObservationStatus}
           onDelete={deleteObservation}
         />
@@ -274,6 +278,7 @@ function SceneGroupRow({
   onOpenNode,
   onOpenEntity,
   onOpenFact,
+  onRevealPassage,
   onSetStatus,
   onDelete,
 }: Readonly<{
@@ -283,6 +288,7 @@ function SceneGroupRow({
   onOpenNode?: (nodeId: string) => void;
   onOpenEntity?: (entityId: string) => void;
   onOpenFact?: (factId: string) => void;
+  onRevealPassage?: (target: PassageTarget) => void;
   onSetStatus: (observationId: string, next: ContinuityStatus) => void | Promise<void>;
   onDelete: (observationId: string) => void | Promise<void>;
 }>) {
@@ -322,6 +328,7 @@ function SceneGroupRow({
               onOpenNode={onOpenNode}
               onOpenEntity={onOpenEntity}
               onOpenFact={onOpenFact}
+              onRevealPassage={onRevealPassage}
               onSetStatus={onSetStatus}
               onDelete={onDelete}
             />
@@ -338,6 +345,7 @@ function ObservationRow({
   onOpenNode,
   onOpenEntity,
   onOpenFact,
+  onRevealPassage,
   onSetStatus,
   onDelete,
 }: Readonly<{
@@ -346,6 +354,7 @@ function ObservationRow({
   onOpenNode?: (nodeId: string) => void;
   onOpenEntity?: (entityId: string) => void;
   onOpenFact?: (factId: string) => void;
+  onRevealPassage?: (target: PassageTarget) => void;
   onSetStatus: (observationId: string, next: ContinuityStatus) => void | Promise<void>;
   onDelete: (observationId: string) => void | Promise<void>;
 }>) {
@@ -364,7 +373,23 @@ function ObservationRow({
       </div>
       <p className="continuity-summary">{o.summary}</p>
       <p className="continuity-quote">
-        {paragraph} &ldquo;{o.quote}&rdquo;
+        {onRevealPassage ? (
+          <button
+            type="button"
+            className="continuity-passage"
+            title={t("continuity.revealPassage")}
+            onClick={() => onRevealPassage({
+              nodeId: o.node_id,
+              paragraphFrom: o.paragraph_from,
+              paragraphTo: o.paragraph_to,
+              quote: o.quote,
+            })}
+          >
+            <span className="continuity-paragraph">{paragraph}</span> &ldquo;{o.quote}&rdquo;
+          </button>
+        ) : (
+          <>{paragraph} &ldquo;{o.quote}&rdquo;</>
+        )}
       </p>
       {o.suggestion && (
         <p className="continuity-suggestion">
@@ -374,7 +399,7 @@ function ObservationRow({
       {o.refs.length > 0 && (
         <div className="continuity-refs">
           {o.refs.map((ref, i) => (
-            <RefChip key={`${ref.type}-${ref.id}-${i}`} refItem={ref} onOpenNode={onOpenNode} onOpenEntity={onOpenEntity} onOpenFact={onOpenFact} />
+            <RefChip key={`${ref.type}-${ref.id}-${i}`} refItem={ref} onOpenNode={onOpenNode} onOpenEntity={onOpenEntity} onOpenFact={onOpenFact} onRevealPassage={onRevealPassage} />
           ))}
         </div>
       )}
@@ -407,6 +432,7 @@ function RefChip({
   onOpenNode,
   onOpenEntity,
   onOpenFact,
+  onRevealPassage,
 }: Readonly<{
   // Named refItem, not ref: React intercepts a JSX prop literally named
   // "ref" on any element, function components included, and never passes
@@ -415,6 +441,7 @@ function RefChip({
   onOpenNode?: (nodeId: string) => void;
   onOpenEntity?: (entityId: string) => void;
   onOpenFact?: (factId: string) => void;
+  onRevealPassage?: (target: PassageTarget) => void;
 }>) {
   const { t } = useI18n();
   const label = refItem.label || t("continuity.refUnknown");
@@ -429,6 +456,20 @@ function RefChip({
     return (
       <button type="button" className="chip continuity-ref" onClick={() => onOpenFact(refItem.id)}>
         {label}
+      </button>
+    );
+  }
+  // A scene ref that names its paragraph opens there, not at the top.
+  if (refItem.type === "scene" && refItem.paragraph && onRevealPassage) {
+    const target: PassageTarget = { nodeId: refItem.id, paragraphFrom: refItem.paragraph, quote: refItem.quote };
+    return (
+      <button
+        type="button"
+        className="chip continuity-ref"
+        title={t("continuity.revealPassage")}
+        onClick={() => onRevealPassage(target)}
+      >
+        {label} · {t("continuity.paragraphSingle", { n: String(refItem.paragraph) })}
       </button>
     );
   }
