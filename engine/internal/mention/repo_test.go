@@ -289,3 +289,22 @@ func TestResyncForNode_dropsAnotherWorksEntity(t *testing.T) {
 		t.Fatalf("after resync: %+v, want only %s", got, own.ID)
 	}
 }
+
+func TestAppearancesByProjectListsEachSceneEntityPairOnce(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	e1, _ := f.er.Create(ctx, 100, entity.NewInput{ProjectID: f.pID, Kind: "character", Name: "해진"})
+	e2, _ := f.er.Create(ctx, 101, entity.NewInput{ProjectID: f.pID, Kind: "character", Name: "민호"})
+	mentionAll(t, f, f.nID, e1.ID, e1.ID, e2.ID)
+	got, err := f.mr.AppearancesByProject(ctx, f.pID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("appearances = %+v, want one per entity", got)
+	}
+	other, _ := f.mr.AppearancesByProject(ctx, "another-work")
+	if len(other) != 0 {
+		t.Fatalf("another work's appearances = %+v", other)
+	}
+}

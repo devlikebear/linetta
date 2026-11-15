@@ -108,6 +108,7 @@ import type {
   UpdateProjectInput,
   UpdateRelationshipInput,
   ChangeRelationshipInput,
+  RelationshipGraph,
   UpdateThreadInput,
   WritingStatsDay,
   WritingStatsSummary,
@@ -781,6 +782,10 @@ export const relationships = {
    *  Returns the new rows. */
   change: (input: ChangeRelationshipInput) =>
     rpcCall<Relationship[]>("relationships.change", input),
+  /** The graph at an episode (1-based); without one, the episode nodeId is
+   *  in, or the latest written. */
+  graph: (projectId: string, at: { episode?: number; nodeId?: string } = {}) =>
+    rpcCall<RelationshipGraph>("relationships.graph", { project_id: projectId, episode: at.episode, node_id: at.nodeId }),
   update: (input: UpdateRelationshipInput) =>
     rpcCall<Relationship>("relationships.update", input),
   delete: (id: string) => rpcCall<{ ok: true }>("relationships.delete", { id }),

@@ -23,6 +23,7 @@ import { CanonPanel } from "../components/CanonPanel";
 import { ProposalInbox } from "../components/ProposalInbox";
 import { ForecastSheet } from "../components/ForecastSheet";
 import { ForeshadowMap } from "../components/ForeshadowMap";
+import { RelationshipGraph } from "../components/RelationshipGraph";
 import { FactBookPanel } from "../components/FactBookPanel";
 import { AgentPanel } from "../components/agent/AgentPanel";
 import { useAgentRunning } from "../hooks/useAgentRunning";
@@ -171,6 +172,8 @@ export function Workspace() {
   // The foreshadowing map (#386 A): a wide overlay, not an inspector panel,
   // since an episode axis needs the width the panel slot does not have.
   const [foreshadowOpen, setForeshadowOpen] = useState(false);
+  // The relationship graph (#386 B2), the same kind of wide overlay.
+  const [relationshipGraphOpen, setRelationshipGraphOpen] = useState(false);
   // The export dialog (#383), opened from the command palette.
   const [exportOpen, setExportOpen] = useState(false);
   // Fills the agent panel's composer from outside it — the forecast
@@ -1832,6 +1835,13 @@ export function Workspace() {
       run: () => setForeshadowOpen(true),
     });
     cmds.push({
+      id: "relationship-graph",
+      section: sectionProject,
+      label: t("workspace.command.relationshipGraph"),
+      keywords: ["relationship", "graph", "cast", "관계", "관계도", "인물", "상관도"],
+      run: () => setRelationshipGraphOpen(true),
+    });
+    cmds.push({
       id: "export-document",
       section: sectionExport,
       label: t("workspace.command.exportDocument"),
@@ -2562,6 +2572,7 @@ export function Workspace() {
             onOpenFact={openFactFromContinuity}
             onRevealPassage={(target) => { void revealPassage(target); }}
             onOpenForeshadowMap={() => setForeshadowOpen(true)}
+            onOpenRelationshipGraph={() => setRelationshipGraphOpen(true)}
             continuityFocusRequest={continuityFocusRequest}
             onOpenProposals={() => {
               setCanonOpen(false);
@@ -2647,6 +2658,17 @@ export function Workspace() {
           projectId={load.project.id}
           nodeId={load.node.id}
           onClose={() => setForeshadowOpen(false)}
+          onRevealPassage={(target) => { void revealPassage(target); }}
+          onOpenNode={(id) => { void navigateToNode({ id } as NodeRow); }}
+        />
+      ) : null}
+
+      {relationshipGraphOpen && load ? (
+        <RelationshipGraph
+          projectId={load.project.id}
+          nodeId={load.node.id}
+          onClose={() => setRelationshipGraphOpen(false)}
+          onOpenEntity={(id) => setEntitySheetId(id)}
           onRevealPassage={(target) => { void revealPassage(target); }}
           onOpenNode={(id) => { void navigateToNode({ id } as NodeRow); }}
         />

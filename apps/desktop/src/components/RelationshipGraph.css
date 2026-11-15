@@ -1,0 +1,54 @@
+.relationship-graph {
+  width: min(1100px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.relationship-graph .rg-head { display: flex; align-items: center; gap: 12px; }
+.relationship-graph .rg-head h2 { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 18px; }
+.relationship-graph .rg-counts { flex: 1; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.relationship-graph .rg-slider { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.relationship-graph .rg-slider input[type="range"] { flex: 1; min-width: 120px; accent-color: var(--accent); }
+.relationship-graph .rg-slider-label, .relationship-graph .rg-range { color: var(--muted); white-space: nowrap; }
+.relationship-graph .rg-episode { min-width: 4em; text-align: center; font-variant-numeric: tabular-nums; }
+.relationship-graph .rg-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.relationship-graph .rg-check { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink); }
+.relationship-graph .rg-empty { color: var(--muted); font-size: 13px; padding: 24px 0; text-align: center; }
+.relationship-graph .rg-svg {
+  width: 100%;
+  height: auto;
+  max-height: 60vh;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  touch-action: none;
+  user-select: none;
+}
+.rg-co { stroke: var(--muted-2); stroke-dasharray: 3 4; opacity: 0.6; }
+.rg-edge { cursor: pointer; }
+.rg-edge-hit { stroke: transparent; stroke-width: 12; }
+.rg-edge-line { stroke: var(--muted); stroke-width: 1.5; }
+.rg-edge-label { font-size: 11px; fill: var(--muted); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
+.rg-edge.is-changed .rg-edge-line { stroke: var(--accent); stroke-width: 3; }
+.rg-edge.is-changed .rg-edge-label { fill: var(--accent); font-weight: 700; }
+.rg-edge.is-selected .rg-edge-line { stroke: var(--ink); stroke-width: 3; }
+.rg-edge.is-selected .rg-edge-label { fill: var(--ink); }
+.rg-node { cursor: grab; }
+.rg-node:active { cursor: grabbing; }
+.rg-node-dot { fill: var(--t-sienna); stroke: var(--surface); stroke-width: 2; }
+.rg-kind-place .rg-node-dot { fill: var(--t-teal); }
+.rg-kind-item .rg-node-dot { fill: var(--t-olive); }
+.rg-kind-concept .rg-node-dot { fill: var(--t-plum); }
+.rg-node-name { font-size: 12px; fill: var(--ink); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
+/* Not on stage yet: hollow and faint, not only paler. */
+.rg-node.is-pending .rg-node-dot { fill: transparent; stroke: var(--muted-2); stroke-dasharray: 3 3; stroke-width: 1.5; }
+.rg-node.is-pending .rg-node-name { fill: var(--muted-2); }
+.relationship-graph .rg-detail { min-height: 64px; border-top: 1px solid var(--line-soft); padding-top: 8px; }
+.relationship-graph .rg-hint { color: var(--muted); font-size: 12px; margin: 0; }
+.relationship-graph .rg-detail-title { margin: 0 0 6px; font-size: 13px; }
+.relationship-graph .rg-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.relationship-graph .rg-step { display: flex; align-items: baseline; gap: 10px; font-size: 12.5px; }
+.relationship-graph .rg-step-when { color: var(--muted); min-width: 6em; font-variant-numeric: tabular-nums; }
+.relationship-graph .rg-step-label { font-weight: 600; }
+.relationship-graph .rg-step-quote { color: var(--muted); font-family: var(--font-serif); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

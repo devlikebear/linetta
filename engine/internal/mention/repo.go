@@ -211,3 +211,31 @@ SELECT e.id, e.project_id, e.kind, e.name, e.aliases, e.role, e.summary, e.attri
 func (r *Repo) ListCoreEntitiesForProject(ctx context.Context, projectID string, limit int) ([]entity.Entity, error) {
 	return entity.NewRepo(r.s).ListCoreByProject(ctx, projectID, limit)
 }
+
+// Appearance is one scene an entity is mentioned in.
+type Appearance struct {
+	NodeID, EntityID string
+}
+
+// AppearancesByProject lists, once each, every scene-entity pair of the work:
+// who appears where, for the relationship graph's sizes and co-appearances.
+func (r *Repo) AppearancesByProject(ctx context.Context, projectID string) ([]Appearance, error) {
+	rows, err := r.s.DB().QueryContext(ctx, `
+SELECT DISTINCT m.node_id, m.entity_id
+  FROM mentions m
+  JOIN entities e ON e.id = m.entity_id
+ WHERE e.project_id = ?`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Appearance
+	for rows.Next() {
+		var a Appearance
+		if err := rows.Scan(&a.NodeID, &a.EntityID); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
