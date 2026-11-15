@@ -65,9 +65,12 @@ func (s *Service) Start() {
 		s.mu.Unlock()
 		return
 	}
-	s.stop, s.done = make(chan struct{}), make(chan struct{})
+	stop, done := make(chan struct{}), make(chan struct{})
+	s.stop, s.done = stop, done
 	s.mu.Unlock()
-	go s.loop()
+	// The worker gets its own channels: Close clears the fields under the
+	// lock, and the worker must not read them while it does.
+	go s.loop(stop, done)
 }
 
 // Close stops the worker and lets go of the model.
@@ -125,16 +128,16 @@ func (s *Service) KickAll(ctx context.Context) error {
 	return rows.Err()
 }
 
-func (s *Service) loop() {
-	defer close(s.done)
+func (s *Service) loop(stop <-chan struct{}, done chan<- struct{}) {
+	defer close(done)
 	for {
 		select {
-		case <-s.stop:
+		case <-stop:
 			return
 		case <-s.wake:
 		}
 		select {
-		case <-s.stop:
+		case <-stop:
 			return
 		case <-time.After(s.delay):
 		}

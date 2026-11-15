@@ -2634,3 +2634,21 @@ export interface OrganizeResult {
   /** On its own: organizing is off, or set to another moment. */
   off?: boolean;
 }
+
+/** search.semantic_status (#384). */
+export interface SemanticModelStatus {
+  installed: boolean;
+  downloading: boolean;
+  received: number;
+  total: number;
+  error?: string;
+}
+
+export interface SemanticStatus {
+  /** False on a build that cannot run the model. */
+  supported: boolean;
+  enabled: boolean;
+  model: SemanticModelStatus;
+  /** How far the asked-about work's paragraphs are embedded. */
+  index?: { project_id: string; done: number; total: number };
+}
