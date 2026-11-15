@@ -143,7 +143,7 @@ func (d ToolDeps) registerProposalWriteTools(s *mcp.Server) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_propose_story_ops",
 		Description: "Suggest world elements (characters, places, items, concepts, relationships, fact " +
-			"cards, storylines, beats) for the writer to accept one by one. Nothing is applied. Use it " +
+			"cards, storylines, beats, ledger entries) for the writer to accept one by one. Nothing is applied. Use it " +
 			"for anything drawn from the manuscript or for more than a few items; reuse existing entity " +
 			"ids from linetta_list_characters instead of proposing duplicates. Cite evidence from " +
 			"linetta_read_scene numbered=true where you can.",
@@ -201,7 +201,7 @@ func (d ToolDeps) listProposals(ctx context.Context, _ *mcp.CallToolRequest, in 
 			}
 			out.Items = append(out.Items, proposalItemOut{
 				ID: it.ID, ProposalID: b.ID, Status: it.Status,
-				Summary:           d.Proposals.Summarize(ctx, it.Op, b.Items),
+				Summary:           d.Proposals.SummarizeItem(ctx, it, b.Items),
 				DependsOn:         it.DependsOn,
 				BlockedByRejected: proposals.DependencyRejected(it, b.Items),
 				Duplicates:        it.Duplicates,

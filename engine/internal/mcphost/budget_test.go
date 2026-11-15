@@ -259,8 +259,11 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	// ones. An item's result gaining linked_existing and code brought it to
 	// 8,156B, and the world's update and delete ops in that shared schema to
 	// 8,840B.
-	if propose := sizes["linetta_propose_story_ops"]; propose > 8900 {
-		t.Errorf("linetta_propose_story_ops costs %dB, want <= 8900B", propose)
+	// #387 Phase 1's ledger items (add a promise, gag, question or decision,
+	// or change one, e.g. mark it paid) and the organize purpose took it to 9,917B: the item's ten
+	// fields appear in the input and again on each returned item.
+	if propose := sizes["linetta_propose_story_ops"]; propose > 9950 {
+		t.Errorf("linetta_propose_story_ops costs %dB, want <= 9950B", propose)
 	}
 	// story-assist Phase 4's save-forecast tool measured 3,701B: branches[]
 	// nests beats[], decisions[], changes{} and risks[] — one schema
