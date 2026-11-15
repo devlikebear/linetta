@@ -7,15 +7,18 @@ import (
 	"testing"
 
 	"github.com/devlikebear/linetta/engine/internal/entity"
+	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/store/storetest"
 )
 
 type relFix struct {
-	rr   *relationship.Repo
-	pID  string
-	a, b string
+	rr    *relationship.Repo
+	nr    *node.Repo
+	pID   string
+	scene string
+	a, b  string
 }
 
 func newRelFixture(t *testing.T) relFix {
@@ -37,7 +40,7 @@ func newRelFixture(t *testing.T) relFix {
 	b, _ := er.Create(context.Background(), 3, entity.NewInput{
 		ProjectID: p.ID, Kind: entity.KindCharacter, Name: "아지",
 	})
-	return relFix{rr: relationship.NewRepo(s), pID: p.ID, a: a.ID, b: b.ID}
+	return relFix{rr: relationship.NewRepo(s), nr: node.NewRepo(s), pID: p.ID, scene: *p.LastOpenedNodeID, a: a.ID, b: b.ID}
 }
 
 func TestCreateOneRelationshipHandler(t *testing.T) {
@@ -81,7 +84,7 @@ func TestListRelationshipsByEntityHandler(t *testing.T) {
 		ProjectID: f.pID, FromID: f.a, ToID: f.b,
 		Label: "친구", InverseLabel: "친구",
 	})
-	res, err := ListRelationshipsByEntity(f.rr)(context.Background(),
+	res, err := ListRelationshipsByEntity(f.rr, f.nr)(context.Background(),
 		json.RawMessage(`{"entity_id":"`+f.a+`"}`))
 	if err != nil {
 		t.Fatalf("handler: %v", err)
@@ -99,7 +102,7 @@ func TestListRelationshipsHandler(t *testing.T) {
 		ProjectID: f.pID, FromID: f.a, ToID: f.b,
 		Label: "친구", InverseLabel: "친구",
 	})
-	res, err := ListRelationships(f.rr)(context.Background(),
+	res, err := ListRelationships(f.rr, f.nr)(context.Background(),
 		json.RawMessage(`{"project_id":"`+f.pID+`"}`))
 	if err != nil {
 		t.Fatalf("handler: %v", err)
@@ -114,7 +117,7 @@ func TestListRelationshipsHandler(t *testing.T) {
 
 func TestListRelationshipsHandlerRequiresProject(t *testing.T) {
 	f := newRelFixture(t)
-	if _, err := ListRelationships(f.rr)(context.Background(),
+	if _, err := ListRelationships(f.rr, f.nr)(context.Background(),
 		json.RawMessage(`{}`)); err == nil {
 		t.Error("missing project_id accepted")
 	}
@@ -122,7 +125,7 @@ func TestListRelationshipsHandlerRequiresProject(t *testing.T) {
 
 func TestListRelationshipsHandlerEmptyIsArray(t *testing.T) {
 	f := newRelFixture(t)
-	res, err := ListRelationships(f.rr)(context.Background(),
+	res, err := ListRelationships(f.rr, f.nr)(context.Background(),
 		json.RawMessage(`{"project_id":"`+f.pID+`"}`))
 	if err != nil {
 		t.Fatalf("handler: %v", err)
@@ -163,5 +166,34 @@ func TestDeleteRelationshipHandler_pair(t *testing.T) {
 	}
 	if _, err := f.rr.Get(context.Background(), rows[1].ID); err == nil {
 		t.Error("inverse row should be gone (atomic pair delete)")
+	}
+}
+
+func TestListRelationshipsShowsHistoryOnlyWhenAsked(t *testing.T) {
+	f := newRelFixture(t)
+	ctx := context.Background()
+	rel, _ := f.rr.CreateOne(ctx, relationship.NewInput{ProjectID: f.pID, FromID: f.a, ToID: f.b, Label: "동료"})
+	if _, err := f.rr.Change(ctx, relationship.ChangeInput{ID: rel.ID, AtNodeID: f.scene, Label: "적"}); err != nil {
+		t.Fatal(err)
+	}
+	for params, want := range map[string]int{
+		`{"project_id":"` + f.pID + `"}`:                        1,
+		`{"project_id":"` + f.pID + `","include_history":true}`: 2,
+	} {
+		res, err := ListRelationships(f.rr, f.nr)(ctx, json.RawMessage(params))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var list []relationship.Relationship
+		_ = json.Unmarshal(res, &list)
+		if len(list) != want {
+			t.Fatalf("%s: %d rows, want %d", params, len(list), want)
+		}
+	}
+	res, _ := ListRelationshipsByEntity(f.rr, f.nr)(ctx, json.RawMessage(`{"entity_id":"`+f.a+`"}`))
+	var list []relationship.Relationship
+	_ = json.Unmarshal(res, &list)
+	if len(list) != 1 || list[0].Label != "적" {
+		t.Fatalf("by entity = %+v, want the current row", list)
 	}
 }

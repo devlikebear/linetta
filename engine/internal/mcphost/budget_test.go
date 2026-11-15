@@ -178,8 +178,10 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	// slack for incidental SDK schema-rendering drift without hiding a real
 	// description regrowth. The world's update and delete ops brought the
 	// three to 7,726B through the storyops.Op schema and the deleted output.
-	if sum > 7750 {
-		t.Errorf("linetta_apply_story_ops + linetta_edit_skill + linetta_read_skill = %dB, want <= 7750B "+
+	// #386's change_relationship (the op name and a quote field) took them
+	// to 7,773B.
+	if sum > 7800 {
+		t.Errorf("linetta_apply_story_ops + linetta_edit_skill + linetta_read_skill = %dB, want <= 7800B "+
 			"(#132 trimmed them from 8282B to 7120B)", sum)
 	}
 
@@ -262,8 +264,10 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	// #387 Phase 1's ledger items (add a promise, gag, question or decision,
 	// or change one, e.g. mark it paid) and the organize purpose took it to 9,917B: the item's ten
 	// fields appear in the input and again on each returned item.
-	if propose := sizes["linetta_propose_story_ops"]; propose > 9950 {
-		t.Errorf("linetta_propose_story_ops costs %dB, want <= 9950B", propose)
+	// #386's change_relationship took it to 10,011B: the op name and its
+	// quote field appear in both of those places too.
+	if propose := sizes["linetta_propose_story_ops"]; propose > 10050 {
+		t.Errorf("linetta_propose_story_ops costs %dB, want <= 10050B", propose)
 	}
 	// story-assist Phase 4's save-forecast tool measured 3,701B: branches[]
 	// nests beats[], decisions[], changes{} and risks[] — one schema
@@ -344,8 +348,10 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	// warning on linetta_write_scene) took it to 29,489B. The paragraph range
 	// on each linetta_search_manuscript hit (#384 Phase 1: two output fields
 	// and the clause saying how they are numbered) took it to 29,615B.
-	if total > 29650 {
-		t.Errorf("the original tool budget (excluding linetta_report_continuity) is %dB, want <= 29650B "+
+	// change_relationship in linetta_apply_story_ops' op schema (#386) took
+	// it to 29,662B.
+	if total > 29700 {
+		t.Errorf("the original tool budget (excluding linetta_report_continuity) is %dB, want <= 29700B "+
 			"(#132 trimmed it from 27687B to 26525B; story-assist raised it to 27100B, 27400B, then 27500B)", total)
 	}
 }

@@ -305,6 +305,13 @@ func (s *Service) Submit(ctx context.Context, now int64, in SubmitInput, source 
 		case "create_relationship":
 			resolveEntityRef(op.From, op.FromRef, "from/from_ref")
 			resolveEntityRef(op.To, op.ToRef, "to/to_ref")
+			if op.NodeID != "" && !lookup.IsLeafNode(op.NodeID) {
+				add(i, "item %d: node_id %q is not a leaf scene in this work", num, op.NodeID)
+			}
+		case "change_relationship":
+			if err := lookup.relationshipChange(op); err != nil {
+				add(i, "item %d: %v", num, err)
+			}
 		case "add_beat":
 			resolveThreadRef(op.ThreadID, op.ThreadRef, "thread_id/thread_ref")
 			resolveLeafNodeRef(op.NodeID, op.NodeRef, "node_id/node_ref")

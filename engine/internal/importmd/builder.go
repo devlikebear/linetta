@@ -164,8 +164,10 @@ func toAnySlice(blocks []TiptapBlock) []any {
 
 // RestoreMetadata recreates exported entities and relationships inside the
 // newly-built project. Relationships are resolved by exported entity id first,
-// then by name for legacy appendices that had no stable ids.
-func RestoreMetadata(ctx context.Context, er *entity.Repo, rr *relationship.Repo, now int64, projectID string, meta mdmeta.Metadata, res *BuildResult) error {
+// then by name for legacy appendices that had no stable ids. nodeIDMap is
+// AlignNodes' exported-to-new node ids, which put each relationship back where
+// it held in the story (#386).
+func RestoreMetadata(ctx context.Context, er *entity.Repo, rr *relationship.Repo, now int64, projectID string, meta mdmeta.Metadata, nodeIDMap map[string]string, res *BuildResult) error {
 	if er == nil || meta.Empty() {
 		return nil
 	}
@@ -225,10 +227,41 @@ func RestoreMetadata(ctx context.Context, er *entity.Repo, rr *relationship.Repo
 	if rr == nil || len(meta.Relationships) == 0 {
 		return nil
 	}
-	return restoreRelationships(ctx, rr, projectID, meta.Relationships, idMap, nameMap, res)
+	relIDMap := map[string]string{}
+	if err := restoreRelationships(ctx, rr, projectID, meta.Relationships, idMap, nameMap, relIDMap, res); err != nil {
+		return err
+	}
+	return restoreRelationshipSpans(ctx, rr, meta.Relationships, relIDMap, nodeIDMap)
 }
 
-func restoreRelationships(ctx context.Context, rr *relationship.Repo, projectID string, rels []mdmeta.Relationship, idMap, nameMap map[string]string, res *BuildResult) error {
+// restoreRelationshipSpans puts back where each relationship held. A scene or
+// row that did not come back leaves that end open, as deleting it would have.
+func restoreRelationshipSpans(ctx context.Context, rr *relationship.Repo, rels []mdmeta.Relationship, relIDMap, nodeIDMap map[string]string) error {
+	mapped := func(m map[string]string, id string) *string {
+		if v, ok := m[stringsTrim(id)]; ok && v != "" {
+			return &v
+		}
+		return nil
+	}
+	for _, rel := range rels {
+		newID, ok := relIDMap[stringsTrim(rel.ID)]
+		if !ok || (rel.SinceNodeID == "" && rel.UntilNodeID == "" && rel.SinceQuote == "" && rel.SupersedesID == "") {
+			continue
+		}
+		if err := rr.SetSpan(ctx, relationship.SpanInput{
+			ID:           newID,
+			SinceNodeID:  mapped(nodeIDMap, rel.SinceNodeID),
+			UntilNodeID:  mapped(nodeIDMap, rel.UntilNodeID),
+			SinceQuote:   stringsTrim(rel.SinceQuote),
+			SupersedesID: mapped(relIDMap, rel.SupersedesID),
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func restoreRelationships(ctx context.Context, rr *relationship.Repo, projectID string, rels []mdmeta.Relationship, idMap, nameMap, relIDMap map[string]string, res *BuildResult) error {
 	groups := map[string][]mdmeta.Relationship{}
 	singles := []mdmeta.Relationship{}
 	for _, rel := range rels {
@@ -241,7 +274,7 @@ func restoreRelationships(ctx context.Context, rr *relationship.Repo, projectID 
 
 	for _, group := range groups {
 		if len(group) == 2 {
-			ok, err := restorePair(ctx, rr, projectID, group[0], group[1], idMap, nameMap, res)
+			ok, err := restorePair(ctx, rr, projectID, group[0], group[1], idMap, nameMap, relIDMap, res)
 			if err != nil {
 				return err
 			}
@@ -250,20 +283,20 @@ func restoreRelationships(ctx context.Context, rr *relationship.Repo, projectID 
 			}
 		}
 		for _, rel := range group {
-			if err := restoreOne(ctx, rr, projectID, rel, idMap, nameMap, res); err != nil {
+			if err := restoreOne(ctx, rr, projectID, rel, idMap, nameMap, relIDMap, res); err != nil {
 				return err
 			}
 		}
 	}
 	for _, rel := range singles {
-		if err := restoreOne(ctx, rr, projectID, rel, idMap, nameMap, res); err != nil {
+		if err := restoreOne(ctx, rr, projectID, rel, idMap, nameMap, relIDMap, res); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func restorePair(ctx context.Context, rr *relationship.Repo, projectID string, a, b mdmeta.Relationship, idMap, nameMap map[string]string, res *BuildResult) (bool, error) {
+func restorePair(ctx context.Context, rr *relationship.Repo, projectID string, a, b mdmeta.Relationship, idMap, nameMap, relIDMap map[string]string, res *BuildResult) (bool, error) {
 	aFrom, aTo := resolveRelationshipEnds(a, idMap, nameMap)
 	bFrom, bTo := resolveRelationshipEnds(b, idMap, nameMap)
 	if aFrom == "" || aTo == "" || bFrom == "" || bTo == "" ||
@@ -281,6 +314,10 @@ func restorePair(ctx context.Context, rr *relationship.Repo, projectID string, a
 	if err != nil {
 		return true, err
 	}
+	if len(created) == 2 {
+		relIDMap[stringsTrim(a.ID)] = created[0].ID
+		relIDMap[stringsTrim(b.ID)] = created[1].ID
+	}
 	if len(created) == 2 && stringsTrim(b.Notes) != "" {
 		if err := rr.Update(ctx, relationship.UpdateInput{
 			ID:    created[1].ID,
@@ -294,22 +331,24 @@ func restorePair(ctx context.Context, rr *relationship.Repo, projectID string, a
 	return true, nil
 }
 
-func restoreOne(ctx context.Context, rr *relationship.Repo, projectID string, rel mdmeta.Relationship, idMap, nameMap map[string]string, res *BuildResult) error {
+func restoreOne(ctx context.Context, rr *relationship.Repo, projectID string, rel mdmeta.Relationship, idMap, nameMap, relIDMap map[string]string, res *BuildResult) error {
 	fromID, toID := resolveRelationshipEnds(rel, idMap, nameMap)
 	label := stringsTrim(rel.Label)
 	if fromID == "" || toID == "" || label == "" {
 		res.Warnings = append(res.Warnings, WarnRelationshipsSkipped)
 		return nil
 	}
-	if _, err := rr.CreateOne(ctx, relationship.NewInput{
+	created, err := rr.CreateOne(ctx, relationship.NewInput{
 		ProjectID: projectID,
 		FromID:    fromID,
 		ToID:      toID,
 		Label:     label,
 		Notes:     stringsTrim(rel.Notes),
-	}); err != nil {
+	})
+	if err != nil {
 		return err
 	}
+	relIDMap[stringsTrim(rel.ID)] = created.ID
 	res.RelationshipCount++
 	return nil
 }

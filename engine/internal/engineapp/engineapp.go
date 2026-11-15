@@ -348,7 +348,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		language:      settingsLanguage,
 		clock:         clock,
 		images:        exportImages{illustrations},
-		sheets:        publishSheets{entities: entities, relationships: relationships, visuals: visuals},
+		sheets:        publishSheets{entities: entities, relationships: relationships, nodes: nodes, visuals: visuals},
 		notify:        func(method string, params any) { _ = s.Notifier().Notify(method, params) },
 	})
 	a.closers = append(a.closers, stopPublish)
@@ -651,8 +651,8 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("plot.spine_panel", handlers.PlotSpinePanel(plotBuilder))
 	s.Handle("relationships.create_one", handlers.CreateOneRelationship(relationships))
 	s.Handle("relationships.create_pair", handlers.CreatePairRelationship(relationships))
-	s.Handle("relationships.list", handlers.ListRelationships(relationships))
-	s.Handle("relationships.list_by_entity", handlers.ListRelationshipsByEntity(relationships))
+	s.Handle("relationships.list", handlers.ListRelationships(relationships, nodes))
+	s.Handle("relationships.list_by_entity", handlers.ListRelationshipsByEntity(relationships, nodes))
 	s.Handle("relationships.update", handlers.UpdateRelationship(relationships))
 	s.Handle("relationships.delete", handlers.DeleteRelationship(relationships))
 	s.Handle("notes.create", handlers.CreateNote(notes, clock))

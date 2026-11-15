@@ -123,6 +123,7 @@ var allowedOpTypes = map[string]bool{
 	"create_entity":       true,
 	"update_entity":       true,
 	"create_relationship": true,
+	"change_relationship": true,
 	"create_fact_card":    true,
 	"create_thread":       true,
 	"update_thread":       true,

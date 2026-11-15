@@ -53,11 +53,11 @@ func ImportMarkdown(pr *project.Repo, nr *node.Repo, er *entity.Repo, rr *relati
 		if err := importmd.RestoreProjectDetails(ctx, pr, ts, doc.Metadata, &built); err != nil {
 			return nil, importFailure(ctx, pr, built.Project.ID, err)
 		}
-		if err := importmd.RestoreMetadata(ctx, er, rr, ts, built.Project.ID, doc.Metadata, &built); err != nil {
-			return nil, importFailure(ctx, pr, built.Project.ID, err)
-		}
 		nodeIDMap, err := importmd.AlignNodes(ctx, nr, ts, built.Project.ID, doc.Metadata.Nodes, &built)
 		if err != nil {
+			return nil, importFailure(ctx, pr, built.Project.ID, err)
+		}
+		if err := importmd.RestoreMetadata(ctx, er, rr, ts, built.Project.ID, doc.Metadata, nodeIDMap, &built); err != nil {
 			return nil, importFailure(ctx, pr, built.Project.ID, err)
 		}
 		if err := importmd.RestoreExtras(ctx, extras, ts, built.Project.ID, doc.Metadata, nodeIDMap, &built); err != nil {

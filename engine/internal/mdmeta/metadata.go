@@ -81,6 +81,12 @@ type Relationship struct {
 	ToName   string `yaml:"to_name,omitempty" json:"to_name,omitempty"`
 	Label    string `yaml:"label,omitempty" json:"label,omitempty"`
 	Notes    string `yaml:"notes,omitempty" json:"notes,omitempty"`
+	// Where it holds in the story (#386), node ids from Nodes above and the
+	// id of the row it took over from.
+	SinceNodeID  string `yaml:"since_node_id,omitempty" json:"since_node_id,omitempty"`
+	UntilNodeID  string `yaml:"until_node_id,omitempty" json:"until_node_id,omitempty"`
+	SinceQuote   string `yaml:"since_quote,omitempty" json:"since_quote,omitempty"`
+	SupersedesID string `yaml:"supersedes_id,omitempty" json:"supersedes_id,omitempty"`
 }
 
 // Thread is a storyline with its beats in ordinal order.

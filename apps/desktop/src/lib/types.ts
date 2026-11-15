@@ -1365,6 +1365,13 @@ export interface Relationship {
   label: string;
   notes: string;
   pair_id?: string;
+  /** Where it holds in the story (#386): from since_node_id (the start when
+   *  absent) until until_node_id, where the row naming it in supersedes_id
+   *  takes over. Lists leave out ended rows unless include_history is set. */
+  since_node_id?: string;
+  until_node_id?: string;
+  since_quote?: string;
+  supersedes_id?: string;
 }
 
 export interface NewRelationshipInput {
@@ -1486,6 +1493,8 @@ export type ProposalOpType =
   | "set_scene_text"
   | "remember"
   | "create_entity" | "update_entity" | "create_relationship"
+  /** #386: a relationship turning into another from a scene on. */
+  | "change_relationship"
   | "create_scene" | "create_outline_node"
   | "create_fact_card"
   /** A ledger item (#387): no op, its change is in SuggestionItem.ledger. */

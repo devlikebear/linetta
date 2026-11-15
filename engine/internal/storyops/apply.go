@@ -656,6 +656,26 @@ func (s *Service) applyOneOp(
 		}
 		removals.add(set, DeletedRecord{Kind: "relationship", ID: rel.ID, Label: rel.Label})
 		return nil
+	case "change_relationship":
+		rel, err := s.relationshipInProject(ctx, projectID, op.RelationshipID)
+		if err != nil {
+			return err
+		}
+		at, err := s.resolveOptionalNodeID(ctx, op.NodeID, op.NodeRef, currentNodeID, nodeRefs)
+		if err != nil {
+			return err
+		}
+		if at == nil {
+			return fmt.Errorf("change_relationship: node_id required: the scene the change happens in")
+		}
+		if err := s.relationshipSceneAfter(ctx, projectID, *at, rel.SinceNodeID); err != nil {
+			return err
+		}
+		_, err = s.relationships.Change(ctx, relationship.ChangeInput{
+			ID: rel.ID, AtNodeID: *at, Label: strings.TrimSpace(op.Label),
+			InverseLabel: strings.TrimSpace(op.InverseLabel), Quote: strings.TrimSpace(op.Quote),
+		})
+		return err
 	case "create_relationship":
 		fromID, err := s.resolveEntityID(ctx, projectID, op.From, op.FromRef, entityRefs, "from entity")
 		if err != nil {
@@ -665,6 +685,17 @@ func (s *Service) applyOneOp(
 		if err != nil {
 			return err
 		}
+		// Without a scene it has held from the start, as before #386.
+		since := ""
+		if at, err := s.resolveOptionalNodeID(ctx, op.NodeID, op.NodeRef, "", nodeRefs); err != nil {
+			return err
+		} else if at != nil {
+			if err := s.relationshipSceneAfter(ctx, projectID, *at, nil); err != nil {
+				return err
+			}
+			since = *at
+		}
+		quote := strings.TrimSpace(op.Quote)
 		if strings.TrimSpace(op.InverseLabel) != "" {
 			_, err := s.relationships.CreatePair(ctx, relationship.NewPairInput{
 				ProjectID:    projectID,
@@ -673,15 +704,19 @@ func (s *Service) applyOneOp(
 				Label:        op.Label,
 				InverseLabel: op.InverseLabel,
 				Notes:        op.Notes,
+				SinceNodeID:  since,
+				SinceQuote:   quote,
 			})
 			return err
 		}
 		_, err = s.relationships.CreateOne(ctx, relationship.NewInput{
-			ProjectID: projectID,
-			FromID:    fromID,
-			ToID:      toID,
-			Label:     op.Label,
-			Notes:     op.Notes,
+			ProjectID:   projectID,
+			FromID:      fromID,
+			ToID:        toID,
+			Label:       op.Label,
+			Notes:       op.Notes,
+			SinceNodeID: since,
+			SinceQuote:  quote,
 		})
 		return err
 	case "create_scene":
@@ -1016,6 +1051,30 @@ func (s *Service) factInProject(ctx context.Context, projectID, id string) (fact
 		return fact.Card{}, fmt.Errorf("fact card %q is not in this work", id)
 	}
 	return card, nil
+}
+
+// relationshipSceneAfter checks that at is a scene of this work and, when
+// since is set, comes after it in reading order: a change before the
+// relationship began would end it before it started.
+func (s *Service) relationshipSceneAfter(ctx context.Context, projectID, at string, since *string) error {
+	all, err := s.nodes.ListByProject(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	pos := map[string]int{}
+	for i, n := range node.ReadingOrder(all) {
+		pos[n.ID] = i
+	}
+	i, ok := pos[at]
+	if !ok {
+		return fmt.Errorf("scene %q is not a scene of this work", at)
+	}
+	if since != nil {
+		if j, ok := pos[*since]; ok && j >= i {
+			return fmt.Errorf("the relationship starts in %q or a later scene; change it in a scene after where it starts", at)
+		}
+	}
+	return nil
 }
 
 func (s *Service) relationshipInProject(ctx context.Context, projectID, id string) (relationship.Relationship, error) {

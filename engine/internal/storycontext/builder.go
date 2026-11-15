@@ -347,7 +347,7 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 	if err != nil {
 		return Context{}, err
 	}
-	relations, err := b.loadRelationships(ctx, proj.ID, ents)
+	relations, err := b.loadRelationships(ctx, proj.ID, nodeID, ents)
 	if err != nil {
 		return Context{}, err
 	}
@@ -1078,8 +1078,10 @@ func (b *ContextBuilder) refreshAndRead(ctx context.Context, n node.Node) string
 }
 
 // loadRelationships returns relationships whose both endpoints appear in the
-// current scene's mentioned entities. Pairs are deduped by pair_id (first wins).
-func (b *ContextBuilder) loadRelationships(ctx context.Context, projectID string, ents []entity.Entity) ([]RelationBrief, error) {
+// current scene's mentioned entities, as they stand at that scene (#386): a
+// pair that turns enemies in episode 30 is still allies in episode 12.
+// Pairs are deduped by pair_id (first wins).
+func (b *ContextBuilder) loadRelationships(ctx context.Context, projectID, nodeID string, ents []entity.Entity) ([]RelationBrief, error) {
 	if b.relationships == nil || len(ents) == 0 {
 		return nil, nil
 	}
@@ -1087,6 +1089,11 @@ func (b *ContextBuilder) loadRelationships(ctx context.Context, projectID string
 	if err != nil {
 		return nil, err
 	}
+	all, err := b.nodes.ListByProject(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	rels = relationship.AsOf(rels, all, nodeID)
 	nameByID := make(map[string]string, len(ents))
 	present := make(map[string]bool, len(ents))
 	for _, e := range ents {

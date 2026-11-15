@@ -375,3 +375,74 @@ func TestCloseAndReopenThread(t *testing.T) {
 		t.Fatal("not reopened")
 	}
 }
+
+func TestChangeRelationshipFromTheCurrentScene(t *testing.T) {
+	ctx := context.Background()
+	svc, nodes, _, projectID, first := newTestService(t)
+	_, _, rels := worldPair(t, svc, projectID)
+	second, err := nodes.CreateSibling(ctx, first, "leaf", "", "2화", 2)
+	if err != nil {
+		t.Fatalf("scene: %v", err)
+	}
+	res := svc.ApplyOps(ctx, projectID, second.ID, Proposal{Summary: "배신", Ops: []Op{{
+		Type: "change_relationship", RelationshipID: rels[0].ID, Label: "원수", InverseLabel: "원수", Quote: "스승님은 이제 내 원수다.",
+	}}}, now())
+	if res.IsError() {
+		t.Fatalf("change: %+v", res.Failures)
+	}
+	all, _ := svc.relationships.ListByProject(ctx, projectID)
+	allNodes, _ := nodes.ListByProject(ctx, projectID)
+	labels := func(at string) []string {
+		var out []string
+		for _, r := range relationship.AsOf(all, allNodes, at) {
+			out = append(out, r.Label)
+		}
+		slices.Sort(out)
+		return out
+	}
+	if got := labels(first); !slices.Equal(got, []string{"스승", "제자"}) {
+		t.Fatalf("first scene = %v", got)
+	}
+	if got := labels(second.ID); !slices.Equal(got, []string{"원수", "원수"}) {
+		t.Fatalf("second scene = %v", got)
+	}
+
+	// The successor starts in the second scene: a change back in the first
+	// would end it before it began.
+	var successor string
+	for _, r := range all {
+		if r.SupersedesID != nil && *r.SupersedesID == rels[0].ID {
+			successor = r.ID
+		}
+	}
+	res = svc.ApplyOps(ctx, projectID, first, Proposal{Summary: "되돌림", Ops: []Op{{
+		Type: "change_relationship", RelationshipID: successor, Label: "스승",
+	}}}, now())
+	if !res.IsError() || !strings.Contains(res.Failures[0].Error, "after where it starts") {
+		t.Fatalf("change before the start = %+v, want refused", res.Failures)
+	}
+}
+
+func TestChangeRelationshipNeedsAScene(t *testing.T) {
+	svc, _, _, projectID, _ := newTestService(t)
+	_, _, rels := worldPair(t, svc, projectID)
+	res := applyWorld(t, svc, projectID, Op{Type: "change_relationship", RelationshipID: rels[0].ID, Label: "원수"})
+	if !res.IsError() || !strings.Contains(res.Failures[0].Error, "node_id required") {
+		t.Fatalf("change without a scene = %+v", res.Failures)
+	}
+}
+
+func TestCreateRelationshipFromAScene(t *testing.T) {
+	ctx := context.Background()
+	svc, _, _, projectID, first := newTestService(t)
+	a, _ := svc.entities.Create(ctx, 1, entity.NewInput{ProjectID: projectID, Kind: "character", Name: "서린"})
+	b, _ := svc.entities.Create(ctx, 1, entity.NewInput{ProjectID: projectID, Kind: "character", Name: "마충"})
+	res := applyWorld(t, svc, projectID, Op{Type: "create_relationship", From: a.ID, To: b.ID, Label: "연인", NodeID: first, Quote: "좋아해."})
+	if res.IsError() {
+		t.Fatalf("create: %+v", res.Failures)
+	}
+	got, _ := svc.relationships.ListByProject(ctx, projectID)
+	if len(got) != 1 || got[0].SinceNodeID == nil || *got[0].SinceNodeID != first || got[0].SinceQuote != "좋아해." {
+		t.Fatalf("relationship = %+v", got)
+	}
+}
