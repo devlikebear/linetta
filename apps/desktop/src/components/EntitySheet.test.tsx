@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -31,6 +31,7 @@ const mocks = vi.hoisted(() => ({
   relationships: {
     listByEntity: vi.fn(),
     delete: vi.fn(),
+    change: vi.fn(),
   },
   settingsGet: vi.fn(),
   illustrations: { list: vi.fn(), get: vi.fn() },
@@ -317,6 +318,56 @@ describe("EntitySheet", () => {
       renderSheet({});
       await screen.findByRole("button", { name: "저장" });
       expect(screen.queryByRole("button", { name: "삭제" })).toBeNull();
+    });
+  });
+
+  describe("relationship history (#386)", () => {
+    const ended = { id: "r1", project_id: "project-1", from_id: "entity-1", to_id: "entity-2", label: "동료", notes: "", pair_id: "p1", until_node_id: "s3" };
+    const now = { ...ended, id: "r2", label: "적", pair_id: "p2", until_node_id: undefined, since_node_id: "s3", since_quote: "넌 이제 적이야.", supersedes_id: "r1" };
+
+    beforeEach(() => {
+      mocks.entities.get.mockImplementation(async (id: string) =>
+        id === "entity-2" ? { ...baseEntity, id, name: "아지" } : baseEntity);
+      mocks.relationships.listByEntity.mockResolvedValue([ended, now]);
+    });
+
+    it("shows what a relationship was and opens the line it changed at", async () => {
+      const user = userEvent.setup();
+      const onReveal = vi.fn();
+      renderSheet({ sceneLabel: (id) => (id === "s3" ? "3화 · 씬 2" : undefined), onReveal });
+      const history = await screen.findByTestId("rel-history");
+      expect(history.textContent).toBe("동료→적3화 · 씬 2부터");
+      expect(mocks.relationships.listByEntity).toHaveBeenCalledWith("entity-1", true);
+      await user.click(screen.getByRole("button", { name: "3화 · 씬 2부터" }));
+      expect(onReveal).toHaveBeenCalledWith("s3", "넌 이제 적이야.");
+    });
+
+    it("records a change from the open scene, both sides of a pair", async () => {
+      const user = userEvent.setup();
+      mocks.relationships.change.mockResolvedValue([]);
+      renderSheet({ currentSceneId: "s9", sceneLabel: () => "9화" });
+      await user.click(await screen.findByRole("button", { name: "바뀜" }));
+      expect(screen.getByText("9화부터 이렇게 바뀝니다")).toBeTruthy();
+      await user.type(screen.getByLabelText("새 관계"), "연인");
+      await user.type(screen.getByLabelText("상대 쪽 관계 (비우면 그대로)"), "연인");
+      await user.click(screen.getByRole("button", { name: "기록" }));
+      expect(mocks.relationships.change).toHaveBeenCalledWith({ id: "r2", at_node_id: "s9", label: "연인", inverse_label: "연인" });
+      await waitFor(() => expect(mocks.relationships.listByEntity).toHaveBeenCalledTimes(2));
+    });
+
+    it("offers no change without an open scene", async () => {
+      renderSheet();
+      await screen.findByTestId("rel-history");
+      expect(screen.queryByRole("button", { name: "바뀜" })).toBeNull();
+    });
+
+    it("deletes the whole relationship, its history included", async () => {
+      const user = userEvent.setup();
+      mocks.relationships.delete.mockResolvedValue({ ok: true });
+      renderSheet();
+      await screen.findByTestId("rel-history");
+      await user.click(within(screen.getByTestId("rel-r2")).getByRole("button", { name: "삭제" }));
+      expect(mocks.relationships.delete.mock.calls.map((c) => c[0])).toEqual(["r2", "r1"]);
     });
   });
 });

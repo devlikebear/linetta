@@ -45,6 +45,8 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   thread_not_found: "errors.threadNotFound",
   beat_not_found: "errors.beatNotFound",
   relationship_not_found: "errors.relationshipNotFound",
+  relationship_change_before_start: "errors.relationshipChangeBeforeStart",
+  relationship_already_changed: "errors.relationshipAlreadyChanged",
   note_not_found: "errors.noteNotFound",
   fact_card_not_found: "errors.factCardNotFound",
   // The built-in agent's provider layer (#90/#91). These must stay mapped:

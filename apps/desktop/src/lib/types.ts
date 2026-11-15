@@ -1403,6 +1403,16 @@ export interface UpdateRelationshipInput {
   notes: string;
 }
 
+/** relationships.change (#386). inverse_label is the partner's new label,
+ *  its old one when left out. */
+export interface ChangeRelationshipInput {
+  id: string;
+  at_node_id: string;
+  label: string;
+  inverse_label?: string;
+  quote?: string;
+}
+
 // Mirrors engine/internal/note Note struct.
 export interface Note {
   id: string;

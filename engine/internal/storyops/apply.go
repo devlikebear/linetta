@@ -1053,28 +1053,13 @@ func (s *Service) factInProject(ctx context.Context, projectID, id string) (fact
 	return card, nil
 }
 
-// relationshipSceneAfter checks that at is a scene of this work and, when
-// since is set, comes after it in reading order: a change before the
-// relationship began would end it before it started.
+// relationshipSceneAfter is relationship.SceneAfter over this work's nodes.
 func (s *Service) relationshipSceneAfter(ctx context.Context, projectID, at string, since *string) error {
 	all, err := s.nodes.ListByProject(ctx, projectID)
 	if err != nil {
 		return err
 	}
-	pos := map[string]int{}
-	for i, n := range node.ReadingOrder(all) {
-		pos[n.ID] = i
-	}
-	i, ok := pos[at]
-	if !ok {
-		return fmt.Errorf("scene %q is not a scene of this work", at)
-	}
-	if since != nil {
-		if j, ok := pos[*since]; ok && j >= i {
-			return fmt.Errorf("the relationship starts in %q or a later scene; change it in a scene after where it starts", at)
-		}
-	}
-	return nil
+	return relationship.SceneAfter(all, at, since)
 }
 
 func (s *Service) relationshipInProject(ctx context.Context, projectID, id string) (relationship.Relationship, error) {

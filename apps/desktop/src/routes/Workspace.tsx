@@ -1574,6 +1574,20 @@ export function Workspace() {
     walk(load?.tree ?? []);
     return out;
   }, [load?.tree, language]);
+  // A scene as a relationship's history names it (#386): its episode, then
+  // itself, "3화 · 씬 2".
+  const sceneLabels = useMemo(() => {
+    const out = new Map<string, string>();
+    const walk = (list: TreeNode[], parent: string) => {
+      for (const n of list) {
+        const own = displayNodeLabel(language, n.label) || n.title;
+        out.set(n.id, [parent, own].filter(Boolean).join(" · "));
+        walk(n.children, n.kind === "leaf" ? parent : own);
+      }
+    };
+    walk(load?.tree ?? [], "");
+    return out;
+  }, [load?.tree, language]);
   // What the export dialog offers (#383): the whole work, each container
   // above the open scene from the top down, then the scene itself.
   const exportScopes = useMemo<ExportScope[]>(() => {
@@ -2508,6 +2522,15 @@ export function Workspace() {
             onNavigate={(nodeId) => {
               setEntitySheetId(null);
               navigateToNode({ id: nodeId } as NodeRow);
+            }}
+            currentSceneId={load?.node.kind === "leaf" ? load.node.id : undefined}
+            sceneLabel={(nodeId) => sceneLabels.get(nodeId)}
+            onReveal={(nodeId, quote) => {
+              setEntitySheetId(null);
+              // No paragraph number is kept for a change: the quote is
+              // looked for across the whole scene.
+              if (quote) void revealPassage({ nodeId, paragraphFrom: 0, quote });
+              else void navigateToNode({ id: nodeId } as NodeRow);
             }}
           />
         ) : threadSheetId ? (
