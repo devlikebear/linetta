@@ -58,7 +58,7 @@ function readRemembered(projectId: string): Remembered {
     if (!raw) return DEFAULTS;
     const saved = JSON.parse(raw) as Partial<Remembered>;
     return {
-      format: saved.format === "txt" || saved.format === "md" ? saved.format : "docx",
+      format: saved.format === "hwpx" || saved.format === "txt" || saved.format === "md" ? saved.format : "docx",
       options: { ...DEFAULTS.options, ...(saved.options ?? {}) },
     };
   } catch {
@@ -74,7 +74,7 @@ function remember(projectId: string, value: Remembered) {
   }
 }
 
-/** Exports the work, or a part of it, as DOCX, TXT or Markdown (#383). DOCX
+/** Exports the work, or a part of it, as DOCX, HWPX, TXT or Markdown (#383). DOCX
  *  and TXT come from export.document; Markdown keeps its own export, which
  *  carries the frontmatter an import reads back. */
 export function ExportDialog({ projectId, scopes, onClose, onMessage }: Readonly<Props>) {
@@ -141,7 +141,8 @@ export function ExportDialog({ projectId, scopes, onClose, onMessage }: Readonly
     }
   };
 
-  const layout = effectiveFormat === "docx";
+  // Word and Hangul take the same layout choices.
+  const layout = effectiveFormat === "docx" || effectiveFormat === "hwpx";
   const prose = effectiveFormat !== "md";
   return (
     <div className="backdrop center" onClick={onClose}>
@@ -176,7 +177,7 @@ export function ExportDialog({ projectId, scopes, onClose, onMessage }: Readonly
         <div className="modal-field">
           <label>{t("exportDialog.format")}</label>
           <div className="chips">
-            {(["docx", "txt", "md"] as const).map((f) => (
+            {(["docx", "hwpx", "txt", "md"] as const).map((f) => (
               <button
                 key={f}
                 type="button"
