@@ -10,7 +10,9 @@ import (
 )
 
 // The phone has the built-in agent but no MCP server: the agent reaches its
-// tools over an in-memory pipe, and it connects with an API key only.
+// tools over an in-memory pipe, and it connects with an API key or through
+// the Linetta Works connection (the trial) — never a browser sign-in that
+// needs a local listener, never a subprocess.
 func TestAgentIsAvailableOnMobileWithAPIKeyProvidersOnly(t *testing.T) {
 	app := openTestApp(t, t.TempDir())
 	raw, err := app.Handle(context.Background(), []byte(`{"jsonrpc":"2.0","id":1,"method":"diagnostics.version","params":null}`))
@@ -34,11 +36,11 @@ func TestAgentIsAvailableOnMobileWithAPIKeyProvidersOnly(t *testing.T) {
 	var ids []string
 	for _, p := range resp.Result {
 		ids = append(ids, p.ID)
-		if p.Auth != "api_key" {
-			t.Errorf("%s connects with %q on mobile, want api_key", p.ID, p.Auth)
+		if p.Auth != "api_key" && p.Auth != "works" {
+			t.Errorf("%s connects with %q on mobile, want api_key or works", p.ID, p.Auth)
 		}
 	}
-	if strings.Join(ids, ",") != "anthropic,gemini-native,openai" {
-		t.Errorf("providers = %v, want anthropic, gemini-native, openai", ids)
+	if strings.Join(ids, ",") != "linetta-trial,anthropic,gemini-native,openai" {
+		t.Errorf("providers = %v, want linetta-trial, anthropic, gemini-native, openai", ids)
 	}
 }
