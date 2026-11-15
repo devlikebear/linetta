@@ -109,7 +109,7 @@ func (s *Service) StartSampleCheck(ctx context.Context, projectID, request strin
 		return err
 	}
 	groups := resolveToolGroups(s.deps.MemoryToolsEnabled, s.deps.SkillToolsEnabled, s.deps.ReviewToolsEnabled).
-		withTrial(s.deps.TrialToolsEnabled)
+		withTrial(provider.IsTrial(resolved.ID))
 	tools, err := s.session(ctx, groups)
 	if err != nil {
 		return err

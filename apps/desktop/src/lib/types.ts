@@ -558,11 +558,19 @@ export interface GitSyncInitResult {
   error: string;
 }
 
-/** The four providers the built-in agent can use (#90). Codex logs in with
+/** The providers the built-in agent can use (#90). "linetta-trial" is Linetta
+ *  Works calling a model on the writer's behalf (docs/plans/trial); the
+ *  settings pane does not list it yet. Codex logs in with
  *  OAuth inside the app; the other three take an API key. "openai" is the
  *  OpenAI-compatible family — base_url points it at OpenRouter, Ollama, LM
  *  Studio. */
-export type ProviderID = "openai-codex" | "anthropic" | "gemini-native" | "openai" | "claude-code";
+export type ProviderID =
+  | "linetta-trial"
+  | "openai-codex"
+  | "anthropic"
+  | "gemini-native"
+  | "openai"
+  | "claude-code";
 export type WebSearchProvider = "brave" | "perplexity";
 
 export type AppLanguage = "ko" | "en" | "ja";
@@ -597,8 +605,9 @@ export type AgentReasoningEffort = "" | "low" | "medium" | "high";
 /** providers.list — where each provider stands. Never carries a secret. */
 export interface ProviderStatus {
   id: ProviderID;
-  /** "cli" is the Claude Code CLI: no key, the writer's own Claude login. */
-  auth: "oauth" | "api_key" | "cli";
+  /** "cli" is the Claude Code CLI: no key, the writer's own Claude login.
+   *  "works" is the Linetta trial: the Linetta Works connection is the key. */
+  auth: "oauth" | "api_key" | "cli" | "works";
   active: boolean;
   /** For "cli", whether the binary was found — not whether it is signed in. */
   configured: boolean;

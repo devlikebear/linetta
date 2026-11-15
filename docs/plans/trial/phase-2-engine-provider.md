@@ -72,27 +72,27 @@ _전제: Phase 1이 개발 서버에 떠 있음(`LINETTA_PUBLISH_BASE_URL`로 �
 
 ## Tasks
 
-- [ ] **2.1 공급자 id와 자격 증명**
+- [x] **2.1 공급자 id와 자격 증명**
   - `ProviderLinettaTrial = "linetta-trial"`. 세 빌드의 `ValidProviders` 맨 앞에 둔다(설정 화면에서 가장 먼저 보이게). `DefaultProvider`는 그대로다
   - `Resolve`, `Configured`, `Options` (위 표)
   - `settings.set`: 이 공급자의 키, 주소, 모델은 거절. 동의(`consented_at`)와 `provider` 활성화는 받는다
   - 테스트: 연결 없음은 미구성, 연결과 토큰이 있으면 구성, 토큰만 지워도 미구성, `Options`의 주소와 키, 키를 넣으려는 `settings.set` 거절, `String()`이 토큰을 가림
 
-- [ ] **2.2 그 턴의 공급자로 체험 정하기**
+- [x] **2.2 그 턴의 공급자로 체험 정하기**
   - `toolGroups.withTrial(bool)`로 바꾸고, `loop.go`와 `pass.go`에서 `resolved.ID == settings.ProviderLinettaTrial`을 넘긴다
   - `Deps.TrialToolsEnabled`와 engineapp 배선, 관련 테스트를 이 기준으로 고친다
   - 테스트: 체험 공급자로 도는 턴은 20개, 같은 서비스에서 다른 공급자로 도는 턴은 전체. 활성 공급자를 턴 도중에 바꿔도 그 턴은 시작할 때의 공급자를 따른다
 
-- [ ] **2.3 오류 이유**
+- [x] **2.3 오류 이유**
   - 새 이유 두 개, `Classify`가 체험 공급자일 때 본문의 `error.code`를 먼저 본다
   - 테스트: 429 + `trial_exhausted` → 소진, 503 + `trial_paused` → 멈춤, 429 + `trial_busy` → 속도 제한, 다른 공급자의 429 본문에 `trial_exhausted`가 있어도 속도 제한
 
-- [ ] **2.4 `trial.status`**
+- [x] **2.4 `trial.status`**
   - `publish.Client.TrialStatus`가 `GET /api/artworks/trial/me`를 부른다. 연결이 없으면 부르지 않고 `{ state: "not_connected" }`
   - RPC `trial.status` → `{ state, granted_tokens, used_tokens, remaining_tokens }`. `state`는 서버 값에 `not_connected`, `unreachable`을 더한다
   - 테스트는 publish 패키지의 가짜 사이트(`fake_site_test.go`)에 경로를 더해 한다
 
-- [ ] **2.5 엔진 끝까지**
+- [x] **2.5 엔진 끝까지**
   - engineapp 테스트: 가짜 사이트(게시 연결 + 체험 경로)와 기록용 가짜 OpenAI 호환 서버로 `agent.run` 한 턴
     - 요청이 `…/api/trial/v1/chat/completions`로, `Authorization: Bearer lwk_…`와 함께 간다
     - 도구가 20개다
@@ -102,3 +102,16 @@ _전제: Phase 1이 개발 서버에 떠 있음(`LINETTA_PUBLISH_BASE_URL`로 �
 
 - `CGO_ENABLED=0 go test ./...` (ffi 둘 제외), `-tags mobile`, `-tags mas` 빌드
 - Phase 1 개발 서버에 붙여 한 턴: `LINETTA_PUBLISH_BASE_URL=<개발 서버>`로 엔진을 띄우고 연결한 뒤 짧은 질문 하나. 서버 원장에 토큰이 적히는지
+
+## 구현 기록 (2026-11-15)
+
+작업지시서와 달라진 점:
+
+- 연결이 없을 때 `BaseURL`은 비워 둔다(`publish.BaseURLFromEnv()`로 채우지 않는다). 어차피 `configured`가 거짓이고, provider 패키지가 publish 패키지를 가져오지 않게 하려는 것이다.
+- 에이전트는 settings를 가져오지 않으므로 `resolved.ID == settings.ProviderLinettaTrial` 대신 `provider.IsTrial(resolved.ID)`로 판단한다.
+- `settings.set`은 체험 공급자의 `pass_model`도 거절한다.
+- 새 이유 두 개의 화면 문구(`rpcMessage.ts`, ko·en·ja)는 원문 오류가 화면에 나오지 않도록 이 Phase에서 넣었다. "내 키 연결" 버튼은 Phase 3에서 붙인다.
+- `trial.status`는 Tauri 렌더러 허용 목록에 넣지 않았다. 렌더러가 부르지 않는 메서드는 목록에 둘 수 없으므로(`rpcAllowlist.test.ts`), 호출부를 만드는 Phase 3에서 함께 넣는다.
+- 설정 화면은 `PROVIDER_ORDER`에 있는 공급자만 보여 주므로, Phase 3 전까지 체험 행은 화면에 나오지 않는다.
+
+남은 확인: Phase 1 개발 서버에 붙여 실제로 한 턴 돌리기(서버 원장에 토큰이 적히는지).

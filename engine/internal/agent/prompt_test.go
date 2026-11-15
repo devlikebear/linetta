@@ -1157,7 +1157,7 @@ func TestSystemPrompt_namesOnlyToolsTheTurnHolds(t *testing.T) {
 				for _, visualOff := range []bool{true, false} {
 					for _, trial := range []bool{false, true} {
 						g := toolGroups{memory: memory, skills: skill, review: review, disableVisualWrites: visualOff}
-						g = g.withTrial(func() bool { return trial })
+						g = g.withTrial(trial)
 						got := systemPrompt("en", doc(agentmemory.ScopeWriterProfile, "writes at night"),
 							emptyDoc(agentmemory.ScopeWorkNotes), skills, g)
 						for _, name := range toolNamePattern.FindAllString(got, -1) {
@@ -1175,7 +1175,7 @@ func TestSystemPrompt_namesOnlyToolsTheTurnHolds(t *testing.T) {
 // A trial keeps the agent's job — read the brief, revise a selection, ask the
 // writer — and loses the lines about what it no longer holds.
 func TestSystemPrompt_trialKeepsTheManuscriptLinesAndDropsTheRest(t *testing.T) {
-	g := allToolGroups().withTrial(func() bool { return true })
+	g := allToolGroups().withTrial(true)
 	got := systemPrompt("en", doc(agentmemory.ScopeWriterProfile, "writes at night"),
 		emptyDoc(agentmemory.ScopeWorkNotes), []agentskills.Skill{writerSkill("dialogue-rhythm", "rhythm")}, g)
 	for _, want := range []string{"linetta_get_story_context", "linetta_revise_scene", "<selection>", "linetta_ask_writer",
@@ -1197,17 +1197,13 @@ func TestSystemPrompt_trialKeepsTheManuscriptLinesAndDropsTheRest(t *testing.T) 
 	}
 }
 
-// Off unless the trial provider says otherwise: an unwired func must leave
-// the writer with the whole product.
-func TestWithTrial_nilOrFalseChangesNothing(t *testing.T) {
+// Off unless the turn runs on the trial provider.
+func TestWithTrial_falseChangesNothing(t *testing.T) {
 	g := allToolGroups()
-	if got := g.withTrial(nil); got != g {
-		t.Errorf("withTrial(nil) = %+v, want %+v", got, g)
-	}
-	if got := g.withTrial(func() bool { return false }); got != g {
+	if got := g.withTrial(false); got != g {
 		t.Errorf("withTrial(false) = %+v, want %+v", got, g)
 	}
-	on := g.withTrial(func() bool { return true })
+	on := g.withTrial(true)
 	if !on.trial || on.memory || on.skills || !on.disableVisualWrites || !on.review {
 		t.Errorf("withTrial(true) = %+v, want trial with memory, skills and visual writes off and review kept", on)
 	}

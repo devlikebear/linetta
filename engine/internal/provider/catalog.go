@@ -14,7 +14,7 @@ import (
 // secret: Configured says a key or login exists, not what it is.
 type Status struct {
 	ID         string `json:"id"`
-	Auth       string `json:"auth"` // "oauth" | "api_key" | "cli"
+	Auth       string `json:"auth"` // "oauth" | "api_key" | "cli" | "works"
 	Active     bool   `json:"active"`
 	Configured bool   `json:"configured"`
 	Consented  bool   `json:"consented"`
@@ -41,6 +41,8 @@ func authKind(id string) string {
 		return "oauth"
 	case settings.ProviderClaudeCode:
 		return "cli"
+	case settings.ProviderLinettaTrial:
+		return "works"
 	}
 	return "api_key"
 }
@@ -93,6 +95,11 @@ func (s *Source) ListModels(ctx context.Context, id string) ([]string, error) {
 	}
 	if r.ID == settings.ProviderClaudeCode {
 		return s.claudeCodeModels(ctx, r.Model), nil
+	}
+	if r.ID == settings.ProviderLinettaTrial {
+		// The site picks the model. Asking it would be one more request
+		// against the writer's trial for an answer that cannot change.
+		return []string{TrialModel}, nil
 	}
 	models, err := s.fetcher.FetchModels(ctx, Options(r))
 	if err != nil {

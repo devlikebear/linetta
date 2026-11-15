@@ -28,6 +28,8 @@ type fakeSite struct {
 	requests []string
 	// poll answers pair/poll in order; the last one repeats.
 	poll []string
+	// trial is what trial/me answers for the token's account.
+	trial TrialStatus
 	// fail makes the next request matching "METHOD /path-prefix" answer with
 	// the given status and code, once.
 	fail []fakeFailure
@@ -62,11 +64,13 @@ const fakeToken = "lwk_test_token"
 
 func newFakeSite(t *testing.T) *fakeSite {
 	t.Helper()
-	f := &fakeSite{t: t, token: fakeToken, works: map[string]*fakeWork{}, poll: []string{PollApproved}}
+	f := &fakeSite{t: t, token: fakeToken, works: map[string]*fakeWork{}, poll: []string{PollApproved},
+		trial: TrialStatus{State: TrialNotStarted, GrantedTokens: 3000000, RemainingTokens: 3000000}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/artworks/pair/start", f.pairStart)
 	mux.HandleFunc("POST /api/artworks/pair/poll", f.pairPoll)
 	mux.HandleFunc("GET /api/artworks/me", f.auth(f.me))
+	mux.HandleFunc("GET /api/artworks/trial/me", f.auth(f.trialMe))
 	mux.HandleFunc("PUT /api/artworks/works/{pid}", f.auth(f.putWork))
 	mux.HandleFunc("GET /api/artworks/works/{pid}", f.auth(f.getWork))
 	mux.HandleFunc("PUT /api/artworks/works/{pid}/episodes/{nid}", f.auth(f.putEpisode))
@@ -180,6 +184,14 @@ func (f *fakeSite) pairPoll(w http.ResponseWriter, r *http.Request) {
 		body["token"], body["handle"], body["pen_name"] = f.token, "devlikebear", "마곰"
 	}
 	writeJSON(w, 200, body)
+}
+
+func (f *fakeSite) trialMe(w http.ResponseWriter, r *http.Request) {
+	f.mu.Lock()
+	st := f.trial
+	f.mu.Unlock()
+	writeJSON(w, 200, map[string]any{"state": st.State, "granted_tokens": st.GrantedTokens,
+		"used_tokens": st.UsedTokens, "remaining_tokens": st.RemainingTokens})
 }
 
 func (f *fakeSite) me(w http.ResponseWriter, r *http.Request) {

@@ -85,14 +85,14 @@ type toolGroups struct {
 
 func allToolGroups() toolGroups { return toolGroups{memory: true, skills: true, review: true} }
 
-// withTrial applies the trial provider's cut when trial reports it, nil
-// meaning no trial. The groups whose every tool is outside the trial are
+// withTrial applies the trial provider's cut when trial is true — when the
+// turn's own resolved provider is settings.ProviderLinettaTrial. The groups whose every tool is outside the trial are
 // switched off here as well as in mcphost (ToolGroups.normalized), so this
 // struct — the session's cache key and the prompt's input — says what the
 // turn really holds: the memory block loses its budget line and the skills
 // block goes, exactly as when the writer switches those groups off.
-func (g toolGroups) withTrial(trial func() bool) toolGroups {
-	if trial == nil || !trial() {
+func (g toolGroups) withTrial(trial bool) toolGroups {
+	if !trial {
 		return g
 	}
 	g.trial = true

@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -9,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/devlikebear/linetta/engine/internal/rpc"
+	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/tars/pkg/llm"
 )
 
@@ -31,6 +33,11 @@ func Classify(id string, err error) error {
 	var pe *llm.ProviderError
 	if errors.As(err, &pe) && pe.StatusCode > 0 {
 		reason = reasonForStatus(pe.StatusCode)
+		if id == settings.ProviderLinettaTrial {
+			if r := trialReason(pe.Message); r != "" {
+				reason = r
+			}
+		}
 	} else if isTimeout(err) {
 		reason = rpc.ReasonProviderTimeout
 	}
@@ -68,6 +75,27 @@ func Classify(id string, err error) error {
 		reason = rpc.ReasonProviderModelUnsupported
 	}
 	return &rpc.ReasonError{Reason: reason, Err: fmt.Errorf("%s: %s", id, firstLine(err))}
+}
+
+// trialReason reads the trial proxy's own error code from an OpenAI-shaped
+// body. Only the trial's answers are read this way: another provider's body
+// that happens to carry the same word stays whatever its status says.
+func trialReason(body string) string {
+	var e struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if json.Unmarshal([]byte(body), &e) != nil {
+		return ""
+	}
+	switch e.Error.Code {
+	case "trial_exhausted":
+		return rpc.ReasonProviderTrialExhausted
+	case "trial_paused":
+		return rpc.ReasonProviderTrialPaused
+	}
+	return ""
 }
 
 // reasonForStatus maps an HTTP status the provider actually sent.

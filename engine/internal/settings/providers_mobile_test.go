@@ -9,7 +9,7 @@ import (
 )
 
 func TestValidProviders_offersOnlyAPIKeyProvidersOnMobile(t *testing.T) {
-	want := []string{"anthropic", "gemini-native", "openai"}
+	want := []string{"linetta-trial", "anthropic", "gemini-native", "openai"}
 	if got := ValidProviders(); !slices.Equal(got, want) {
 		t.Fatalf("ValidProviders = %v, want %v", got, want)
 	}

@@ -38,6 +38,12 @@ const (
 	ProviderGeminiNative = "gemini-native"
 	ProviderOpenAI       = "openai"
 	ProviderClaudeCode   = "claude-code"
+	// ProviderLinettaTrial is Linetta Works calling a model with the
+	// operator's key on the writer's behalf, for a fixed number of tokens per
+	// Works account (docs/plans/trial). It borrows the publish connection for
+	// its credential and the site for its address, so the writer stores
+	// nothing for it but consent; see the merge loop in Set.
+	ProviderLinettaTrial = "linetta-trial"
 )
 
 // AIDataSharingConsentVersion increments whenever the disclosed third-party
@@ -948,6 +954,13 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 			}
 			if pp.ConsentedAt != nil {
 				cfg.ConsentedAt = *pp.ConsentedAt
+			}
+			if id == ProviderLinettaTrial && (pp.Model != nil || pp.PassModel != nil || pp.BaseURL != nil || pp.APIKey != nil) {
+				// The trial's key is the publish token, its address the
+				// connected site, and its model whatever the site serves. A
+				// pane that accepted any of them would be telling the writer
+				// it mattered; consent is the one thing the writer gives.
+				return Config{}, fmt.Errorf("settings: provider %q takes only consent", id)
 			}
 			if pp.APIKey != nil && strings.TrimSpace(*pp.APIKey) != "" && id == ProviderClaudeCode {
 				// The CLI signs in with the writer's own Claude login. A key

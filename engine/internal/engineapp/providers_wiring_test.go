@@ -41,6 +41,9 @@ func TestProvidersListIsRegisteredAndDescribesAFreshInstall(t *testing.T) {
 	}
 
 	want := []providerStatus{
+		// First, so the pane lists it first; configured only once the device
+		// is connected to Linetta Works.
+		{ID: "linetta-trial", Auth: "works"},
 		{ID: "openai-codex", Auth: "oauth", Active: true},
 		{ID: "anthropic", Auth: "api_key"},
 		{ID: "gemini-native", Auth: "api_key"},

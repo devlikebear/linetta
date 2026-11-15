@@ -534,3 +534,30 @@ func TestSet_aFailedFileWriteRollsBackTheKeys(t *testing.T) {
 	}
 	before.assertUnchanged(t, snapshotSettings(t, s, secrets))
 }
+
+func TestSet_linettaTrialTakesOnlyConsentAndActivation(t *testing.T) {
+	s := newStoreOnTemp(t)
+	ctx := context.Background()
+	for name, pp := range map[string]ProviderPatch{
+		"api_key":    {APIKey: strPtr("sk-x")},
+		"base_url":   {BaseURL: strPtr("https://example.com/v1")},
+		"model":      {Model: strPtr("solar-mini")},
+		"pass_model": {PassModel: strPtr("solar-mini")},
+	} {
+		if _, err := s.Set(ctx, Patch{Providers: map[string]ProviderPatch{ProviderLinettaTrial: pp}}); err == nil {
+			t.Errorf("%s: Set accepted it for the trial provider", name)
+		}
+	}
+	if _, err := s.Set(ctx, Patch{
+		Provider:  strPtr(ProviderLinettaTrial),
+		Providers: map[string]ProviderPatch{ProviderLinettaTrial: {ConsentedAt: int64Ptr(1700000000000)}},
+	}); err != nil {
+		t.Fatalf("Set consent and activation: %v", err)
+	}
+	if got := s.ActiveProvider(); got != ProviderLinettaTrial {
+		t.Errorf("ActiveProvider = %q, want %q", got, ProviderLinettaTrial)
+	}
+	if !s.HasProviderConsent(ProviderLinettaTrial) {
+		t.Error("consent was not recorded")
+	}
+}

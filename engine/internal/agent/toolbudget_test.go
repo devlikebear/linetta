@@ -402,22 +402,21 @@ func TestToolSession_aSecondReleaseIsReportedAndChangesNothing(t *testing.T) {
 	}
 }
 
-// The trial switch rebuilds the session like any group switch, and a trial
-// turn is offered exactly the trial's twenty tools — the nineteen mcphost
-// registers plus linetta_ask_writer — through the real registrar.
+// A turn whose provider resolves to the trial rebuilds the session like any
+// group switch, and is offered exactly the trial's twenty tools — the
+// nineteen mcphost registers plus linetta_ask_writer — through the real
+// registrar. The same service on another provider gets the whole set back.
 func TestRun_aTrialTurnIsOfferedTheTrialSetOnItsOwnSession(t *testing.T) {
 	rec := &recorder{}
 	c := &scriptedClient{responses: []llm.ChatResponse{textReply("ok")}}
 	svc, cfg, registrations := budgetService(t, c, rec)
 	setToolSwitches(t, cfg, true, true, true)
-	var trial atomic.Bool
-	svc.deps.TrialToolsEnabled = trial.Load
 
 	oneTurn(t, svc, rec)
 	full := len(c.options().Tools)
 	built := *registrations
 
-	trial.Store(true)
+	svc.deps.Providers = fakeProviders{client: c, id: settings.ProviderLinettaTrial}
 	oneTurn(t, svc, rec)
 	if *registrations != built+1 {
 		t.Errorf("switching the trial on built %d tool servers in total, want %d", *registrations, built+1)
@@ -435,7 +434,7 @@ func TestRun_aTrialTurnIsOfferedTheTrialSetOnItsOwnSession(t *testing.T) {
 		t.Errorf("a trial turn was offered %d tools, no fewer than the full turn's %d", len(offered), full)
 	}
 
-	trial.Store(false)
+	svc.deps.Providers = fakeProviders{client: c}
 	oneTurn(t, svc, rec)
 	if got := len(c.options().Tools); got != full {
 		t.Errorf("after the trial the turn was offered %d tools, want the full %d back", got, full)

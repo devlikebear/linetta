@@ -8,7 +8,7 @@ package settings
 // callback needs a local listener the phone cannot keep open while Safari is
 // in front.
 func ValidProviders() []string {
-	return []string{ProviderAnthropic, ProviderGeminiNative, ProviderOpenAI}
+	return []string{ProviderLinettaTrial, ProviderAnthropic, ProviderGeminiNative, ProviderOpenAI}
 }
 
 // DefaultProvider is what a new library starts on, and what an id outside
