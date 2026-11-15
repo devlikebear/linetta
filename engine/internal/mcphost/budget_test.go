@@ -350,8 +350,10 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	// and the clause saying how they are numbered) took it to 29,615B.
 	// change_relationship in linetta_apply_story_ops' op schema (#386) took
 	// it to 29,662B.
-	if total > 29700 {
-		t.Errorf("the original tool budget (excluding linetta_report_continuity) is %dB, want <= 29700B "+
+	// Meaning search on linetta_search_manuscript (#384 Phase 3: the mode
+	// input and the semantic flag on its output) took it to 29,770B.
+	if total > 29800 {
+		t.Errorf("the original tool budget (excluding linetta_report_continuity) is %dB, want <= 29800B "+
 			"(#132 trimmed it from 27687B to 26525B; story-assist raised it to 27100B, 27400B, then 27500B)", total)
 	}
 }

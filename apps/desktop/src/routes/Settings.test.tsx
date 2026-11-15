@@ -19,6 +19,13 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../lib/rpc", () => ({
+  // A build that cannot run the model shows no meaning-search section; the
+  // section has its own tests.
+  semanticSearch: {
+    status: () => Promise.resolve({ supported: false, enabled: false, model: { installed: false, downloading: false, received: 0, total: 0 } }),
+    enable: vi.fn(),
+    disable: vi.fn(),
+  },
   // Rejecting hides the background-residence section, matching a shell
   // without those commands; BackgroundSection has its own tests.
   backgroundPrefsGet: () => Promise.reject(new Error("not in this test")),

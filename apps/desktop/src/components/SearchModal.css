@@ -2,3 +2,8 @@
    .backdrop.top, .palette, .palette-input-wrap, .palette-input, .palette-list,
    .palette-empty, .search-result(.active), .sr-top, .sr-proj, .sr-scene,
    .sr-snip + mark highlight, .palette-foot. No local overrides required. */
+
+/* #384: the words/meaning switch and meaning search's state line. */
+.search-modes { display: flex; gap: 6px; padding: 8px 14px 0; }
+.search-notice { display: flex; align-items: center; gap: 10px; margin: 8px 14px 0; padding: 8px 10px; font-size: 12px; color: var(--muted); background: var(--surface-2, var(--surface)); border: 1px solid var(--line-soft); border-radius: var(--r-sm); }
+.search-notice span { flex: 1; }
