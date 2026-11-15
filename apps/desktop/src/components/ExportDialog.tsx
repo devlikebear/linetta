@@ -45,8 +45,20 @@ const DEFAULTS: Remembered = {
     headings: true,
     scene_break: "* * *",
     illustrations: false,
+    illustration_images: false,
+    cover: false,
+    contents: false,
   },
 };
+
+/** What becomes of the pictures: left out, a "[삽화: caption]" line, or the
+ *  picture itself. A text file cannot hold a picture, so there it is the line. */
+type IllustrationMode = "none" | "placeholder" | "pictures";
+
+function illustrationMode(options: Required<ExportDocumentOptions>, pictures: boolean): IllustrationMode {
+  if (options.illustration_images) return pictures ? "pictures" : "placeholder";
+  return options.illustrations ? "placeholder" : "none";
+}
 
 const KEY = "linetta.exportOptions.";
 
@@ -74,8 +86,8 @@ function remember(projectId: string, value: Remembered) {
   }
 }
 
-/** Exports the work, or a part of it, as DOCX, HWPX, TXT or Markdown (#383). DOCX
- *  and TXT come from export.document; Markdown keeps its own export, which
+/** Exports the work, or a part of it, as DOCX, HWPX, TXT or Markdown (#383). DOCX,
+ *  HWPX and TXT come from export.document; Markdown keeps its own export, which
  *  carries the frontmatter an import reads back. */
 export function ExportDialog({ projectId, scopes, onClose, onMessage }: Readonly<Props>) {
   const { t } = useI18n();
@@ -113,25 +125,41 @@ export function ExportDialog({ projectId, scopes, onClose, onMessage }: Readonly
   }, [projectId, scope.nodeId]);
 
   const effectiveFormat: ExportFormat = format === "md" && !markdownFits ? "docx" : format;
+  // Word and Hangul take the same layout choices, pictures, cover and contents.
+  const layout = effectiveFormat === "docx" || effectiveFormat === "hwpx";
+  const prose = effectiveFormat !== "md";
+  const mode = illustrationMode(options, layout);
+  const setMode = (next: IllustrationMode) =>
+    choose({ options: { ...options, illustrations: next !== "none", illustration_images: next === "pictures" } });
 
   const run = async () => {
     setBusy(true);
     try {
       let path: string | null;
+      let leftOut = 0;
       if (effectiveFormat === "md") {
         const payload = scope.nodeId ? await exportApi.node(scope.nodeId) : await exportApi.project(projectId);
         path = await saveExportedMarkdown(payload);
       } else {
+        const mode = illustrationMode(options, layout);
         const payload = await exportApi.document({
           project_id: projectId,
           node_id: scope.nodeId,
           format: effectiveFormat,
-          options,
+          options: {
+            ...options,
+            illustrations: mode !== "none",
+            illustration_images: mode === "pictures",
+            cover: layout && options.cover,
+            contents: layout && options.contents,
+          },
         });
         path = await saveExportedFile(payload, effectiveFormat);
+        leftOut = payload.pictures_left_out ?? 0;
       }
       if (path) {
-        onMessage(exportDestinationMessage(t, path));
+        const saved = exportDestinationMessage(t, path);
+        onMessage(leftOut > 0 ? `${saved} ${t("exportDialog.picturesLeftOut", { count: String(leftOut) })}` : saved);
         onClose();
       }
     } catch (e) {
@@ -141,9 +169,6 @@ export function ExportDialog({ projectId, scopes, onClose, onMessage }: Readonly
     }
   };
 
-  // Word and Hangul take the same layout choices.
-  const layout = effectiveFormat === "docx" || effectiveFormat === "hwpx";
-  const prose = effectiveFormat !== "md";
   return (
     <div className="backdrop center" onClick={onClose}>
       <div
@@ -236,6 +261,14 @@ export function ExportDialog({ projectId, scopes, onClose, onMessage }: Readonly
               />
               {t("exportDialog.pageBreak")}
             </label>
+            <label className="export-check">
+              <input type="checkbox" checked={options.cover} onChange={(e) => setOption("cover", e.target.checked)} />
+              {t("exportDialog.cover")}
+            </label>
+            <label className="export-check">
+              <input type="checkbox" checked={options.contents} onChange={(e) => setOption("contents", e.target.checked)} />
+              {t("exportDialog.contents")}
+            </label>
           </div>
         ) : null}
 
@@ -253,13 +286,13 @@ export function ExportDialog({ projectId, scopes, onClose, onMessage }: Readonly
                 ))}
               </select>
             </label>
-            <label className="export-check">
-              <input
-                type="checkbox"
-                checked={options.illustrations}
-                onChange={(e) => setOption("illustrations", e.target.checked)}
-              />
+            <label>
               {t("exportDialog.illustrations")}
+              <select value={mode} onChange={(e) => setMode(e.target.value as IllustrationMode)}>
+                <option value="none">{t("exportDialog.illustrations.none")}</option>
+                <option value="placeholder">{t("exportDialog.illustrations.placeholder")}</option>
+                {layout ? <option value="pictures">{t("exportDialog.illustrations.pictures")}</option> : null}
+              </select>
             </label>
           </div>
         ) : (

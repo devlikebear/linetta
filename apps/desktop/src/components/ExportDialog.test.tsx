@@ -107,8 +107,38 @@ describe("ExportDialog", () => {
     renderDialog();
     fireEvent.click(screen.getByTestId("export-format-txt"));
     expect(screen.queryByTestId("export-layout")).toBeNull();
-    fireEvent.click(screen.getByLabelText("exportDialog.illustrations"));
+    fireEvent.change(screen.getByLabelText("exportDialog.illustrations"), { target: { value: "placeholder" } });
     await waitFor(() => expect(window.localStorage.getItem("linetta.exportOptions.p1")).toContain('"illustrations":true'));
+  });
+
+  it("puts pictures, a title page and contents in a Word file and says what it left out", async () => {
+    mocks.document.mockImplementation((req: { preview?: boolean }) =>
+      Promise.resolve(req.preview ? { scenes: 1, chars: 1 } : { scenes: 1, chars: 1, bytes_base64: "UEs=", pictures_left_out: 2 }));
+    const { onMessage } = renderDialog();
+    fireEvent.change(screen.getByLabelText("exportDialog.illustrations"), { target: { value: "pictures" } });
+    fireEvent.click(screen.getByLabelText("exportDialog.cover"));
+    fireEvent.click(screen.getByLabelText("exportDialog.contents"));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("export-run"));
+    });
+    expect(mocks.document).toHaveBeenLastCalledWith(expect.objectContaining({
+      options: expect.objectContaining({ illustrations: true, illustration_images: true, cover: true, contents: true }),
+    }));
+    expect(onMessage).toHaveBeenCalledWith("saved /tmp/w.docx exportDialog.picturesLeftOut:count=2");
+  });
+
+  it("marks pictures in a text file, which cannot hold them", async () => {
+    renderDialog();
+    fireEvent.change(screen.getByLabelText("exportDialog.illustrations"), { target: { value: "pictures" } });
+    fireEvent.click(screen.getByTestId("export-format-txt"));
+    expect((screen.getByLabelText("exportDialog.illustrations") as HTMLSelectElement).value).toBe("placeholder");
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("export-run"));
+    });
+    expect(mocks.document).toHaveBeenLastCalledWith(expect.objectContaining({
+      format: "txt",
+      options: expect.objectContaining({ illustrations: true, illustration_images: false, cover: false, contents: false }),
+    }));
   });
 
   it("says why an export failed and stays open", async () => {
