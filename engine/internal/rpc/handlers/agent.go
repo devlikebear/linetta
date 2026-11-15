@@ -31,6 +31,10 @@ type AgentController interface {
 	// StartSampleCheck compares scenes in the background, with no conversation.
 	// What it finds lands in the continuity record.
 	StartSampleCheck(ctx context.Context, projectID, request string, maxCalls int) error
+	// StartOrganize reads an episode's changed scenes in the background and
+	// proposes what the record lacks into the suggestions inbox (#387). done
+	// gets how the pass ended.
+	StartOrganize(ctx context.Context, req OrganizeStart, done func(ctx context.Context, outcome string)) error
 	// Undo reverts a structural batch (batchID) or restores a scene's
 	// pre-write snapshot (snapshotID). Exactly one is non-empty; AgentUndo
 	// validates that before calling this (#112).

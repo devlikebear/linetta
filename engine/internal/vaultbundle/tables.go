@@ -102,6 +102,7 @@ var dependents = []Table{
 	{"story_ledger", byProject, ""},
 	{"part_arcs", byProject, ""},
 	{"scene_settlements", byProject, ""},
+	{"scene_organize", byProject, ""},
 }
 
 // excluded names every table that stays behind, and why. A table in neither

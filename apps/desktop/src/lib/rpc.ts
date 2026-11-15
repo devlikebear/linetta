@@ -107,6 +107,7 @@ import type {
   UpdateNoteInput,
   UpdateProjectInput,
   UpdateRelationshipInput,
+  OrganizeResult,
   ChangeRelationshipInput,
   RelationshipGraph,
   UpdateThreadInput,
@@ -655,6 +656,11 @@ export const agent = {
   /** Starts the conversation over from here. Nothing is deleted. */
   startFresh: (projectId: string) =>
     rpcCall<{ ok: true }>("agent.start_fresh", { project_id: projectId }),
+  /** Reads the episode nodeId is in for what the work's record lacks, in the
+   *  background, and proposes it into the inbox (#387). force reads scenes
+   *  already read as they are. */
+  organize: (projectId: string, nodeId: string, force = false) =>
+    rpcCall<OrganizeResult>("agent.organize", { project_id: projectId, node_id: nodeId, force }),
   // Exactly one of batchId/snapshotId is expected — an outline batch from
   // linetta_apply_story_ops, or a scene write/revise's pre-write snapshot
   // (#112). rpcCall drops the other since it stringifies as undefined.

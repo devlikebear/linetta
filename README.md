@@ -201,6 +201,17 @@ finds. It sends the manuscript again, so it is metered by your provider and is
 off by default. With the Claude Code provider it runs as one more `claude` call
 limited to those same read-only tools, and counts against your Claude plan.
 
+### Organizing what you wrote by hand
+
+**Suggest updates from this episode**, in the command palette, reads the open
+episode's scenes that changed since they were last read and looks for what the
+work's record does not hold yet: a person, place or thing named for the first
+time, a tie between two people or one that changed, a promise the story now owes
+or one it just paid. Each finding goes to the suggestions inbox with the line it
+rests on; nothing changes until you accept it. It runs on your connected
+provider, not the trial, and its cost shows as "Organize suggestions" in
+Settings → Agent usage.
+
 The style check also reports paired contrast and narrator explanation in Korean
 prose, a sentence repeated across scenes, and consecutive scenes that end the same
 way. It only reports them. You can name one scene as the style to match, and keep

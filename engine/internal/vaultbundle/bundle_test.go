@@ -75,6 +75,7 @@ func seedWork(t *testing.T, db *sql.DB, id string) {
 		 VALUES ('P-l4', 'P', 'knowledge', '가나', '다라의 정체를 앎', 'open', 'agent', '앎', 1, 'P-l3', 1, 1)`,
 		`INSERT INTO part_arcs (node_id, project_id, role, goal, tension, updated_at) VALUES ('P-n2', 'P', '승', '목표', 5, 1)`,
 		`INSERT INTO scene_settlements (node_id, project_id, content_version, outcome, settled_at) VALUES ('P-n2', 'P', 3, 'done', 1)`,
+		`INSERT INTO scene_organize (node_id, project_id, content_version, text_hash, outcome, organized_at) VALUES ('P-n2', 'P', 3, 'h', 'done', 1)`,
 		`INSERT INTO project_focus (project_id, body, anchor_node_id, set_at) VALUES ('P', '집중', 'P-n2', 1)`,
 		`INSERT INTO illustrations (id, project_id, source_node_id, prompt, provider, model, mime, byte_size, data, created_at)
 		 VALUES ('P-i1', 'P', 'P-n2', '그림', 'p', 'm', 'image/png', 4, x'89504e47', 1)`,

@@ -100,33 +100,11 @@ func (s *Service) cliPass(ctx context.Context, st loopState, name string, msgs [
 // no brief: what the writer asked for is a reader who has seen only these
 // scenes. It is a pass with no turn before it, so it sets up what a turn would.
 func (s *Service) StartSampleCheck(ctx context.Context, projectID, request string, maxCalls int) error {
-	projectID = strings.TrimSpace(projectID)
-	if s.runs.status(projectID).Running {
-		return ErrTurnRunning
-	}
-	client, resolved, err := s.deps.Providers.Client(ctx, "")
+	st, release, err := s.standalone(ctx, projectID)
 	if err != nil {
 		return err
 	}
-	groups := resolveToolGroups(s.deps.MemoryToolsEnabled, s.deps.SkillToolsEnabled, s.deps.ReviewToolsEnabled).
-		withTrial(provider.IsTrial(resolved.ID))
-	tools, err := s.session(ctx, groups)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := tools.release(); err != nil {
-			logf("agent: releasing the tool session: %v", err)
-		}
-	}()
-	schemas, err := tools.schemas(ctx)
-	if err != nil {
-		return err
-	}
-	st := loopState{
-		runID: newRunID(), projectID: projectID, req: RunRequest{ProjectID: projectID},
-		provider: resolved.ID, client: client, model: resolved.Model, session: tools, schemas: schemas, groups: groups,
-	}
+	defer release()
 	s.startPasses(ctx, st, []func(context.Context){func(ctx context.Context) {
 		s.runPass(ctx, st, "sample check", []llm.ChatMessage{
 			{Role: "system", Content: sampleSystemPrompt},
@@ -134,4 +112,38 @@ func (s *Service) StartSampleCheck(ctx context.Context, projectID, request strin
 		}, sampleTools, maxCalls)
 	}})
 	return nil
+}
+
+// standalone sets up what a turn would for a pass the writer started with no
+// turn before it: the provider, the tool session and its schemas. release
+// lets go of this call's hold on the session; startPasses takes its own.
+func (s *Service) standalone(ctx context.Context, projectID string) (loopState, func(), error) {
+	projectID = strings.TrimSpace(projectID)
+	if s.runs.status(projectID).Running {
+		return loopState{}, nil, ErrTurnRunning
+	}
+	client, resolved, err := s.deps.Providers.Client(ctx, "")
+	if err != nil {
+		return loopState{}, nil, err
+	}
+	groups := resolveToolGroups(s.deps.MemoryToolsEnabled, s.deps.SkillToolsEnabled, s.deps.ReviewToolsEnabled).
+		withTrial(provider.IsTrial(resolved.ID))
+	tools, err := s.session(ctx, groups)
+	if err != nil {
+		return loopState{}, nil, err
+	}
+	release := func() {
+		if err := tools.release(); err != nil {
+			logf("agent: releasing the tool session: %v", err)
+		}
+	}
+	schemas, err := tools.schemas(ctx)
+	if err != nil {
+		release()
+		return loopState{}, nil, err
+	}
+	return loopState{
+		runID: newRunID(), projectID: projectID, req: RunRequest{ProjectID: projectID},
+		provider: resolved.ID, client: client, model: resolved.Model, session: tools, schemas: schemas, groups: groups,
+	}, release, nil
 }

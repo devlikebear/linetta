@@ -22,6 +22,7 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
     "agent.cancel",
     "agent.clear",
     "agent.history",
+    "agent.organize",
     "agent.prompts",
     "agent.run",
     "agent.start_fresh",
@@ -1039,6 +1040,7 @@ mod security_boundary_tests {
             "agent.undo",
             "agent.prompts",
             "agent.usage",
+            "agent.organize",
         ] {
             assert!(
                 is_renderer_engine_method(method),

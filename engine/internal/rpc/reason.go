@@ -167,6 +167,11 @@ const (
 	// out on its own. The writer can still reach the same change through
 	// snapshot history.
 	ReasonAgentUndoUnavailable = "agent_undo_unavailable"
+	// agent.organize (#387): the trial does not run it, this build has no
+	// suggestions inbox, or the node is in no episode.
+	ReasonOrganizeTrial        = "organize_trial"
+	ReasonOrganizeUnavailable  = "organize_unavailable"
+	ReasonOrganizeNotInEpisode = "organize_not_in_episode"
 
 	// proposals.undo asking to revert a structural batch (story-assist
 	// Phase 4's purpose=forecast outline-reflection) that has aged out of
