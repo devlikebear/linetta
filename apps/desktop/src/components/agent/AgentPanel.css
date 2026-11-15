@@ -427,3 +427,55 @@
 .agent-fresh-actions .chip { margin-right: auto; }
 
 .agent-longform { padding: 8px 14px; border-bottom: 1px solid var(--line, var(--surface-3)); }
+
+/* The Linetta trial. */
+.agent-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.agent-setup-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.agent-setup .agent-setup-card { color: var(--ink); }
+
+.agent-setup-card span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.agent-setup-card.is-primary {
+  border-color: var(--accent-deep);
+}
+
+.agent-setup-card:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.agent-setup-card:not(:disabled):hover {
+  background: var(--hover, rgba(0, 0, 0, 0.04));
+}
+
+.agent-trial-remaining {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.agent-trial-remaining.is-low { color: var(--danger); }

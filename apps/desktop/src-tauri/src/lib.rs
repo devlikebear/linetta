@@ -231,6 +231,7 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
     "threads.list",
     "threads.reopen",
     "threads.update",
+    "trial.status",
     "vault.delete_item",
     "vault.items_get",
     "vault.items_set",

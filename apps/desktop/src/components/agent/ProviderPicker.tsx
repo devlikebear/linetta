@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useI18n } from "../../lib/i18n";
 import { providers as providersApi, settings as settingsApi } from "../../lib/rpc";
 import { dispatchAppEvent } from "../../lib/appEvents";
-import { isProviderReady, offeredProviders } from "../../lib/providers";
+import { isProviderReady, isTrial, offeredProviders } from "../../lib/providers";
 import type { ProviderID, ProviderStatus } from "../../lib/types";
 
 /** Which provider and model the next turn goes to, and a way to change both
@@ -134,29 +134,32 @@ export function ProviderPicker({
           })}
         </select>
       </label>
-      <label className="chip agent-model-chip">
-        <select
-          aria-label={t("agentPanel.model.label")}
-          data-testid="agent-model-select"
-          value={storedModel}
-          disabled={locked}
-          onFocus={loadModels}
-          onPointerDown={loadModels}
-          onChange={(e) => chooseModel(e.target.value)}
-        >
-          <option value="">{t("settings.providers.model.default")}</option>
-          {modelIds.map((id) => (
-            <option key={id} value={id}>
-              {id}
-            </option>
-          ))}
-          {modelsState === "loading" ? (
-            <option value="__loading" disabled>
-              {t("agentPanel.model.loading")}
-            </option>
-          ) : null}
-        </select>
-      </label>
+      {/* The trial's model is the site's to pick. */}
+      {isTrial(activeId) ? null : (
+        <label className="chip agent-model-chip">
+          <select
+            aria-label={t("agentPanel.model.label")}
+            data-testid="agent-model-select"
+            value={storedModel}
+            disabled={locked}
+            onFocus={loadModels}
+            onPointerDown={loadModels}
+            onChange={(e) => chooseModel(e.target.value)}
+          >
+            <option value="">{t("settings.providers.model.default")}</option>
+            {modelIds.map((id) => (
+              <option key={id} value={id}>
+                {id}
+              </option>
+            ))}
+            {modelsState === "loading" ? (
+              <option value="__loading" disabled>
+                {t("agentPanel.model.loading")}
+              </option>
+            ) : null}
+          </select>
+        </label>
+      )}
       {modelsState === "failed" ? (
         <p className="agent-model-note" data-testid="agent-model-failed">
           {t("agentPanel.model.listFailed")}

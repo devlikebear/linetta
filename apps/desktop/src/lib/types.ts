@@ -559,8 +559,8 @@ export interface GitSyncInitResult {
 }
 
 /** The providers the built-in agent can use (#90). "linetta-trial" is Linetta
- *  Works calling a model on the writer's behalf (docs/plans/trial); the
- *  settings pane does not list it yet. Codex logs in with
+ *  Works calling a model on the writer's behalf (docs/plans/trial): its key is
+ *  the Works connection, and only consent is the writer's to set. Codex logs in with
  *  OAuth inside the app; the other three take an API key. "openai" is the
  *  OpenAI-compatible family — base_url points it at OpenRouter, Ollama, LM
  *  Studio. */
@@ -770,6 +770,25 @@ export interface PublishConnectStatus {
   handle?: string;
   site_url: string;
   failure_reason?: PublishFailureReason;
+}
+
+/** trial.status — where this device's Linetta Works account stands in the
+ *  Linetta trial. The site reports the first four; the engine adds
+ *  not_connected (no Works connection, the site was not asked) and
+ *  unreachable (no answer). Token counts are 0 unless the site answered. */
+export type TrialState =
+  | "not_started"
+  | "available"
+  | "exhausted"
+  | "paused"
+  | "not_connected"
+  | "unreachable";
+
+export interface TrialStatus {
+  state: TrialState;
+  granted_tokens: number;
+  used_tokens: number;
+  remaining_tokens: number;
 }
 
 /** An episode's publishing state, the site's status combined with whether the

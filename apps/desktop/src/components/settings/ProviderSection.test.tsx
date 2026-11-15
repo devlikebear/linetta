@@ -29,6 +29,16 @@ vi.mock("../../lib/rpc", () => ({
   openExternalUrl: rpc.openExternalUrl,
 }));
 
+// The trial's own setup has its tests (TrialSetup.test.tsx); here only that
+// the pane hands the trial row to it, with the row's consent.
+const trialSetup = vi.hoisted(() => ({ props: null as null | Record<string, unknown> }));
+vi.mock("../trial/TrialSetup", () => ({
+  TrialSetup: (props: Record<string, unknown>) => {
+    trialSetup.props = props;
+    return <div data-testid="trial-setup-stub" />;
+  },
+}));
+
 vi.mock("../../lib/i18n", () => ({
   // The keys are the contract under test, not the prose, so echo them back.
   //
@@ -1940,5 +1950,41 @@ describe("ProviderSection — Claude Code CLI", () => {
         "errors.providerUnreachable",
       );
     });
+  });
+});
+
+describe("ProviderSection on the Linetta trial", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    trialSetup.props = null;
+    rpc.settingsGet.mockImplementation(() => Promise.resolve({}));
+    rpc.settingsSet.mockImplementation(() => Promise.resolve({}));
+    rpc.providersList.mockImplementation(() =>
+      Promise.resolve([
+        { id: "linetta-trial", auth: "works", active: true, configured: true, consented: true },
+        ...rows("none"),
+      ]),
+    );
+  });
+
+  it("lists the trial first and shows its setup instead of a key, a model and a test", async () => {
+    render(<ProviderSection />);
+    await screen.findByTestId("trial-setup-stub");
+    const choices = screen.getByTestId("provider-choices").querySelectorAll("button");
+    expect(choices[0].getAttribute("data-testid")).toBe("provider-choice-linetta-trial");
+    for (const id of ["provider-key", "provider-model", "provider-pass-model", "provider-consent", "provider-test"]) {
+      expect(screen.queryByTestId(id)).toBeNull();
+    }
+    expect(trialSetup.props?.mode).toBe("settings");
+    expect(trialSetup.props?.consented).toBe(true);
+  });
+
+  it("saves the trial's consent like any provider's", async () => {
+    render(<ProviderSection />);
+    await screen.findByTestId("trial-setup-stub");
+    await act(async () => {
+      await (trialSetup.props?.onConsentChange as (c: boolean) => Promise<void>)(false);
+    });
+    expect(rpc.settingsSet).toHaveBeenCalledWith({ providers: { "linetta-trial": { consented_at: 0 } } });
   });
 });

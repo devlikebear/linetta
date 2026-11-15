@@ -1,5 +1,6 @@
 import type { CharacterVisualSheet, ReferenceImageMeta, ArtStyle, StyleApproveMode, StyleCheckResult, StyleDraftState, StyleRules, StyleRulesState, WriterStyleRules, WriterStyleState } from "./types";
 import type { ArchivedNote } from "./types";
+import type { TrialStatus } from "./types";
 import type { AgentUsageSummary } from "./types";
 import type { WorksGalleryPage } from "./types";
 import type { ManuscriptPages, SubmissionReport } from "./types";
@@ -517,6 +518,12 @@ export const codex = {
   loginStart: () => rpcCall<CodexLoginStart>("codex.login_start"),
   loginStatus: () => rpcCall<CodexStatus>("codex.login_status"),
   logout: () => rpcCall<{ ok: true }>("codex.logout"),
+};
+
+/** The Linetta trial (docs/plans/trial). Its credential is the Works
+ *  connection below; status never fails, it says why in `state`. */
+export const trial = {
+  status: () => rpcCall<TrialStatus>("trial.status"),
 };
 
 /** Linetta Works publishing (Phase 3). Nothing here reaches the site until

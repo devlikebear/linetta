@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
+import { useWorksConnect } from "../../hooks/useWorksConnect";
 import { useI18n } from "../../lib/i18n";
 import type { MessageKey } from "../../lib/i18n";
-import { openExternalUrl, publishApi } from "../../lib/rpc";
+import { openExternalUrl } from "../../lib/rpc";
 import { rpcErrorMessage } from "../../lib/rpcMessage";
-import type { PublishConnectStatus, PublishFailureReason } from "../../lib/types";
+import type { PublishFailureReason } from "../../lib/types";
 
 /** Settings → Publishing: connect this device to Linetta Works.
  *
@@ -15,9 +16,7 @@ import type { PublishConnectStatus, PublishFailureReason } from "../../lib/types
  *  connect page and waits, showing the code the browser shows too.
  */
 
-const POLL_MS = 1500;
-
-const FAILURE_KEYS: Record<PublishFailureReason, MessageKey> = {
+export const FAILURE_KEYS: Record<PublishFailureReason, MessageKey> = {
   denied: "settings.publish.failed.denied",
   expired: "settings.publish.failed.expired",
   network: "settings.publish.failed.network",
@@ -34,99 +33,19 @@ export type PublishSectionProps = {
 
 export function PublishSection({ available }: PublishSectionProps) {
   const { t } = useI18n();
-  const [status, setStatus] = useState<PublishConnectStatus | null>(null);
+  const { status, busy, error, guard, start, disconnect: endConnection } = useWorksConnect(available);
   const [consented, setConsented] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-  const pollRef = useRef<number | null>(null);
-  // Every poll tick checks it still belongs to the newest attempt: a tick
-  // resolving after a cancel, or after a second connect, must not paint its
-  // stale answer over the current one (the ProviderSection lesson).
-  const pollGenRef = useRef(0);
-
-  const stopPolling = useCallback(() => {
-    if (pollRef.current !== null) {
-      window.clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-    pollGenRef.current += 1;
-  }, []);
-
-  const startPolling = useCallback(() => {
-    stopPolling();
-    const gen = pollGenRef.current;
-    pollRef.current = window.setInterval(() => {
-      void publishApi
-        .connectStatus()
-        .then((s) => {
-          if (gen !== pollGenRef.current) return;
-          setStatus(s);
-          if (s.state !== "waiting") stopPolling();
-        })
-        .catch((e: unknown) => {
-          if (gen !== pollGenRef.current) return;
-          stopPolling();
-          setError(e);
-        });
-    }, POLL_MS);
-  }, [stopPolling]);
-
-  useEffect(() => {
-    if (!available) return;
-    let cancelled = false;
-    publishApi
-      .connectStatus()
-      .then((s) => {
-        if (cancelled) return;
-        setStatus(s);
-        // Settings was left and reopened mid-connect: keep waiting.
-        if (s.state === "waiting") startPolling();
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) setError(e);
-      });
-    return () => {
-      cancelled = true;
-      stopPolling();
-    };
-  }, [available, startPolling, stopPolling]);
 
   if (!available) return null;
 
-  const guard = async (fn: () => Promise<void>) => {
-    setBusy(true);
-    setError(null);
-    try {
-      await fn();
-    } catch (e) {
-      setError(e);
-    } finally {
-      setBusy(false);
-    }
+  const connect = () => start(consented);
+
+  const cancel = () => endConnection();
+
+  const disconnect = async () => {
+    await endConnection();
+    setConsented(false);
   };
-
-  const connect = () =>
-    guard(async () => {
-      const s = await publishApi.connectStart(consented);
-      setStatus(s);
-      if (s.verify_url) await openExternalUrl(s.verify_url);
-      startPolling();
-    });
-
-  const cancel = () =>
-    guard(async () => {
-      stopPolling();
-      await publishApi.disconnect();
-      setStatus(await publishApi.connectStatus());
-    });
-
-  const disconnect = () =>
-    guard(async () => {
-      stopPolling();
-      await publishApi.disconnect();
-      setConsented(false);
-      setStatus(await publishApi.connectStatus());
-    });
 
   const state = status?.state ?? "disconnected";
   const site = status?.site_url ?? "";

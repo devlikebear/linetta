@@ -16,6 +16,7 @@ const rpc = vi.hoisted(() => ({
   agentStartFresh: vi.fn().mockResolvedValue({ ok: true }),
   settingsGet: vi.fn(),
   agentPrompts: vi.fn(),
+  trialStatus: vi.fn(),
 }));
 
 // What the engine's agent.prompts answers with every tool group on (#133).
@@ -48,6 +49,7 @@ vi.mock("../../lib/rpc", () => ({
   agent: { undo: rpc.agentUndo, run: rpc.agentRun, cancel: rpc.agentCancel, history: rpc.agentHistory, startFresh: rpc.agentStartFresh, prompts: rpc.agentPrompts },
   settings: { get: rpc.settingsGet },
   proposals: { list: rpc.proposalsList, accept: rpc.proposalsAccept },
+  trial: { status: rpc.trialStatus },
 }));
 
 // The approval card has its own tests (IllustrationRequestCard.test.tsx);
@@ -2750,5 +2752,71 @@ describe("AgentPanel starting the conversation over", () => {
     expect(rpc.agentStartFresh).not.toHaveBeenCalled();
     expect((screen.getByLabelText("agentPanel.composer.label") as HTMLTextAreaElement).value)
       .toBe("agentPanel.startFresh.tidyPrompt");
+  });
+});
+
+describe("AgentPanel on the Linetta trial", () => {
+  const trial = (remaining: number) => ({
+    state: "available",
+    granted_tokens: 3_000_000,
+    used_tokens: 3_000_000 - remaining,
+    remaining_tokens: remaining,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    ev.listeners.clear();
+    rpc.agentHistory.mockImplementation(() => Promise.resolve([]));
+    rpc.agentPrompts.mockImplementation(() => Promise.resolve({ prompts: [] }));
+    rpc.settingsGet.mockImplementation(() => Promise.resolve({ review_tools_enabled: true }));
+    rpc.proposalsList.mockImplementation(() => Promise.resolve([]));
+  });
+
+  async function renderOnTrial() {
+    rpc.providersList.mockImplementation(() =>
+      Promise.resolve([row({ id: "linetta-trial", auth: "works", configured: true, consented: true })]),
+    );
+    renderPanel();
+    await screen.findByTestId("agent-log");
+  }
+
+  it("shows the remaining tokens in the header and reads them again after each turn", async () => {
+    rpc.trialStatus.mockResolvedValueOnce(trial(2_134_000)).mockResolvedValueOnce(trial(400_000));
+    await renderOnTrial();
+    const chip = await screen.findByTestId("agent-trial-remaining");
+    expect(chip.textContent).toBe("agentPanel.trial.remaining:amount=2.1");
+    expect(chip.className).not.toContain("is-low");
+
+    await emit("agent-done", { run_id: "r1" });
+    await waitFor(() =>
+      expect(screen.getByTestId("agent-trial-remaining").textContent).toBe("agentPanel.trial.remaining:amount=0.4"),
+    );
+    expect(screen.getByTestId("agent-trial-remaining").className).toContain("is-low");
+    expect(rpc.trialStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ["provider_trial_exhausted", "errors.providerTrialExhausted"],
+    ["provider_trial_paused", "errors.providerTrialPaused"],
+  ])("%s ends the turn with a way to connect the writer's own key", async (reason, text) => {
+    rpc.trialStatus.mockResolvedValue(trial(0));
+    await renderOnTrial();
+    await emit("agent-error", { run_id: "r1", reason, message: "429" });
+    const notice = notices()[0];
+    expect(notice.textContent).toBe(`${text} agentPanel.trial.connectOwnKey`);
+    expect(notice.querySelector("a")?.getAttribute("href")).toBe("/settings");
+  });
+
+  it("reads provider_auth_failed on the trial as a lost Works connection", async () => {
+    rpc.trialStatus.mockResolvedValue(trial(1_000_000));
+    await renderOnTrial();
+    await emit("agent-error", { run_id: "r1", reason: "provider_auth_failed", message: "401" });
+    expect(notices()[0].textContent).toBe("agentPanel.trial.authFailed agentPanel.trial.reconnect");
+  });
+
+  it("asks nothing about the trial on another provider", async () => {
+    await renderReady();
+    expect(screen.queryByTestId("agent-trial-remaining")).toBeNull();
+    expect(rpc.trialStatus).not.toHaveBeenCalled();
   });
 });
