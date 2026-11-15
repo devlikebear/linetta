@@ -223,6 +223,9 @@ fn notification_event(method: &str) -> Option<&'static str> {
         // reused — a stale listener must never match a new event.
         "agent.delta" => Some("agent-delta"),
         "agent.tool" => Some("agent-tool"),
+        // Which tool call the model is writing, before it runs: a long one
+        // (a whole scene) streams nothing else for a minute or more.
+        "agent.composing" => Some("agent-composing"),
         "agent.done" => Some("agent-done"),
         "agent.error" => Some("agent-error"),
         "agent.cancelled" => Some("agent-cancelled"),
@@ -442,6 +445,7 @@ mod tests {
         // a reply that already arrived.
         assert_eq!(notification_event("agent.delta"), Some("agent-delta"));
         assert_eq!(notification_event("agent.tool"), Some("agent-tool"));
+        assert_eq!(notification_event("agent.composing"), Some("agent-composing"));
         assert_eq!(notification_event("agent.done"), Some("agent-done"));
         assert_eq!(notification_event("agent.error"), Some("agent-error"));
         assert_eq!(notification_event("agent.cancelled"), Some("agent-cancelled"));

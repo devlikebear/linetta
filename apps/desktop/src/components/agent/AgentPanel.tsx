@@ -166,6 +166,12 @@ interface AgentToolPayload extends AgentEventBase {
   ask?: AgentAsk;
 }
 
+/** The tool call the model has started writing. Its arguments are still
+ *  streaming; agent.tool "started" follows once the call runs. */
+interface AgentComposingPayload extends AgentEventBase {
+  name: string;
+}
+
 interface AgentDonePayload extends AgentEventBase {
   /** Never read, and deliberately kept — the same argument `summary` and
    *  `node_ids` above are kept on: the usage footer says what the turn cost,
@@ -493,6 +499,10 @@ export function AgentPanel({
   // while true the reply reveals gradually; once false it snaps to the full
   // text (also covers the mount-with-nothing-streaming-yet case).
   const [running, setRunning] = useState(false);
+  // The tool call the model is writing right now, by name, from
+  // agent.composing until that call runs or the model writes text again.
+  // Only the working line reads it.
+  const [composing, setComposing] = useState<string | null>(null);
 
   // The composer (Task 6). `draft` is the textarea's own value. `sending` is
   // true only for the round trip of agent.run itself — before a run id
@@ -792,6 +802,7 @@ export function AgentPanel({
     discardSendWindow();
     setLines([]);
     setRunning(false);
+    setComposing(null);
     setTurn(null);
     setCanceling(false);
     setSending(false);
@@ -914,6 +925,7 @@ export function AgentPanel({
   useEngineEvent<AgentDeltaPayload>("agent-delta", whileNotSending<AgentDeltaPayload>((payload) => {
     if (!acceptRun(payload.run_id)) return;
     setRunning(true);
+    setComposing(null);
     const id = assistantLineId(payload.run_id, segmentRef.current.get(payload.run_id) ?? 0);
     setLines((prev) => {
       const idx = prev.findIndex((l) => l.kind === "assistant" && l.id === id);
@@ -929,6 +941,7 @@ export function AgentPanel({
     if (!acceptRun(payload.run_id)) return;
     const key = `${payload.run_id}:${payload.name}`;
     if (payload.state === "started") {
+      setComposing(null);
       const occurrence = (toolOccurrenceRef.current.get(key) ?? 0) + 1;
       toolOccurrenceRef.current.set(key, occurrence);
       const id = `${key}:${occurrence}`;
@@ -986,9 +999,15 @@ export function AgentPanel({
     );
   }));
 
+  useEngineEvent<AgentComposingPayload>("agent-composing", whileNotSending<AgentComposingPayload>((payload) => {
+    if (!acceptRun(payload.run_id)) return;
+    setComposing(payload.name);
+  }));
+
   useEngineEvent<AgentDonePayload>("agent-done", whileNotSending<AgentDonePayload>((payload) => {
     if (!acceptRun(payload.run_id)) return;
     setRunning(false);
+    setComposing(null);
     // The composer's send control returns from "stop" to "send" once this
     // run's own terminal event lands — not on a timer, not on any other
     // run's terminal event (acceptRun above already refused those).
@@ -1018,6 +1037,7 @@ export function AgentPanel({
   useEngineEvent<AgentErrorPayload>("agent-error", whileNotSending<AgentErrorPayload>((payload) => {
     if (!acceptRun(payload.run_id)) return;
     setRunning(false);
+    setComposing(null);
     setTurn(null);
     setCanceling(false);
     setLines((prev) => [
@@ -1030,6 +1050,7 @@ export function AgentPanel({
   useEngineEvent<AgentCancelledPayload>("agent-cancelled", whileNotSending<AgentCancelledPayload>((payload) => {
     if (!acceptRun(payload.run_id)) return;
     setRunning(false);
+    setComposing(null);
     setTurn(null);
     setCanceling(false);
     setLines((prev) => [
@@ -1490,15 +1511,22 @@ export function AgentPanel({
   // A question card waits until the writer says something after it.
   const lastUserLine = lines.map((l) => l.kind).lastIndexOf("user");
   const askOpen = lines.some((l, i) => l.kind === "tool" && l.ask && i > lastUserLine);
-  // What the turn is doing, for the working line: inside a tool, writing its
-  // reply, or neither — which is the model thinking, or composing a tool call
-  // that can take minutes for a whole scene and streams nothing meanwhile.
+  // What the turn is doing, for the working line: inside a tool, writing a
+  // tool call (which can take minutes for a whole scene and streams nothing
+  // else meanwhile), writing its reply, or none of those — the model
+  // thinking. A provider that cannot see a call until it is complete never
+  // reports one, and that turn reads as thinking until the call runs.
   const toolRunning = lines.some((l) => l.kind === "tool" && l.state === "running");
-  const workingKey = toolRunning
-    ? "agentPanel.working.tool"
-    : running
-      ? "agentPanel.working.writing"
-      : "agentPanel.working.thinking";
+  const composingLabel = composing ? toolLabelKey(composing) : null;
+  const workingText = toolRunning
+    ? t("agentPanel.working.tool")
+    : composing
+      ? composingLabel
+        ? t("agentPanel.working.composing", { tool: t(composingLabel) })
+        : t("agentPanel.working.composingTool")
+      : running
+        ? t("agentPanel.working.writing")
+        : t("agentPanel.working.thinking");
 
   useEffect(() => {
     const el = logRef.current;
@@ -1733,7 +1761,7 @@ export function AgentPanel({
                 <i />
                 <i />
               </span>
-              <span>{t(workingKey)}</span>
+              <span>{workingText}</span>
               {turnStartedAt !== null ? <Elapsed since={turnStartedAt} /> : null}
             </div>
           ) : null}

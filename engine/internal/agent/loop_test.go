@@ -52,6 +52,13 @@ func (c *scriptedClient) Chat(ctx context.Context, msgs []llm.ChatMessage, opts 
 	if opts.OnDelta != nil && resp.Message.Content != "" {
 		opts.OnDelta(resp.Message.Content)
 	}
+	// A streaming provider names each call as it starts writing it, after
+	// any text that came first.
+	if opts.OnToolCallStart != nil {
+		for _, call := range resp.Message.ToolCalls {
+			opts.OnToolCallStart(call.Name)
+		}
+	}
 	return resp, nil
 }
 
