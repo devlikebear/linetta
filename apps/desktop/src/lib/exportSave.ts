@@ -1,6 +1,6 @@
 import { save } from "@tauri-apps/plugin-dialog";
-import { writeTextFile } from "@tauri-apps/plugin-fs";
-import type { ExportPayload } from "./types";
+import { writeFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import type { ExportDocumentPayload, ExportPayload } from "./types";
 import type { useI18n } from "./i18n";
 
 /** Open the OS save dialog seeded with the suggested filename, then write the
@@ -21,6 +21,35 @@ export async function saveExportedMarkdown(payload: ExportPayload): Promise<stri
   if (!path) return null;
   await writeTextFile(path, payload.markdown);
   return path;
+}
+
+const FILE_FILTERS: Record<"docx" | "txt", { name: string; extensions: string[] }> = {
+  docx: { name: "Word", extensions: ["docx"] },
+  txt: { name: "Text", extensions: ["txt"] },
+};
+
+/** saveExportedMarkdown for export.document's files (#383): the same save
+ *  dialog, seeded with the suggested name and filtered to the format, then
+ *  the decoded bytes written as they are. */
+export async function saveExportedFile(
+  payload: ExportDocumentPayload,
+  format: keyof typeof FILE_FILTERS,
+): Promise<string | null> {
+  if (!payload.bytes_base64) throw new Error("the export came back empty");
+  const path = await save({
+    defaultPath: payload.suggested_filename,
+    filters: [FILE_FILTERS[format]],
+  });
+  if (!path) return null;
+  await writeFile(path, decodeBase64(payload.bytes_base64));
+  return path;
+}
+
+function decodeBase64(b64: string): Uint8Array {
+  const raw = atob(b64);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
 }
 
 /** Folder names the major consumer sync clients create. Matching on the folder

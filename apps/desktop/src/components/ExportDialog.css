@@ -1,0 +1,13 @@
+.export-dialog { width: min(520px, calc(100vw - 32px)); }
+.export-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px 14px;
+  margin: 4px 0 14px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.export-grid label { display: flex; flex-direction: column; gap: 4px; }
+.export-grid select { font: inherit; }
+.export-grid .export-check { flex-direction: row; align-items: center; gap: 6px; }
+.export-summary { min-height: 1.4em; font-variant-numeric: tabular-nums; }
