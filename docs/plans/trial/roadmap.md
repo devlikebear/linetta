@@ -19,6 +19,10 @@ _관련: [`tool-profile.md`](./tool-profile.md)(체험 도구 20개, #359 계획
 
 ## 결정 사항
 
+- **상위 모델을 Claude Haiku 5.5로 바꾼다 (2026-11-15 사용자).** 운영자가 매달 받는 Anthropic API 크레딧(100달러)으로 체험을 돌린다.
+  가격은 $0.10 / $0.50 per 1M(프롬프트 10만 토큰 초과 시 $0.50 / $2.50)으로 Solar Mini 4와 비슷하다. Anthropic Commercial Terms A.1이
+  고객의 제품을 사용자에게 제공하는 용도를 허용하므로 아래 Upstage 서면 확인은 필요 없다. 프록시는 Anthropic Messages 형식
+  (`POST /api/trial/v1/messages`, `x-api-key: lwk_…`)을 받고, 앱은 tars의 Anthropic 클라이언트로 부른다. 아래 Upstage 관련 결정과 사전 조건은 이 결정으로 대체된다.
 - **상위 모델은 Upstage Solar Mini 4 (2026-11-11 사용자).** $0.10 / $0.40 per 1M(캐시 입력 $0.01), 도구 호출, 512K 맥락,
   한국어 강조, API 입력을 학습에 쓰지 않는다고 밝힌다. 프록시는 OpenAI 호환 형식만 다루므로, 나중에 운영 설정으로 다른 공급자로 바꿀 수 있게 둔다.
 - **식별은 웍스 계정과 기기 연결 (2026-11-11 사용자).** 게시에 쓰는 기기 연결(`lwk_` 토큰, `/api/artworks/pair/*`)을 그대로 쓴다.

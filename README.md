@@ -92,7 +92,7 @@ No provider yet? The **Linetta trial** lets you try the agent without a key.
 Connect this device to your Linetta Works account (the same connection
 publishing uses), agree to the trial's notice, and the agent runs on a fixed
 number of tokens, once per account. Requests go through Linetta Works to
-Upstage's Solar model; Linetta Works stores none of the text, only how many
+Anthropic's Claude Haiku model; Linetta Works stores none of the text, only how many
 tokens you used. The agent panel offers it when nothing is set up, and it is
 the first row under **Settings → AI provider**. A trial turn has a smaller
 tool set and runs no background passes. When it runs out, connect your own

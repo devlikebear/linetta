@@ -84,6 +84,9 @@ func TestClassify_readsTheTrialProxyCodeOnlyForTheTrial(t *testing.T) {
 		return &llm.ProviderError{Provider: "openai", Operation: "request", StatusCode: code, Message: body}
 	}
 	body := func(code string) string { return `{"error":{"code":"` + code + `","message":"체험 한도"}}` }
+	anthropicBody := func(kind string) string {
+		return `{"type":"error","error":{"type":"` + kind + `","message":"체험 한도"}}`
+	}
 	cases := []struct {
 		name string
 		id   string
@@ -96,6 +99,9 @@ func TestClassify_readsTheTrialProxyCodeOnlyForTheTrial(t *testing.T) {
 		{"unauthorized", "linetta-trial", status(401, body("unauthorized")), rpc.ReasonProviderAuthFailed},
 		{"not json", "linetta-trial", status(429, "slow down"), rpc.ReasonProviderRateLimited},
 		{"another provider", "openai", status(429, body("trial_exhausted")), rpc.ReasonProviderRateLimited},
+		{"anthropic shape exhausted", "linetta-trial", status(429, anthropicBody("trial_exhausted")), rpc.ReasonProviderTrialExhausted},
+		{"anthropic shape paused", "linetta-trial", status(503, anthropicBody("trial_paused")), rpc.ReasonProviderTrialPaused},
+		{"anthropic overloaded", "linetta-trial", status(529, anthropicBody("overloaded_error")), reasonOf(t, Classify("anthropic", status(529, anthropicBody("overloaded_error"))))},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

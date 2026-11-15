@@ -104,15 +104,16 @@ func Options(r Resolved) llm.ProviderOptions {
 		opts.BaseURL = ""
 		opts.WorkDir = r.WorkDir
 	case settings.ProviderLinettaTrial:
-		// The site's trial proxy speaks the OpenAI Chat Completions shape
-		// and passes it through to whatever model it serves.
-		opts.Provider = tarsOpenAIProvider
+		// The site's trial proxy speaks the Anthropic Messages shape and
+		// passes it through to Anthropic, so the trial rides tars' Anthropic
+		// client with the publish token as its key.
+		opts.Provider = settings.ProviderAnthropic
 		opts.Model = TrialModel
 		opts.APIKey = strings.TrimSpace(r.APIKey)
 	default:
 		opts.APIKey = strings.TrimSpace(r.APIKey)
 	}
-	if r.ID == settings.ProviderAnthropic {
+	if opts.Provider == settings.ProviderAnthropic {
 		opts.MaxTokens = anthropicMaxTokens(opts.Model)
 	}
 	return opts
@@ -151,6 +152,7 @@ var anthropicLargeOutputFamilies = []string{
 	"claude-opus-4-6",
 	"claude-sonnet-5",
 	"claude-sonnet-4-6",
+	"claude-haiku-5",
 	"claude-haiku-4-5",
 }
 
@@ -170,16 +172,16 @@ func anthropicMaxTokens(model string) int {
 // agent cuts to the trial's tool set and runs no background passes after.
 func IsTrial(id string) bool { return id == settings.ProviderLinettaTrial }
 
-// tarsOpenAIProvider is tars' OpenAI-compatible client, which the trial rides.
-const tarsOpenAIProvider = "openai"
+// TrialModel is the model the trial runs on. The site overwrites the model of
+// every request with the one it serves, so this name only has to match it
+// closely enough for tars to shape the request: adaptive thinking, and the
+// output ceiling above.
+const TrialModel = "claude-haiku-5-5"
 
-// TrialModel is the model name the trial sends. The site ignores it and
-// substitutes the model it serves, so the engine names no real model.
-const TrialModel = "linetta-trial"
-
-// trialAPIPath is where the site's trial proxy listens, under the connected
-// site's address (linetta-artworks docs/api.md, "Linetta 체험").
-const trialAPIPath = "/api/trial/v1"
+// trialAPIPath is the base the trial's Anthropic client calls under the
+// connected site's address; tars appends /v1/messages (linetta-artworks
+// docs/api.md, "Linetta 체험").
+const trialAPIPath = "/api/trial"
 
 // ClientFactory builds an llm.Client. Production is llm.NewProvider; tests
 // inject one that never dials.

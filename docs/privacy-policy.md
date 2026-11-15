@@ -124,14 +124,14 @@ Linetta Works 동기화는 운영자가 허가한 Linetta Works 계정만 쓸 �
 #### 3.8 리네타 체험
 리네타 체험은 API 키 없이 내장 에이전트를 써 볼 수 있게, Linetta Works가 개발자의 키로 AI 모델을 대신 불러 주는 프로바이더입니다. 사용자가 브라우저로 Linetta Works 계정을 이 기기에 연결하고(3.5항과 같은 연결), 체험 전송 안내에 동의하고, 프로바이더로 리네타 체험을 고르기 전까지는 아무것도 보내지 않습니다. 계정마다 정해진 토큰 수만큼 한 번만 쓸 수 있습니다.
 
-- **어디로 가나.** 개발자가 운영하는 Linetta Works 서버를 거쳐 Upstage(Solar 모델)로 갑니다. 그 밖의 어디로도 가지 않습니다.
+- **어디로 가나.** 개발자가 운영하는 Linetta Works 서버를 거쳐 미국의 Anthropic(Claude Haiku 모델)으로 갑니다. 그 밖의 어디로도 가지 않습니다.
 - **무엇이 가나.** 3.1항에서 내장 에이전트가 프로바이더로 보내는 것과 같습니다. 체험으로 도는 턴은 쓸 수 있는 툴이 줄어들고, 턴이 끝난 뒤의 자체 검토와 회차 검토 같은 추가 요청을 보내지 않습니다.
 - **서버가 남기는 것.** Linetta Works는 요청과 응답의 내용을 저장하지 않고 로그에도 남기지 않습니다. 계정, 기기, 사용한 토큰 수(추정 비용 포함), 시각, 결과만 기록합니다. 보관 기간은 Linetta Works의 개인정보처리방침을 따릅니다.
-- **Upstage가 그 데이터로 무엇을 하는지**는 Upstage의 개인정보 처리방침과 약관 소관입니다.
+- **Anthropic이 그 데이터로 무엇을 하는지.** Anthropic은 상업 약관에 따라 API로 받은 요청과 응답을 모델 학습에 쓰지 않습니다. 그 밖의 처리는 Anthropic의 개인정보 처리방침과 약관 소관입니다.
 - **언제든 끄기.** 다른 프로바이더를 고르거나 체험 동의를 해제하면 바로 보내지 않습니다. `설정 → 게시`에서 Linetta Works 연결을 해제하면 체험도 함께 끊깁니다.
 
 ### 4. 데이터 판매·공유
-개발자는 사용자 데이터를 판매하거나 자체 목적으로 공유하지 않습니다. 원고가 다른 곳에 닿는 경로는 사용자가 직접 켜는 것뿐입니다. 내장 에이전트는 사용자가 연결한 프로바이더에 원고를 보내고, 삽화 생성은 사용자가 고른 이미지 프로바이더에 프롬프트와 참조 이미지를 보내며, 사용자가 실행하는 MCP 클라이언트는 원고를 읽어 가며, GitHub 동기화는 사용자의 git 원격으로 원고를 푸시하고, 폴더 동기화는 사용자가 지정한 폴더로 원고를 복사하며, 게시는 사용자가 고른 회차와 시트·표지를 Linetta Works에 공개하고, Linetta Works 동기화는 사용자가 고른 작품의 암호문을 Linetta Works에 맡기며, 리네타 체험은 에이전트의 요청을 Linetta Works를 거쳐 Upstage로 보냅니다. 모두 위 3항과 같습니다.
+개발자는 사용자 데이터를 판매하거나 자체 목적으로 공유하지 않습니다. 원고가 다른 곳에 닿는 경로는 사용자가 직접 켜는 것뿐입니다. 내장 에이전트는 사용자가 연결한 프로바이더에 원고를 보내고, 삽화 생성은 사용자가 고른 이미지 프로바이더에 프롬프트와 참조 이미지를 보내며, 사용자가 실행하는 MCP 클라이언트는 원고를 읽어 가며, GitHub 동기화는 사용자의 git 원격으로 원고를 푸시하고, 폴더 동기화는 사용자가 지정한 폴더로 원고를 복사하며, 게시는 사용자가 고른 회차와 시트·표지를 Linetta Works에 공개하고, Linetta Works 동기화는 사용자가 고른 작품의 암호문을 Linetta Works에 맡기며, 리네타 체험은 에이전트의 요청을 Linetta Works를 거쳐 Anthropic으로 보냅니다. 모두 위 3항과 같습니다.
 
 ### 5. 아동의 개인정보
 개발자는 아동을 포함한 사용자의 개인정보를 수집하지 않습니다. 아동 사용자는 연결하는 AI 프로바이더와 이미지 프로바이더, MCP로 연결하는 클라이언트, 푸시하는 git 호스트, 동기화 폴더를 제공하는 클라우드 서비스, 그리고 게시하거나 동기화를 쓰는 Linetta Works 각각의 연령 요건 및 보호자 동의 요건도 충족해야 합니다.
@@ -264,14 +264,14 @@ Linetta Works sync is available only to Linetta Works accounts the operator has 
 #### 3.8 The Linetta Trial
 The Linetta trial is a provider through which Linetta Works calls an AI model with the developer's key, so you can try the built-in agent without an API key. Nothing is sent until you connect your Linetta Works account to this device in the browser (the same connection as Section 3.5), agree to the trial's notice, and choose the Linetta trial as your provider. Each account can use a fixed number of tokens, once.
 
-- **Where it goes.** Through the Linetta Works server the developer operates, to Upstage (its Solar model), and nowhere else.
+- **Where it goes.** Through the Linetta Works server the developer operates, to Anthropic (its Claude Haiku model) in the United States, and nowhere else.
 - **What goes.** The same as what the built-in agent sends a provider in Section 3.1. A turn on the trial has fewer tools available, and sends none of the extra requests after a turn, such as the self-review or the episode review.
 - **What the server keeps.** Linetta Works neither stores nor logs the content of requests and replies. It records only the account, the device, the number of tokens used (with an estimated cost), the time and the outcome. How long it keeps them is governed by the Linetta Works privacy policy.
-- **What Upstage does with that data** is governed by Upstage's privacy policy and terms.
+- **What Anthropic does with that data.** Under its commercial terms, Anthropic does not train models on requests and replies it receives through its API. Anything else it does with them is governed by Anthropic's privacy policy and terms.
 - **Turning it off.** Choose another provider or untick the trial's consent and the App stops sending at once. Disconnecting Linetta Works under `Settings → Publishing` ends the trial too.
 
 ### 4. Selling or Sharing Data
-The developer does not sell user data or share it for the developer's own purposes. The only ways your writing reaches anyone else are the ones you turn on yourself: the built-in agent sends it to the provider you connected, illustration generation sends a prompt and reference images to the image provider you chose, an MCP client you run reads it, GitHub Sync pushes it to your git remote, Folder Sync copies it into the folder you chose, Publishing makes the episodes, sheets and cover you choose public on Linetta Works, Linetta Works sync keeps the ciphertext of works you choose on Linetta Works, and the Linetta trial sends the agent's requests through Linetta Works to Upstage. Each is described in Section 3.
+The developer does not sell user data or share it for the developer's own purposes. The only ways your writing reaches anyone else are the ones you turn on yourself: the built-in agent sends it to the provider you connected, illustration generation sends a prompt and reference images to the image provider you chose, an MCP client you run reads it, GitHub Sync pushes it to your git remote, Folder Sync copies it into the folder you chose, Publishing makes the episodes, sheets and cover you choose public on Linetta Works, Linetta Works sync keeps the ciphertext of works you choose on Linetta Works, and the Linetta trial sends the agent's requests through Linetta Works to Anthropic. Each is described in Section 3.
 
 ### 5. Children's Privacy
 The developer collects no personal data from users, including children. Child users must also satisfy the age and parental-consent requirements of any AI or image provider they connect, any client they connect over MCP, the git host they push to, any cloud service whose folder they sync into, and Linetta Works if they publish there or use its vault.
@@ -403,14 +403,14 @@ Linetta Works 同期は、運営者が許可した Linetta Works アカウント
 #### 3.8 Linetta お試し
 Linetta お試しは、API キーなしで内蔵エージェントを試せるよう、Linetta Works が開発者のキーで AI モデルを代わりに呼び出すプロバイダーです。ユーザーがブラウザで Linetta Works のアカウントをこの端末に接続し（第3.5項と同じ接続）、お試しの送信についての説明に同意し、プロバイダーとして Linetta お試しを選ぶまで、何も送信しません。アカウントごとに決まったトークン数まで、一度だけ使えます。
 
-- **送信先.** 開発者が運営する Linetta Works サーバーを経由して Upstage（Solar モデル）へ送られます。それ以外へは送られません。
+- **送信先.** 開発者が運営する Linetta Works サーバーを経由して米国の Anthropic（Claude Haiku モデル）へ送られます。それ以外へは送られません。
 - **送信される内容.** 第3.1項で内蔵エージェントがプロバイダーへ送るものと同じです。お試しで動くターンは使えるツールが少なく、ターンの後のセルフレビューや話のレビューのような追加のリクエストを送りません。
 - **サーバーが残すもの.** Linetta Works はリクエストと応答の内容を保存せず、ログにも残しません。アカウント、端末、使用したトークン数（推定費用を含む）、時刻、結果だけを記録します。保存期間は Linetta Works のプライバシーポリシーに従います。
-- **Upstage がそのデータをどう扱うか**は、Upstage のプライバシーポリシーと利用規約に従います。
+- **Anthropic がそのデータをどう扱うか.** Anthropic は商用利用規約に基づき、API で受け取ったリクエストと応答をモデルの学習に使いません。それ以外の扱いは Anthropic のプライバシーポリシーと利用規約に従います。
 - **いつでも止める.** 別のプロバイダーを選ぶか、お試しへの同意を外すと、すぐに送信を止めます。`設定 → 公開`で Linetta Works の接続を解除すると、お試しも終わります。
 
 ### 4. データの販売・共有
-開発者はユーザーデータを販売せず、開発者自身の目的で共有しません。原稿が他者に届く経路は、ユーザー自身が有効にするものだけです。内蔵エージェントはユーザーが接続したプロバイダーへ原稿を送信し、挿絵生成はユーザーが選んだ画像プロバイダーへプロンプトと参照画像を送信し、ユーザーが実行する MCP クライアントは原稿を読み取り、GitHub 同期はユーザーの git リモートへ原稿をプッシュし、フォルダ同期はユーザーが指定したフォルダへ原稿をコピーし、公開機能はユーザーが選んだエピソードとシート・表紙を Linetta Works で公開し、Linetta Works 同期はユーザーが選んだ作品の暗号文を Linetta Works に預け、Linetta お試しはエージェントのリクエストを Linetta Works 経由で Upstage へ送ります。いずれも第3項のとおりです。
+開発者はユーザーデータを販売せず、開発者自身の目的で共有しません。原稿が他者に届く経路は、ユーザー自身が有効にするものだけです。内蔵エージェントはユーザーが接続したプロバイダーへ原稿を送信し、挿絵生成はユーザーが選んだ画像プロバイダーへプロンプトと参照画像を送信し、ユーザーが実行する MCP クライアントは原稿を読み取り、GitHub 同期はユーザーの git リモートへ原稿をプッシュし、フォルダ同期はユーザーが指定したフォルダへ原稿をコピーし、公開機能はユーザーが選んだエピソードとシート・表紙を Linetta Works で公開し、Linetta Works 同期はユーザーが選んだ作品の暗号文を Linetta Works に預け、Linetta お試しはエージェントのリクエストを Linetta Works 経由で Anthropic へ送ります。いずれも第3項のとおりです。
 
 ### 5. 子どものプライバシー
 開発者は子どもを含むユーザーの個人情報を収集しません。子どもの利用者は、接続する AI プロバイダーと画像プロバイダー、MCP で接続するクライアント、プッシュ先の git ホスト、同期先フォルダを提供するクラウドサービス、そして公開先または同期先として使う Linetta Works それぞれの年齢要件および保護者同意要件も満たす必要があります。
