@@ -22,6 +22,7 @@ import { ContextPanel, type SaveStatus } from "../components/ContextPanel";
 import { CanonPanel } from "../components/CanonPanel";
 import { ProposalInbox } from "../components/ProposalInbox";
 import { ForecastSheet } from "../components/ForecastSheet";
+import { ForeshadowMap } from "../components/ForeshadowMap";
 import { FactBookPanel } from "../components/FactBookPanel";
 import { AgentPanel } from "../components/agent/AgentPanel";
 import { useAgentRunning } from "../hooks/useAgentRunning";
@@ -167,6 +168,9 @@ export function Workspace() {
   const [proposalInboxOpen, setProposalInboxOpen] = useState(false);
   // "Where the story could go" (story-assist Phase 4).
   const [forecastSheetOpen, setForecastSheetOpen] = useState(false);
+  // The foreshadowing map (#386 A): a wide overlay, not an inspector panel,
+  // since an episode axis needs the width the panel slot does not have.
+  const [foreshadowOpen, setForeshadowOpen] = useState(false);
   // Fills the agent panel's composer from outside it — the forecast
   // sheet's [개요 반영 제안 요청] button. The nonce is the dependency
   // AgentPanel's own effect keys off, so the identical sentence sent twice
@@ -387,6 +391,7 @@ export function Workspace() {
   // forecast.select/forecast.delete against a project the writer no longer
   // believes they are looking at (review finding f2, 2026-10-25).
   useEffect(() => { setForecastSheetOpen(false); }, [projectId]);
+  useEffect(() => { setForeshadowOpen(false); }, [projectId]);
   const editorRef = useRef<TiptapHandle>(null);
   const savedSelectionRef = useRef<{ from: number; to: number } | null>(null);
   const zenEditorRef = useRef<TiptapHandle | null>(null);
@@ -1790,6 +1795,13 @@ export function Workspace() {
       },
     });
     cmds.push({
+      id: "foreshadow-map",
+      section: sectionProject,
+      label: t("workspace.command.foreshadowMap"),
+      keywords: ["foreshadow", "ledger", "promise", "복선", "떡밥", "원장", "회수"],
+      run: () => setForeshadowOpen(true),
+    });
+    cmds.push({
       id: "export-project",
       section: sectionExport,
       label: t("workspace.command.exportProject"),
@@ -2531,6 +2543,7 @@ export function Workspace() {
             onOpenEntity={(entityId) => setEntitySheetId(entityId)}
             onOpenFact={openFactFromContinuity}
             onRevealPassage={(target) => { void revealPassage(target); }}
+            onOpenForeshadowMap={() => setForeshadowOpen(true)}
             continuityFocusRequest={continuityFocusRequest}
             onOpenProposals={() => {
               setCanonOpen(false);
@@ -2610,6 +2623,16 @@ export function Workspace() {
         onClose={() => setPaletteOpen(false)}
         commands={commands}
       />
+
+      {foreshadowOpen && load ? (
+        <ForeshadowMap
+          projectId={load.project.id}
+          nodeId={load.node.id}
+          onClose={() => setForeshadowOpen(false)}
+          onRevealPassage={(target) => { void revealPassage(target); }}
+          onOpenNode={(id) => { void navigateToNode({ id } as NodeRow); }}
+        />
+      ) : null}
 
       <SearchModal
         open={searchOpen}

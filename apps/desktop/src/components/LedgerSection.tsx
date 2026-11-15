@@ -20,6 +20,8 @@ interface Props {
   onOpenNode?: (nodeId: string) => void;
   /** The scene open in the editor; the "who knows what" table starts there. */
   nodeId?: string;
+  /** Opens the foreshadowing map (#386 A). */
+  onOpenMap?: () => void;
 }
 
 type Tab = "owed" | "settled" | "closed" | "cut";
@@ -68,7 +70,7 @@ function tabOf(e: LedgerEntry): Tab {
   return OWED.includes(e.kind) ? "owed" : "settled";
 }
 
-export function LedgerSection({ projectId, onOpenNode, nodeId }: Readonly<Props>) {
+export function LedgerSection({ projectId, onOpenNode, nodeId, onOpenMap }: Readonly<Props>) {
   const { t } = useI18n();
   const [state, setState] = useState<LedgerState | null>(null);
   const [tab, setTab] = useState<Tab>("owed");
@@ -159,6 +161,11 @@ export function LedgerSection({ projectId, onOpenNode, nodeId }: Readonly<Props>
         {owedCount > 0 && <span className="style-badge">{t("ledger.owedBadge", { count: owedCount })}</span>}
       </summary>
       <p className="style-hint">{t("ledger.description")}</p>
+      {onOpenMap && (
+        <button type="button" className="btn sm" data-testid="ledger-open-map" onClick={onOpenMap}>
+          {t("foreshadow.title")}
+        </button>
+      )}
       {error != null && <p role="alert">{rpcErrorMessage(error, t)}</p>}
 
       {(state?.parts.length ?? 0) > 0 && (
@@ -212,6 +219,16 @@ export function LedgerSection({ projectId, onOpenNode, nodeId }: Readonly<Props>
               )}
               {e.due_node_id && (
                 <span className="ledger-where">{t("ledger.due", { label: state?.labels[e.due_node_id] ?? "" })}</span>
+              )}
+              {e.paid_node_id && (
+                <button
+                  type="button"
+                  className="ledger-where"
+                  title={e.paid_quote || undefined}
+                  onClick={() => onOpenNode?.(e.paid_node_id ?? "")}
+                >
+                  {t("ledger.paid", { label: state?.labels[e.paid_node_id] ?? "" })}
+                </button>
               )}
               {e.valid_to_node_id && (
                 <span className="ledger-where">{t("ledger.validUntil", { label: state?.labels[e.valid_to_node_id] ?? "" })}</span>
