@@ -1403,6 +1403,53 @@ export interface UpdateRelationshipInput {
   notes: string;
 }
 
+/** relationships.graph (#386 B2): the work at one episode. */
+export interface RelationshipGraphEpisode {
+  ordinal: number;
+  node_id: string;
+  label: string;
+  title?: string;
+}
+
+export interface RelationshipGraphNode {
+  entity_id: string;
+  kind: EntityKind;
+  name: string;
+  /** Scenes it has appeared in up to the shown episode. */
+  appearances: number;
+  /** The episode it first appears in; absent when not yet. */
+  first_episode?: number;
+}
+
+export interface RelationshipGraphStep {
+  label: string;
+  inverse_label?: string;
+  /** Absent: from the start. */
+  since_episode?: number;
+  since_node_id?: string;
+  quote?: string;
+}
+
+export interface RelationshipGraphEdge {
+  id: string;
+  from_id: string;
+  to_id: string;
+  label: string;
+  inverse_label?: string;
+  /** Took this label in the shown episode. */
+  changed?: boolean;
+  steps: RelationshipGraphStep[];
+}
+
+export interface RelationshipGraph {
+  episodes: RelationshipGraphEpisode[];
+  latest: number;
+  as_of: number;
+  nodes: RelationshipGraphNode[];
+  edges: RelationshipGraphEdge[];
+  co_appearances: Array<{ from_id: string; to_id: string; scenes: number }>;
+}
+
 /** relationships.change (#386). inverse_label is the partner's new label,
  *  its old one when left out. */
 export interface ChangeRelationshipInput {

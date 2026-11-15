@@ -43,6 +43,8 @@ interface Props {
   onOpenFact?: (factId: string) => void;
   /** Opens the foreshadowing map (#386 A). */
   onOpenForeshadowMap?: () => void;
+  /** Opens the relationship graph (#386 B2). */
+  onOpenRelationshipGraph?: () => void;
   /** Opens a scene at a continuity observation's cited paragraph. */
   onRevealPassage?: (target: PassageTarget) => void;
   /** Opens the suggestions inbox (story-assist Phase 3). Omitted entirely
@@ -57,7 +59,7 @@ interface Props {
 
 export function CanonPanel({
   projectId, onOpenEntity, onClose, refreshKey = 0, nodeId, onOpenNode, onBeforeStyleCheck, onOpenWriterStyle, onOpenFact,
-  onOpenProposals, continuityFocusRequest, onRevealPassage, onOpenForeshadowMap,
+  onOpenProposals, continuityFocusRequest, onRevealPassage, onOpenForeshadowMap, onOpenRelationshipGraph,
 }: Readonly<Props>) {
   const { t } = useI18n();
   const [all, setAll] = useState<Entity[]>([]);
@@ -172,6 +174,11 @@ export function CanonPanel({
 
         <div className="canon-controls">
           <p className="sd">{t("canon.description")}</p>
+          {onOpenRelationshipGraph && (
+            <button type="button" className="btn sm" data-testid="canon-open-graph" onClick={onOpenRelationshipGraph}>
+              {t("relGraph.title")}
+            </button>
+          )}
           <label className="canon-search">
             <Search size={13} aria-hidden="true" />
             <input

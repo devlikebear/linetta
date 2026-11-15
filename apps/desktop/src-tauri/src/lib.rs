@@ -187,6 +187,7 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
     "relationships.create_one",
     "relationships.create_pair",
     "relationships.delete",
+    "relationships.graph",
     "relationships.list",
     "relationships.list_by_entity",
     "relationships.update",
