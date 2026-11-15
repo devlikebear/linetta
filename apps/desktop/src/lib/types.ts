@@ -1450,7 +1450,24 @@ export type ProposalOpType =
   | "remember"
   | "create_entity" | "update_entity" | "create_relationship"
   | "create_scene" | "create_outline_node"
-  | "create_fact_card";
+  | "create_fact_card"
+  /** A ledger item (#387): no op, its change is in SuggestionItem.ledger. */
+  | "ledger_entry";
+
+/** A proposed story ledger change. Mirrors proposals.LedgerItem: without
+ *  entry_id an entry to add, with one a change to that entry. */
+export interface ProposalLedgerItem {
+  entry_id?: string;
+  kind?: string;
+  subject?: string;
+  body?: string;
+  status?: string;
+  planted_node_id?: string;
+  planted_quote?: string;
+  due_node_id?: string;
+  paid_node_id?: string;
+  paid_quote?: string;
+}
 
 export interface ProposalOp {
   op: ProposalOpType;
@@ -2020,7 +2037,7 @@ export interface ContinuityChangedPayload {
 // storyops.Op mirror linetta_apply_story_ops' own pending-approval preview
 // uses) rather than a second copy of the same 30-odd fields.
 
-export type SuggestionPurpose = "general" | "import_extraction" | "forecast";
+export type SuggestionPurpose = "general" | "import_extraction" | "forecast" | "organize";
 export type SuggestionSource = "agent" | "external";
 /** "reverting" means proposals.Undo has committed to revert this item but
  *  has not yet confirmed the outcome — the engine's own StatusReverting.
@@ -2063,6 +2080,8 @@ export interface SuggestionItem {
   ordinal: number;
   op_type: ProposalOpType;
   op: ProposalOp;
+  /** Set on a ledger item (op_type "ledger_entry"). */
+  ledger?: ProposalLedgerItem;
   /** Human-readable headline, e.g. "새 인물: 하린 — 검술 사범". */
   summary: string;
   depends_on: string[];

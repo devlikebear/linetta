@@ -88,6 +88,37 @@ describe("ProposalInbox", () => {
     events.listeners.clear();
   });
 
+  it("groups a proposed ledger change under the ledger, with its quotes, and names a tidy-up batch", async () => {
+    const onOpenNode = vi.fn();
+    mocks.list.mockResolvedValue({
+      proposals: [
+        batch(
+          [
+            item({
+              id: "led-1",
+              op_type: "ledger_entry",
+              op: { op: "" as never },
+              ledger: { entry_id: "e1", status: "paid", paid_node_id: "n9", paid_quote: "문이 열렸다" },
+              summary: "회수로 표시: 은빛 열쇠",
+            }),
+          ],
+          { id: "p-1", purpose: "organize", summary: "12화" },
+        ),
+        batch([item({ id: "item-2", proposal_id: "p-2" })], { id: "p-2", summary: "다른 묶음" }),
+      ],
+    });
+    renderInbox({ onOpenNode });
+
+    expect(await screen.findByText("회수로 표시: 은빛 열쇠")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /원장/ })).toBeInTheDocument();
+    const quotes = screen.getByTestId("proposal-ledger-led-1");
+    expect(quotes.textContent).toContain("회수한 곳");
+    expect(quotes.textContent).toContain("“문이 열렸다”");
+    await userEvent.click(quotes.querySelector("button") as HTMLButtonElement);
+    expect(onOpenNode).toHaveBeenCalledWith("n9");
+    expect(screen.getByRole("option", { name: "자동 정리 · 12화" })).toBeInTheDocument();
+  });
+
   it("lists items with their summary", async () => {
     mocks.list.mockResolvedValue({ proposals: [batch([item()])] });
     renderInbox();

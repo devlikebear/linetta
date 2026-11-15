@@ -64,6 +64,48 @@ func scanEntry(row interface{ Scan(...any) error }) (Entry, error) {
 // Add records an entry. A quote has to be in the scene it names: the point of
 // the ledger is a record that can be checked against the prose.
 func (r *Repo) Add(ctx context.Context, now int64, e Entry) (Entry, error) {
+	e, err := r.prepareAdd(ctx, e)
+	if err != nil {
+		return Entry{}, err
+	}
+	e.ID = uuid.NewString()
+	e.CreatedAt, e.UpdatedAt = now, now
+	if _, err := r.s.DB().ExecContext(ctx, `
+INSERT INTO story_ledger (id, project_id, kind, subject, body, status, planted_node_id, planted_quote,
+                          due_node_id, paid_node_id, paid_quote, source, attribute, valid_to_node_id,
+                          strength, value_num, reach, answer, about, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		e.ID, e.ProjectID, e.Kind, e.Subject, e.Body, e.Status, nullable(e.PlantedNodeID), e.PlantedQuote,
+		nullable(e.DueNodeID), nullable(e.PaidNodeID), e.PaidQuote, e.Source, e.Attribute,
+		nullable(e.ValidToNodeID), e.Strength, e.ValueNum, e.Reach, e.Answer, nullable(e.About), now, now); err != nil {
+		return Entry{}, err
+	}
+	return e, nil
+}
+
+// CheckAdd says whether Add would take e, without recording it: a proposal is
+// checked when it is made, so the writer is never offered an entry the ledger
+// would refuse.
+func (r *Repo) CheckAdd(ctx context.Context, e Entry) error {
+	_, err := r.prepareAdd(ctx, e)
+	return err
+}
+
+// CheckUpdate is CheckAdd for a patch to entry id. The entry has to belong to
+// projectID.
+func (r *Repo) CheckUpdate(ctx context.Context, projectID, id string, p Patch) error {
+	e, err := r.patched(ctx, id, p)
+	if err != nil {
+		return err
+	}
+	if e.ProjectID != projectID {
+		return ErrWrongWork
+	}
+	return nil
+}
+
+// prepareAdd fills an entry's defaults and validates it, as Add records it.
+func (r *Repo) prepareAdd(ctx context.Context, e Entry) (Entry, error) {
 	e.Body = strings.TrimSpace(e.Body)
 	e.Subject = strings.TrimSpace(e.Subject)
 	if e.Status == "" {
@@ -88,18 +130,6 @@ func (r *Repo) Add(ctx context.Context, now int64, e Entry) (Entry, error) {
 	if err := r.validate(ctx, e); err != nil {
 		return Entry{}, err
 	}
-	e.ID = uuid.NewString()
-	e.CreatedAt, e.UpdatedAt = now, now
-	if _, err := r.s.DB().ExecContext(ctx, `
-INSERT INTO story_ledger (id, project_id, kind, subject, body, status, planted_node_id, planted_quote,
-                          due_node_id, paid_node_id, paid_quote, source, attribute, valid_to_node_id,
-                          strength, value_num, reach, answer, about, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		e.ID, e.ProjectID, e.Kind, e.Subject, e.Body, e.Status, nullable(e.PlantedNodeID), e.PlantedQuote,
-		nullable(e.DueNodeID), nullable(e.PaidNodeID), e.PaidQuote, e.Source, e.Attribute,
-		nullable(e.ValidToNodeID), e.Strength, e.ValueNum, e.Reach, e.Answer, nullable(e.About), now, now); err != nil {
-		return Entry{}, err
-	}
 	return e, nil
 }
 
@@ -114,6 +144,26 @@ func (r *Repo) Get(ctx context.Context, id string) (Entry, error) {
 
 // Update applies a patch.
 func (r *Repo) Update(ctx context.Context, now int64, id string, p Patch) (Entry, error) {
+	e, err := r.patched(ctx, id, p)
+	if err != nil {
+		return Entry{}, err
+	}
+	e.UpdatedAt = now
+	if _, err := r.s.DB().ExecContext(ctx, `
+UPDATE story_ledger
+   SET subject = ?, body = ?, status = ?, planted_node_id = ?, planted_quote = ?,
+       due_node_id = ?, paid_node_id = ?, paid_quote = ?, attribute = ?, valid_to_node_id = ?,
+       strength = ?, value_num = ?, reach = ?, answer = ?, about = ?, updated_at = ?
+ WHERE id = ?`, e.Subject, e.Body, e.Status, nullable(e.PlantedNodeID), e.PlantedQuote,
+		nullable(e.DueNodeID), nullable(e.PaidNodeID), e.PaidQuote, e.Attribute,
+		nullable(e.ValidToNodeID), e.Strength, e.ValueNum, e.Reach, e.Answer, nullable(e.About), now, id); err != nil {
+		return Entry{}, err
+	}
+	return e, nil
+}
+
+// patched is entry id with p applied and validated, as Update would save it.
+func (r *Repo) patched(ctx context.Context, id string, p Patch) (Entry, error) {
 	e, err := r.Get(ctx, id)
 	if err != nil {
 		return Entry{}, err
@@ -137,17 +187,6 @@ func (r *Repo) Update(ctx context.Context, now int64, id string, p Patch) (Entry
 	}
 	e.Subject = r.canonical(ctx, e)
 	if err := r.validate(ctx, e); err != nil {
-		return Entry{}, err
-	}
-	e.UpdatedAt = now
-	if _, err := r.s.DB().ExecContext(ctx, `
-UPDATE story_ledger
-   SET subject = ?, body = ?, status = ?, planted_node_id = ?, planted_quote = ?,
-       due_node_id = ?, paid_node_id = ?, paid_quote = ?, attribute = ?, valid_to_node_id = ?,
-       strength = ?, value_num = ?, reach = ?, answer = ?, about = ?, updated_at = ?
- WHERE id = ?`, e.Subject, e.Body, e.Status, nullable(e.PlantedNodeID), e.PlantedQuote,
-		nullable(e.DueNodeID), nullable(e.PaidNodeID), e.PaidQuote, e.Attribute,
-		nullable(e.ValidToNodeID), e.Strength, e.ValueNum, e.Reach, e.Answer, nullable(e.About), now, id); err != nil {
 		return Entry{}, err
 	}
 	return e, nil

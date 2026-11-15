@@ -30,12 +30,14 @@ interface Props {
   onOpenNode?: (nodeId: string) => void;
 }
 
-type GroupKind = "character" | "place" | "item" | "concept" | "relationship" | "fact" | "thread" | "beat" | "other";
+type GroupKind = "character" | "place" | "item" | "concept" | "relationship" | "fact" | "thread" | "beat" | "ledger" | "other";
 
-const GROUP_ORDER: GroupKind[] = ["character", "place", "item", "concept", "relationship", "fact", "thread", "beat", "other"];
+const GROUP_ORDER: GroupKind[] = ["character", "place", "item", "concept", "relationship", "fact", "thread", "beat", "ledger", "other"];
 
-function groupKindFor(op: { op: ProposalOpType; kind?: string }): GroupKind {
-  switch (op.op) {
+function groupKindFor(opType: ProposalOpType, op: { kind?: string }): GroupKind {
+  switch (opType) {
+    case "ledger_entry":
+      return "ledger";
     case "create_entity":
     case "update_entity":
       switch (op.kind) {
@@ -193,7 +195,7 @@ export function ProposalInbox({ projectId, onClose, onOpenNode }: Readonly<Props
     for (const b of visibleBatches) {
       for (const it of b.items) {
         if (it.status !== "pending" && it.status !== "failed" && it.status !== "reverting") continue;
-        const k = groupKindFor(it.op);
+        const k = groupKindFor(it.op_type, it.op);
         const list = groups.get(k) ?? [];
         list.push(it);
         groups.set(k, list);
@@ -341,6 +343,7 @@ export function ProposalInbox({ projectId, onClose, onOpenNode }: Readonly<Props
             <option value="all">{t("proposals.filterAll")}</option>
             {(batches ?? []).map((b) => (
               <option key={b.id} value={b.id}>
+                {b.purpose === "organize" ? `${t("proposals.purpose.organize")} · ` : ""}
                 {b.summary || b.id}
               </option>
             ))}
@@ -422,6 +425,29 @@ export function ProposalInbox({ projectId, onClose, onOpenNode }: Readonly<Props
                       )}
                       {!item.blocked_by_rejected && unmetDep && (
                         <p className="pi-note">{t("proposals.item.dependsOn", { name: unmetDep.summary })}</p>
+                      )}
+
+                      {item.ledger && (item.ledger.planted_quote || item.ledger.paid_quote) && (
+                        <ul className="pi-evidence" data-testid={`proposal-ledger-${item.id}`}>
+                          {(
+                            [
+                              ["planted", item.ledger.planted_node_id, item.ledger.planted_quote],
+                              ["paid", item.ledger.paid_node_id, item.ledger.paid_quote],
+                            ] as const
+                          )
+                            .filter(([, , quote]) => quote)
+                            .map(([which, nodeId, quote]) => (
+                              <li key={which}>
+                                <span className="pi-breadcrumb">{t(`proposals.ledger.${which}`)}</span>
+                                <span className="pi-quote">“{quote}”</span>
+                                {onOpenNode && nodeId && (
+                                  <button type="button" className="pi-link" onClick={() => onOpenNode(nodeId)}>
+                                    {t("proposals.openScene")}
+                                  </button>
+                                )}
+                              </li>
+                            ))}
+                        </ul>
                       )}
 
                       {item.evidence.length > 0 && (

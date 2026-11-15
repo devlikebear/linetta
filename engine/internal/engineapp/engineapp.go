@@ -291,7 +291,8 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	proposalsStory := storyops.New(projects, nodes, threads, beats, entities, relationships).WithFacts(facts)
 	proposalsSvc := proposals.New(st, proposalsStory, entities, threads, beats, facts, nodes, projects,
 		func(method string, params any) { _ = s.Notifier().Notify(method, params) }).
-		WithForecasts(forecastSvc)
+		WithForecasts(forecastSvc).
+		WithLedger(ledgerRepo)
 
 	// Resolve any proposal item a crash left stuck at StatusReverting
 	// before the RPC server takes a single request: storyops' own

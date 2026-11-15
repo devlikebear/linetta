@@ -11,6 +11,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/forecast"
+	"github.com/devlikebear/linetta/engine/internal/ledger"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
@@ -28,6 +29,7 @@ type testEnv struct {
 	projects  *project.Repo
 	storyops  *storyops.Service
 	forecasts *forecast.Service
+	ledger    *ledger.Repo
 	project   project.Project
 	sceneID   string
 }
@@ -73,10 +75,11 @@ func newTestEnv(t *testing.T) *testEnv {
 		Facts: facts, Threads: threads, Beats: beats, Direction: directionRepo,
 	})
 
-	svc := New(st, so, entities, threads, beats, facts, nodes, projects, nil).WithForecasts(forecasts)
+	ledgerRepo := ledger.NewRepo(st, nodes)
+	svc := New(st, so, entities, threads, beats, facts, nodes, projects, nil).WithForecasts(forecasts).WithLedger(ledgerRepo)
 	return &testEnv{
 		svc: svc, nodes: nodes, entities: entities, threads: threads, beats: beats,
-		projects: projects, storyops: so, forecasts: forecasts, project: p, sceneID: sceneID,
+		projects: projects, storyops: so, forecasts: forecasts, ledger: ledgerRepo, project: p, sceneID: sceneID,
 	}
 }
 
