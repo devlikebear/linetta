@@ -1,15 +1,31 @@
 # Changelog
 
-## Unreleased
+## v1.25.0 - 2026-11-15
 
 - Added: the Linetta trial. With no provider set up, the agent panel offers
   "Try it without a key": connect this device to your Linetta Works account,
   agree to the trial's notice, and the agent runs on a fixed number of
   tokens, once per account. Requests go through Linetta Works to Anthropic's
-  Claude Haiku model; Linetta Works keeps no text, only the tokens used. The panel
-  shows what is left, and when it runs out, how to connect your own key. The
-  trial is also the first row under Settings → AI provider. A trial turn
-  uses a smaller tool set and runs no background passes.
+  Claude Haiku model; Linetta Works keeps no text, only the tokens used. The
+  panel shows what is left, and when it runs out, how to connect your own
+  key. The trial is also the first row under Settings → AI provider. A trial
+  turn uses a smaller tool set and runs no background passes.
+- Added: while the model writes out a tool call, the agent panel names the
+  tool it is preparing ("Preparing: Continuity check…") instead of
+  "Thinking…". Anthropic, OpenAI-compatible and ChatGPT sign-in providers
+  report it; Gemini and the Claude Code CLI still show "Thinking…".
+- Added: manuscript search, in the app and the agent's search tool, now
+  points to the paragraphs inside a scene that match, numbered the same way
+  as the continuity check's citations. An existing library is indexed on the
+  first launch after updating.
+- Added: clicking a continuity check's ¶ citation opens the scene at that
+  paragraph and highlights the quoted sentence. If the text has changed since,
+  it highlights the paragraph, or says the paragraph is gone.
+- Fixed: "Copy this episode text" in the web novel preset did nothing,
+  because the window was not allowed to call it.
+- Fixed: the episode review's description said it does not run on the Claude
+  Code provider. It does, as one more claude call that counts toward your
+  Claude plan.
 
 ## v1.24.0 - 2026-11-14
 
