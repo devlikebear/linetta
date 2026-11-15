@@ -20,6 +20,7 @@ import { ProviderSection } from "../components/settings/ProviderSection";
 import { AgentUsageSection } from "../components/settings/AgentUsageSection";
 import { SummarizerSection } from "../components/settings/SummarizerSection";
 import { WriterStyleSection } from "../components/settings/WriterStyleSection";
+import { SemanticSearchSection } from "../components/settings/SemanticSearchSection";
 import { ImageGenSection } from "../components/settings/ImageGenSection";
 import { PublishSection } from "../components/settings/PublishSection";
 import { SyncOverview } from "../components/settings/SyncOverview";
@@ -553,6 +554,7 @@ export function Settings() {
             )}
 
             {tab === "writing" && <WriterStyleSection />}
+            {tab === "writing" && <SemanticSearchSection />}
 
             {tab === "writing" && (
             <section className="settings-section">

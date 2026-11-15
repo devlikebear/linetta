@@ -2726,6 +2726,8 @@ export function Workspace() {
         open={searchOpen}
         onClose={() => setSearchOpen(false)}
         onSelect={handleSearchSelect}
+        projectId={load?.project.id}
+        onReveal={(target) => { void revealPassage(target); }}
       />
 
       <MentionPicker state={mentionState} />

@@ -17,6 +17,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/export"
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/illustref"
+	"github.com/devlikebear/linetta/engine/internal/manuscript"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/project"
@@ -212,6 +213,7 @@ type searchManuscriptInput struct {
 	ProjectID string `json:"project_id" jsonschema:"id of the work to search"`
 	Query     string `json:"query" jsonschema:"words or phrase to find in the manuscript"`
 	Limit     int    `json:"limit,omitempty"`
+	Mode      string `json:"mode,omitempty" jsonschema:"auto (default), words, or meaning"`
 }
 
 func (in searchManuscriptInput) scope() (string, string) { return in.ProjectID, "" }
@@ -229,6 +231,9 @@ type searchHit struct {
 
 type searchManuscriptOutput struct {
 	Hits []searchHit `json:"hits"`
+	// Semantic is false when meaning search is off or not ready: the hits
+	// are word matches only.
+	Semantic bool `json:"semantic"`
 }
 
 // ---------- linetta_list_characters ----------
@@ -397,7 +402,7 @@ func (d ToolDeps) registerReadTools(s *mcp.Server, groups ToolGroups) {
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_search_manuscript",
-		Description: "Full-text search across the work's manuscript. A scene must contain every word. Returns snippets, best match first, " +
+		Description: "Search the work's manuscript, by meaning too when the writer has it on. Returns snippets, best match first, " +
 			"with the paragraphs found in, numbered as linetta_read_scene numbered=true.",
 	}, record(d, "linetta_search_manuscript", d.searchManuscript))
 
@@ -903,11 +908,15 @@ func (d ToolDeps) searchManuscript(ctx context.Context, _ *mcp.CallToolRequest, 
 	if limit <= 0 || limit > 100 {
 		limit = defaultSearchLimit
 	}
-	hits, err := d.Manuscript.Query(ctx, p.ID, q, limit)
+	mode := strings.TrimSpace(in.Mode)
+	if mode != manuscript.ModeWords && mode != manuscript.ModeMeaning {
+		mode = manuscript.ModeAuto
+	}
+	hits, semantic, err := d.Manuscript.QueryMode(ctx, p.ID, q, limit, mode)
 	if err != nil {
 		return toolErr("search failed: %v", err), searchManuscriptOutput{}, nil
 	}
-	out := searchManuscriptOutput{Hits: []searchHit{}}
+	out := searchManuscriptOutput{Hits: []searchHit{}, Semantic: semantic}
 	for _, h := range hits {
 		out.Hits = append(out.Hits, searchHit{
 			NodeID: h.NodeID, Label: h.Breadcrumb, Snippet: h.Snippet,

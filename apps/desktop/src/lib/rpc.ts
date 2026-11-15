@@ -691,8 +691,9 @@ export const search = {
 };
 
 export const manuscript = {
-  search: (projectId: string, query: string, limit = 20) =>
-    rpcCall<ManuscriptSearchHit[]>("manuscript.search", { project_id: projectId, query, limit }),
+  /** mode: auto (words, and meaning when it is on), words, or meaning (#384). */
+  search: (projectId: string, query: string, limit = 20, mode?: "auto" | "words" | "meaning") =>
+    rpcCall<ManuscriptSearchHit[]>("manuscript.search", { project_id: projectId, query, limit, mode }),
   replacePreview: (projectId: string, query: string, replacement: string, nodeIds: string[] = []) =>
     rpcCall<ReplacePlan>("manuscript.replace_preview", {
       project_id: projectId,
