@@ -45,6 +45,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/rpc/handlers"
 	"github.com/devlikebear/linetta/engine/internal/search"
+	"github.com/devlikebear/linetta/engine/internal/semantic"
 	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/stats"
@@ -173,6 +174,21 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	settingsStore, err := settings.NewForHomeWithSecretStore(home, secrets)
 	if err != nil {
 		return fmt.Errorf("settings: %w", err)
+	}
+
+	// Meaning search (#384): off until the writer switches it on, then each
+	// paragraph is embedded in the background, saved scenes first.
+	notify := func(method string, params any) { _ = s.Notifier().Notify(method, params) }
+	semModels := semantic.NewModels(semantic.Model, filepath.Join(home, "models"), func(st semantic.ModelStatus) {
+		notify("search.semantic_progress", map[string]any{"phase": "download", "model": st})
+	})
+	semService := semantic.NewService(st.DB(), semModels, settingsStore.SemanticSearchEnabled, notify, semantic.OpenEmbedder)
+	manuscriptSearcher.SetSemantic(semService)
+	nodes.SetManuscriptIndexer(semanticKick{Indexer: manuscriptIndexer, sem: semService})
+	semService.Start()
+	a.closers = append(a.closers, semService.Close)
+	if semService.Ready() {
+		_ = semService.KickAll(ctx)
 	}
 	// "Phrases to keep out of every work" was a setting of this device before
 	// the writer's default style (#179) gave it a place in the library. Carried
@@ -531,6 +547,10 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("projects.duplicate", handlers.DuplicateProject(st, home, manuscriptIndexer, clock))
 	s.Handle("search.query", handlers.Search(searchRepo))
 	s.Handle("manuscript.search", handlers.SearchManuscript(manuscriptSearcher))
+	semDeps := handlers.SemanticDeps{Service: semService, Models: semModels, Settings: settingsStore, Supported: semantic.Supported}
+	s.Handle("search.semantic_status", handlers.SemanticStatus(semDeps))
+	s.Handle("search.semantic_enable", handlers.SemanticEnable(semDeps))
+	s.Handle("search.semantic_disable", handlers.SemanticDisable(semDeps))
 	s.Handle("manuscript.replace_preview", handlers.ReplacePreview(manuscriptEditor))
 	s.Handle("manuscript.replace_apply", handlers.ReplaceApply(manuscriptEditor, clock))
 	s.Handle("contextual.resolve_target", handlers.ContextualResolveTarget(contextualEditor))

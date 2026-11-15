@@ -204,6 +204,10 @@ type Config struct {
 	// ("leave", the default), after a long idle ("idle"), or only on request
 	// ("manual").
 	AgentOrganizeTrigger string `json:"agent_organize_trigger,omitempty"`
+	// SemanticSearchEnabled turns on meaning search (#384): each paragraph
+	// is embedded on this device by a model downloaded once. Off by default:
+	// the model is about 135MB.
+	SemanticSearchEnabled bool `json:"semantic_search_enabled"`
 	// StyleAvoidPhrases are checked in every work, on top of a work's own list.
 	StyleAvoidPhrases []string `json:"style_avoid_phrases,omitempty"`
 	// CharCountPresets are the writer's own length rules (#239), applied to a
@@ -425,6 +429,7 @@ type Patch struct {
 	AgentImpactReviewEnabled  *bool                    `json:"agent_impact_review_enabled,omitempty"`
 	AgentOrganizeEnabled      *bool                    `json:"agent_organize_enabled,omitempty"`
 	AgentOrganizeTrigger      *string                  `json:"agent_organize_trigger,omitempty"`
+	SemanticSearchEnabled     *bool                    `json:"semantic_search_enabled,omitempty"`
 	StyleAvoidPhrases         *[]string                `json:"style_avoid_phrases,omitempty"`
 	CharCountPresets          *[]CharCountPreset       `json:"char_count_presets,omitempty"`
 	AgentMaxToolCalls         *int                     `json:"agent_max_tool_calls,omitempty"`
@@ -627,6 +632,7 @@ func (s *Store) load() error {
 	}
 	s.cfg.AgentImpactReviewEnabled = disk.AgentImpactReviewEnabled
 	s.cfg.AgentOrganizeEnabled = disk.AgentOrganizeEnabled
+	s.cfg.SemanticSearchEnabled = disk.SemanticSearchEnabled
 	if validOrganizeTrigger(disk.AgentOrganizeTrigger) {
 		s.cfg.AgentOrganizeTrigger = disk.AgentOrganizeTrigger
 	}
@@ -775,6 +781,13 @@ func (s *Store) AgentImpactReviewEnabled() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.cfg.AgentImpactReviewEnabled
+}
+
+// SemanticSearchEnabled reports whether meaning search is on (#384).
+func (s *Store) SemanticSearchEnabled() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg.SemanticSearchEnabled
 }
 
 // When the organize pass runs on its own (#387).
@@ -1126,6 +1139,9 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	if p.AgentOrganizeEnabled != nil {
 		next.AgentOrganizeEnabled = *p.AgentOrganizeEnabled
 	}
+	if p.SemanticSearchEnabled != nil {
+		next.SemanticSearchEnabled = *p.SemanticSearchEnabled
+	}
 	if p.AgentOrganizeTrigger != nil {
 		trigger := strings.TrimSpace(*p.AgentOrganizeTrigger)
 		if !validOrganizeTrigger(trigger) {
@@ -1326,6 +1342,7 @@ func (s *Store) persistWith(next Config, legacy legacyPlaintextKeys) error {
 		AgentImpactReviewEnabled:  next.AgentImpactReviewEnabled,
 		AgentOrganizeEnabled:      next.AgentOrganizeEnabled,
 		AgentOrganizeTrigger:      next.AgentOrganizeTrigger,
+		SemanticSearchEnabled:     next.SemanticSearchEnabled,
 		StyleAvoidPhrases:         next.StyleAvoidPhrases,
 		AgentMaxToolCalls:         next.AgentMaxToolCalls,
 		AgentHistoryBudget:        next.AgentHistoryBudget,

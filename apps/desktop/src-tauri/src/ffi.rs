@@ -265,6 +265,10 @@ fn notification_event(method: &str) -> Option<&'static str> {
         // on Linetta Works (#238). Missing here, the dialog never opens and
         // every publish the writer asked for times out.
         "publish.approvals_changed" => Some("publish-approvals-changed"),
+        // Meaning search (#384): the model downloading and each work's
+        // paragraphs being embedded. The settings pane and the search box
+        // show the progress; without it they would sit at 0% until reopened.
+        "search.semantic_progress" => Some("search-semantic-progress"),
         _ => None,
     }
 }
@@ -488,6 +492,11 @@ mod tests {
         // stale count until an unrelated remount refreshed it.
         assert_eq!(notification_event("continuity.changed"), Some("continuity-changed"));
         assert_eq!(notification_event("continuity.unmapped"), None);
+    }
+
+    #[test]
+    fn semantic_progress_is_forwarded_to_the_renderer() {
+        assert_eq!(notification_event("search.semantic_progress"), Some("search-semantic-progress"));
     }
 
     #[test]
