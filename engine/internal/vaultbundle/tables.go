@@ -143,6 +143,7 @@ var excluded = map[string]string{
 	"manuscript_fts_data":              "search index, rebuilt from nodes",
 	"manuscript_fts_docsize":           "search index, rebuilt from nodes",
 	"manuscript_fts_idx":               "search index, rebuilt from nodes",
+	"manuscript_chunks":                "search index, rebuilt from nodes",
 }
 
 // imageColumns are the BLOB columns. Each value leaves the row as a part of its

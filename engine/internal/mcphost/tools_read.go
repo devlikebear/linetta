@@ -219,6 +219,11 @@ type searchHit struct {
 	NodeID  string `json:"node_id"`
 	Label   string `json:"label"`
 	Snippet string `json:"snippet"`
+	// The paragraphs of the scene the match is in, numbered as
+	// linetta_read_scene numbered=true prints them. Absent when the match
+	// could not be placed.
+	ParagraphFrom int `json:"paragraph_from,omitempty"`
+	ParagraphTo   int `json:"paragraph_to,omitempty"`
 }
 
 type searchManuscriptOutput struct {
@@ -384,8 +389,9 @@ func (d ToolDeps) registerReadTools(s *mcp.Server, groups ToolGroups) {
 	}, record(d, "linetta_read_scene", d.readScene))
 
 	mcp.AddTool(s, &mcp.Tool{
-		Name:        "linetta_search_manuscript",
-		Description: "Full-text search across the work's manuscript. A scene must contain every word. Returns snippets, best match first.",
+		Name: "linetta_search_manuscript",
+		Description: "Full-text search across the work's manuscript. A scene must contain every word. Returns snippets, best match first, " +
+			"with the paragraphs found in, numbered as linetta_read_scene numbered=true.",
 	}, record(d, "linetta_search_manuscript", d.searchManuscript))
 
 	mcp.AddTool(s, &mcp.Tool{
@@ -894,7 +900,10 @@ func (d ToolDeps) searchManuscript(ctx context.Context, _ *mcp.CallToolRequest, 
 	}
 	out := searchManuscriptOutput{Hits: []searchHit{}}
 	for _, h := range hits {
-		out.Hits = append(out.Hits, searchHit{NodeID: h.NodeID, Label: h.Breadcrumb, Snippet: h.Snippet})
+		out.Hits = append(out.Hits, searchHit{
+			NodeID: h.NodeID, Label: h.Breadcrumb, Snippet: h.Snippet,
+			ParagraphFrom: h.ParagraphFrom, ParagraphTo: h.ParagraphTo,
+		})
 	}
 	return nil, out, nil
 }
