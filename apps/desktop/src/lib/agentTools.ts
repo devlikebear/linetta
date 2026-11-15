@@ -29,6 +29,7 @@ export const READ_TOOL_NAMES = [
   "linetta_get_story_context",
   "linetta_read_scene",
   "linetta_search_manuscript",
+  "linetta_cite_sources",
   "linetta_list_characters",
   "linetta_where_does_appear",
   "linetta_get_plot",

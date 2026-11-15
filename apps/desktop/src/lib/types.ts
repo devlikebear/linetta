@@ -952,6 +952,21 @@ export interface AgentAskQuestion {
   options: AgentAskOption[];
 }
 
+/** One source linetta_cite_sources checked against the manuscript (#385).
+ *  Mirrors mcphost.CitedSource (tools_cite.go). The quote was found in those
+ *  paragraphs, numbered as the engine numbers them (style.Paragraphs). */
+export interface AgentCitation {
+  /** What the reply cites it by: [1] is n=1. */
+  n: number;
+  node_id: string;
+  /** Stored outline labels, e.g. "1부 / 12화 / 씬 3"; translate for display. */
+  breadcrumb: string;
+  scene_title?: string;
+  paragraph_from: number;
+  paragraph_to: number;
+  quote: string;
+}
+
 /** The card linetta_ask_writer left on its tool line. Mirrors agent.askCard
  *  (ask.go). */
 export interface AgentAsk {

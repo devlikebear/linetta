@@ -32,6 +32,7 @@ var ReadToolNames = []string{
 	"linetta_get_story_context",
 	"linetta_read_scene",
 	"linetta_search_manuscript",
+	"linetta_cite_sources",
 	"linetta_list_characters",
 	"linetta_where_does_appear",
 	"linetta_get_plot",
@@ -393,6 +394,8 @@ func (d ToolDeps) registerReadTools(s *mcp.Server, groups ToolGroups) {
 		Description: "Full-text search across the work's manuscript. A scene must contain every word. Returns snippets, best match first, " +
 			"with the paragraphs found in, numbered as linetta_read_scene numbered=true.",
 	}, record(d, "linetta_search_manuscript", d.searchManuscript))
+
+	d.registerCiteTool(s)
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_list_characters",
