@@ -43,7 +43,11 @@ vi.mock("../../lib/rpc", () => ({
 }));
 
 vi.mock("../../lib/i18n", () => ({
-  useI18n: () => ({ t: (key: string) => key }),
+  // Values follow the key, so a line built from two keys shows both.
+  useI18n: () => ({
+    t: (key: string, values?: Record<string, string | number>) =>
+      values ? `${key} ${Object.values(values).join(" ")}` : key,
+  }),
 }));
 
 import { AgentPanel } from "./AgentPanel";
@@ -242,5 +246,45 @@ describe("AgentPanel log order within a turn", () => {
     expect(bubbles[1].querySelector('[data-testid="agent-usage"]')).toBeTruthy();
     expect(bubbles[0].querySelector('[data-testid="agent-usage"]')).toBeNull();
     expect(screen.queryByTestId("agent-working")).toBeNull();
+  });
+});
+
+describe("AgentPanel working line while the model writes a tool call", () => {
+  it("names the call being written until it runs, then goes back to the turn's state", async () => {
+    rpc.agentStatus.mockImplementation(() =>
+      Promise.resolve({ running: true, run_id: "r1", started_at: 1, seq: 4 }),
+    );
+    await renderPanel();
+    const working = () => screen.getByTestId("agent-working").textContent ?? "";
+    expect(working()).toContain("agentPanel.working.thinking");
+
+    // A long call streams its arguments with nothing else arriving.
+    await emit("agent-composing", { run_id: "r1", seq: 5, name: "linetta_report_continuity" });
+    expect(working()).toContain("agentPanel.working.composing");
+    expect(working()).toContain("agentPanel.toolName.linetta_report_continuity");
+
+    // The call runs: the tool's own state takes over, and once it is done the
+    // call it was composing is no longer what the model is doing.
+    await emit("agent-tool", { run_id: "r1", seq: 6, name: "linetta_report_continuity", state: "started" });
+    expect(working()).toContain("agentPanel.working.tool");
+    await emit("agent-tool", { run_id: "r1", seq: 7, name: "linetta_report_continuity", state: "done" });
+    expect(working()).toContain("agentPanel.working.thinking");
+
+    // A tool the panel has no label for is still a call being prepared.
+    await emit("agent-composing", { run_id: "r1", seq: 8, name: "some_new_tool" });
+    expect(working()).toContain("agentPanel.working.composingTool");
+
+    // Text after it means the model is writing to the writer again.
+    await emit("agent-delta", { run_id: "r1", seq: 9, text: "정리했어요." });
+    expect(working()).toContain("agentPanel.working.writing");
+  });
+
+  it("ignores another turn's call", async () => {
+    rpc.agentStatus.mockImplementation(() =>
+      Promise.resolve({ running: true, run_id: "r1", started_at: 1, seq: 4 }),
+    );
+    await renderPanel();
+    await emit("agent-composing", { run_id: "other", seq: 5, name: "linetta_write_scene" });
+    expect(screen.getByTestId("agent-working").textContent).toContain("agentPanel.working.thinking");
   });
 });

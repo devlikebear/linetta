@@ -51,6 +51,7 @@ export function useAgentRunning(projectId: string | undefined, enabled: boolean)
   };
   useEngineEvent<AgentEvent>("agent-delta", alive);
   useEngineEvent<AgentEvent>("agent-tool", alive);
+  useEngineEvent<AgentEvent>("agent-composing", alive);
   useEngineEvent<AgentEvent>("agent-done", ended);
   useEngineEvent<AgentEvent>("agent-error", ended);
   useEngineEvent<AgentEvent>("agent-cancelled", ended);

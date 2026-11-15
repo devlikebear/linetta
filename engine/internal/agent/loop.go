@@ -362,6 +362,16 @@ type deltaPayload struct {
 	Text      string `json:"text"`
 }
 
+// composingPayload names the tool call the model has started writing. Its
+// arguments are still streaming; agent.tool "started" follows once they are
+// complete and the call runs.
+type composingPayload struct {
+	RunID     string `json:"run_id"`
+	ProjectID string `json:"project_id"`
+	Seq       int64  `json:"seq"`
+	Name      string `json:"name"`
+}
+
 type toolPayload struct {
 	RunID     string `json:"run_id"`
 	ProjectID string `json:"project_id"`
@@ -453,6 +463,7 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 		resp, err := st.client.Chat(ctx, msgs, llm.ChatOptions{
 			Tools:           st.schemas,
 			OnDelta:         func(text string) { s.streamDelta(st, text) },
+			OnToolCallStart: func(name string) { s.composing(st, name) },
 			ReasoningEffort: st.effort,
 		})
 		if err != nil {
@@ -574,6 +585,15 @@ func (s *Service) afterReply(ctx context.Context, st loopState, toolCalls int, u
 func (s *Service) streamDelta(st loopState, text string) {
 	seq := s.runs.streamed(st.runID, text)
 	s.notify("agent.delta", deltaPayload{RunID: st.runID, ProjectID: st.projectID, Seq: seq, Text: text})
+}
+
+// composing tells the panel which tool call the model has started writing.
+// A call carrying a whole scene or a list of findings streams its arguments
+// for a minute or more with no text arriving, and without this the panel can
+// only say the model is thinking. Providers that cannot see a call before it
+// is complete never report one, and the panel keeps its generic line.
+func (s *Service) composing(st loopState, name string) {
+	s.notify("agent.composing", composingPayload{RunID: st.runID, ProjectID: st.projectID, Seq: s.runs.next(st.runID), Name: name})
 }
 
 // silentStop reports whether a response that asked for no tools ended the

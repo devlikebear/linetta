@@ -18,6 +18,8 @@ func projectIDOf(params any) (string, bool) {
 		return p.ProjectID, true
 	case toolPayload:
 		return p.ProjectID, true
+	case composingPayload:
+		return p.ProjectID, true
 	case donePayload:
 		return p.ProjectID, true
 	case errorPayload:
