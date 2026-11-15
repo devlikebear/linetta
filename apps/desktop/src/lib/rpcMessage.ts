@@ -60,6 +60,8 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   provider_rejected: "errors.providerRejected",
   provider_unavailable: "errors.providerUnavailable",
   provider_model_unsupported: "errors.providerModelUnsupported",
+  provider_trial_exhausted: "errors.providerTrialExhausted",
+  provider_trial_paused: "errors.providerTrialPaused",
   // Illustration drawing: what only drawing has. The provider failures above
   // apply to it too.
   image_generation_off: "errors.imageGenerationOff",

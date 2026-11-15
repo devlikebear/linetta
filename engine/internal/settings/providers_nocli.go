@@ -7,7 +7,7 @@ package settings
 // subprocess, so the Claude Code CLI is not one of them: a settings file that
 // names it falls back to Codex like any unknown id.
 func ValidProviders() []string {
-	return []string{ProviderOpenAICodex, ProviderAnthropic, ProviderGeminiNative, ProviderOpenAI}
+	return []string{ProviderLinettaTrial, ProviderOpenAICodex, ProviderAnthropic, ProviderGeminiNative, ProviderOpenAI}
 }
 
 // DefaultProvider is what a new library starts on, and what an id outside

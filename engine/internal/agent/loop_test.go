@@ -76,10 +76,16 @@ func (c *scriptedClient) options() llm.ChatOptions {
 type fakeProviders struct {
 	client llm.Client
 	err    error
+	// id is the provider the turn resolves to, "anthropic" when empty.
+	id string
 }
 
 func (f fakeProviders) Client(context.Context, string) (llm.Client, provider.Resolved, error) {
-	return f.client, provider.Resolved{ID: "anthropic", Model: "test-model"}, f.err
+	id := f.id
+	if id == "" {
+		id = "anthropic"
+	}
+	return f.client, provider.Resolved{ID: id, Model: "test-model"}, f.err
 }
 
 // recorder collects notifications so a test can assert on the stream the

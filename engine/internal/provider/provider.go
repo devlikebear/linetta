@@ -56,6 +56,12 @@ func (r Resolved) Configured() bool {
 		_, err := os.Stat(filepath.Join(r.CodexHome, codexAuthFile))
 		return err == nil
 	}
+	if r.ID == settings.ProviderLinettaTrial {
+		// Resolve leaves BaseURL empty when no Works account is connected,
+		// so a token left behind by a half-finished disconnect does not
+		// count on its own.
+		return strings.TrimSpace(r.BaseURL) != "" && strings.TrimSpace(r.APIKey) != ""
+	}
 	if r.ID == settings.ProviderClaudeCode {
 		// The binary is all Linetta can see. Whether the writer is signed
 		// in to it is something only the CLI knows, and providers.test is
@@ -97,6 +103,12 @@ func Options(r Resolved) llm.ProviderOptions {
 		opts.Provider = tarsClaudeCodeProvider
 		opts.BaseURL = ""
 		opts.WorkDir = r.WorkDir
+	case settings.ProviderLinettaTrial:
+		// The site's trial proxy speaks the OpenAI Chat Completions shape
+		// and passes it through to whatever model it serves.
+		opts.Provider = tarsOpenAIProvider
+		opts.Model = TrialModel
+		opts.APIKey = strings.TrimSpace(r.APIKey)
 	default:
 		opts.APIKey = strings.TrimSpace(r.APIKey)
 	}
@@ -153,6 +165,21 @@ func anthropicMaxTokens(model string) int {
 	}
 	return 0
 }
+
+// IsTrial reports whether a provider is the Linetta trial, whose turns the
+// agent cuts to the trial's tool set and runs no background passes after.
+func IsTrial(id string) bool { return id == settings.ProviderLinettaTrial }
+
+// tarsOpenAIProvider is tars' OpenAI-compatible client, which the trial rides.
+const tarsOpenAIProvider = "openai"
+
+// TrialModel is the model name the trial sends. The site ignores it and
+// substitutes the model it serves, so the engine names no real model.
+const TrialModel = "linetta-trial"
+
+// trialAPIPath is where the site's trial proxy listens, under the connected
+// site's address (linetta-artworks docs/api.md, "Linetta 체험").
+const trialAPIPath = "/api/trial/v1"
 
 // ClientFactory builds an llm.Client. Production is llm.NewProvider; tests
 // inject one that never dials.
@@ -228,6 +255,9 @@ func (s *Source) Resolve(id string) (Resolved, error) {
 			Err:    fmt.Errorf("unknown provider %q", id),
 		}
 	}
+	if id == settings.ProviderLinettaTrial {
+		return s.resolveTrial(), nil
+	}
 	cfg := s.settings.ProviderConfigFor(id)
 	r := Resolved{
 		ID:          id,
@@ -248,6 +278,24 @@ func (s *Source) Resolve(id string) (Resolved, error) {
 		r.WorkDir = s.cliWorkDir
 	}
 	return r, nil
+}
+
+// resolveTrial borrows the publish connection: the publish token is the key
+// and the connected site is the address. Disconnecting from Works therefore
+// ends the trial as well. Only consent is the trial's own setting.
+func (s *Source) resolveTrial() Resolved {
+	r := Resolved{
+		ID:          settings.ProviderLinettaTrial,
+		Model:       TrialModel,
+		ConsentedAt: s.settings.ProviderConfigFor(settings.ProviderLinettaTrial).ConsentedAt,
+	}
+	acc, ok := s.settings.PublishAccount()
+	if !ok || strings.TrimSpace(acc.SiteURL) == "" {
+		return r
+	}
+	r.BaseURL = strings.TrimRight(strings.TrimSpace(acc.SiteURL), "/") + trialAPIPath
+	r.APIKey = s.settings.PublishToken()
+	return r
 }
 
 // Client builds a client for id ("" = active). It refuses before any network

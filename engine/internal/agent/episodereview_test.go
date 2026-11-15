@@ -11,6 +11,7 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/mcphost"
+	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/tars/pkg/llm"
 )
 
@@ -160,14 +161,13 @@ func TestEpisodeReview_doesNotRunOnATrialTurn(t *testing.T) {
 	c := &episodeClient{turn: writingTurn("n1"), entered: make(chan struct{})}
 	st := openStoreForAgentTests(t)
 	svc := New(Deps{
-		Providers:            fakeProviders{client: c},
+		Providers:            fakeProviders{client: c, id: settings.ProviderLinettaTrial},
 		History:              companion.NewHistoryRepo(st.DB()),
 		Scope:                fakeScope{titles: map[string]string{"p1": "제목"}},
 		Register:             episodeTools(&writes),
 		Notify:               rec.notify,
 		Language:             func() string { return "ko" },
 		EpisodeReviewEnabled: func() bool { return true },
-		TrialToolsEnabled:    func() bool { return true },
 		Clock:                func() int64 { return 1700000000000 },
 	})
 	t.Cleanup(func() { _ = svc.Close() })

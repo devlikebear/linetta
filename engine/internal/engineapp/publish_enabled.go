@@ -60,6 +60,8 @@ func setupPublish(deps publishDeps) (*publish.Service, *publish.Approvals, func(
 	s.Handle("publish.cover_set", handlers.PublishCoverSet(svc))
 	s.Handle("publish.cover_publish", handlers.PublishCoverPublish(svc))
 	s.Handle("publish.sheets_sync", handlers.PublishSheetsSync(svc))
+	// The Linetta trial rides the same connection (docs/plans/trial).
+	s.Handle("trial.status", handlers.TrialStatus(svc))
 	// An agent's publish waits here until the writer answers in the app.
 	approvals := publish.NewApprovals(deps.notify, publish.DefaultApprovalTimeout)
 	s.Handle("publish.approvals_pending", handlers.PublishApprovalsPending(approvals))

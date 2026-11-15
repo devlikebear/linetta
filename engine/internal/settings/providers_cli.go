@@ -6,7 +6,7 @@ package settings
 // the settings pane lists them. This build may spawn a subprocess, so the
 // Claude Code CLI is among them.
 func ValidProviders() []string {
-	return []string{ProviderOpenAICodex, ProviderAnthropic, ProviderGeminiNative, ProviderOpenAI, ProviderClaudeCode}
+	return []string{ProviderLinettaTrial, ProviderOpenAICodex, ProviderAnthropic, ProviderGeminiNative, ProviderOpenAI, ProviderClaudeCode}
 }
 
 // DefaultProvider is what a new library starts on, and what an id outside

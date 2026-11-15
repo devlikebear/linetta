@@ -9,7 +9,7 @@ import (
 )
 
 func TestValidProviders_leavesTheCLIOutOfSandboxedBuilds(t *testing.T) {
-	want := []string{"openai-codex", "anthropic", "gemini-native", "openai"}
+	want := []string{"linetta-trial", "openai-codex", "anthropic", "gemini-native", "openai"}
 	if got := ValidProviders(); !slices.Equal(got, want) {
 		t.Fatalf("ValidProviders = %v, want %v", got, want)
 	}

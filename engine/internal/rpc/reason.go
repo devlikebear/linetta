@@ -93,6 +93,11 @@ const (
 	// the one asked for. Its own code because the fix is a different model,
 	// not a retry.
 	ReasonProviderModelUnsupported = "provider_model_unsupported"
+	// The Linetta trial (docs/plans/trial): the Works account has used its
+	// tokens, or the site is not taking trial requests right now. Their own
+	// codes because the fix is the writer's own provider, not a retry.
+	ReasonProviderTrialExhausted = "provider_trial_exhausted"
+	ReasonProviderTrialPaused    = "provider_trial_paused"
 
 	// Illustration drawing. The provider's credential and the failures above
 	// are shared with the agent; these are what only drawing has. Off: no

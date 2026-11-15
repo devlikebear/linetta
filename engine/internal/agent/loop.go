@@ -102,8 +102,11 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 		groups.disableVisualWrites = s.deps.VisualWriteToolsDisabled()
 	}
 	// Last, because a trial overrides the writer's switches rather than
-	// combining with them.
-	groups = groups.withTrial(s.deps.TrialToolsEnabled)
+	// combining with them. Decided by the provider this turn's client was
+	// built for, not a second read of the active one: a writer switching
+	// providers in between would otherwise send the whole tool set on the
+	// trial's key, or the cut set to their own.
+	groups = groups.withTrial(provider.IsTrial(resolved.ID))
 	tools, err := s.session(ctx, groups)
 	if err != nil {
 		return "", err

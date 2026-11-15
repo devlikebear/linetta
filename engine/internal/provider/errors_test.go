@@ -78,3 +78,30 @@ func TestClassify_passesAReasonErrorThrough(t *testing.T) {
 		t.Errorf("got %v, want the same error back", got)
 	}
 }
+
+func TestClassify_readsTheTrialProxyCodeOnlyForTheTrial(t *testing.T) {
+	status := func(code int, body string) error {
+		return &llm.ProviderError{Provider: "openai", Operation: "request", StatusCode: code, Message: body}
+	}
+	body := func(code string) string { return `{"error":{"code":"` + code + `","message":"체험 한도"}}` }
+	cases := []struct {
+		name string
+		id   string
+		err  error
+		want string
+	}{
+		{"exhausted", "linetta-trial", status(429, body("trial_exhausted")), rpc.ReasonProviderTrialExhausted},
+		{"paused", "linetta-trial", status(503, body("trial_paused")), rpc.ReasonProviderTrialPaused},
+		{"busy", "linetta-trial", status(429, body("trial_busy")), rpc.ReasonProviderRateLimited},
+		{"unauthorized", "linetta-trial", status(401, body("unauthorized")), rpc.ReasonProviderAuthFailed},
+		{"not json", "linetta-trial", status(429, "slow down"), rpc.ReasonProviderRateLimited},
+		{"another provider", "openai", status(429, body("trial_exhausted")), rpc.ReasonProviderRateLimited},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := reasonOf(t, Classify(tc.id, tc.err)); got != tc.want {
+				t.Errorf("reason = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
