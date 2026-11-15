@@ -1066,3 +1066,21 @@ func TestSet_storingOneProvidersKeyKeepsTheOthersPlaintextResidue(t *testing.T) 
 		t.Errorf("legacy_plaintext_providers = %v, want anthropic gone", got.LegacyPlaintextProviders)
 	}
 }
+
+func TestAgentOrganizeDefaultsToOffOnLeavingAnEpisode(t *testing.T) {
+	s := newStoreOnTemp(t)
+	if on, trigger := s.AgentOrganize(); on || trigger != OrganizeOnLeave {
+		t.Fatalf("default = %v %q", on, trigger)
+	}
+	on, idle := true, OrganizeOnIdle
+	if _, err := s.Set(context.Background(), Patch{AgentOrganizeEnabled: &on, AgentOrganizeTrigger: &idle}); err != nil {
+		t.Fatal(err)
+	}
+	if on, trigger := s.AgentOrganize(); !on || trigger != OrganizeOnIdle {
+		t.Fatalf("after update = %v %q", on, trigger)
+	}
+	bad := "hourly"
+	if _, err := s.Set(context.Background(), Patch{AgentOrganizeTrigger: &bad}); err == nil {
+		t.Fatal("unknown trigger accepted")
+	}
+}

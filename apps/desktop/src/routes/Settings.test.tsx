@@ -809,6 +809,27 @@ describe("Settings", () => {
     );
   });
 
+  it("switches organizing on and picks when it runs (#387)", async () => {
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true, mcp_available: false }));
+    mocks.settingsGet.mockResolvedValue({ ...baseSettings });
+    mocks.settingsSet.mockImplementation((patch: Record<string, unknown>) =>
+      Promise.resolve({ ...baseSettings, ...patch }),
+    );
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByTestId("settings-tab-agent"));
+    // Off by default, and the moment is chosen only once it is on.
+    expect(screen.queryByTestId("organize-trigger")).toBeNull();
+    await user.click(await screen.findByTestId("organize-enabled"));
+    await waitFor(() => expect(mocks.settingsSet).toHaveBeenLastCalledWith({ agent_organize_enabled: true }));
+    const select = (await screen.findByTestId("organize-trigger")) as HTMLSelectElement;
+    expect(select.value).toBe("leave");
+    await waitFor(() => expect(screen.getByTestId("organize-trigger")).not.toBeDisabled());
+    await user.selectOptions(screen.getByTestId("organize-trigger"), "idle");
+    await waitFor(() => expect(mocks.settingsSet).toHaveBeenLastCalledWith({ agent_organize_trigger: "idle" }));
+  });
+
   it("treats a blank history budget as automatic and pulls a number into range", async () => {
     mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true, mcp_available: false }));
     mocks.settingsGet.mockResolvedValue({ ...baseSettings });

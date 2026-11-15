@@ -658,9 +658,10 @@ export const agent = {
     rpcCall<{ ok: true }>("agent.start_fresh", { project_id: projectId }),
   /** Reads the episode nodeId is in for what the work's record lacks, in the
    *  background, and proposes it into the inbox (#387). force reads scenes
-   *  already read as they are. */
-  organize: (projectId: string, nodeId: string, force = false) =>
-    rpcCall<OrganizeResult>("agent.organize", { project_id: projectId, node_id: nodeId, force }),
+   *  already read as they are. trigger marks a moment the app noticed: the
+   *  engine runs only when the writer switched organizing on for it. */
+  organize: (projectId: string, nodeId: string, force = false, trigger?: "leave" | "idle") =>
+    rpcCall<OrganizeResult>("agent.organize", { project_id: projectId, node_id: nodeId, force, trigger }),
   // Exactly one of batchId/snapshotId is expected — an outline batch from
   // linetta_apply_story_ops, or a scene write/revise's pre-write snapshot
   // (#112). rpcCall drops the other since it stringifies as undefined.

@@ -210,7 +210,11 @@ time, a tie between two people or one that changed, a promise the story now owes
 or one it just paid. Each finding goes to the suggestions inbox with the line it
 rests on; nothing changes until you accept it. It runs on your connected
 provider, not the trial, and its cost shows as "Organize suggestions" in
-Settings → Agent usage.
+Settings → Agent usage. **Suggest updates from episodes you write**, under
+Settings → Agent, runs it on its own — when you move to another episode, or
+after ten minutes without typing — for scenes changed by more than 300
+characters. It is off by default and never interrupts: findings simply wait in
+the inbox.
 
 The style check also reports paired contrast and narrator explanation in Korean
 prose, a sentence repeated across scenes, and consecutive scenes that end the same

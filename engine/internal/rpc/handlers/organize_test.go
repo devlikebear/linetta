@@ -31,7 +31,8 @@ func TestAgentOrganizeStartsOnChangedScenesAndRecordsTheOutcome(t *testing.T) {
 	_ = nr.Delete(ctx, *p.LastOpenedNodeID, 5)
 
 	ag := &fakeAgent{}
-	h := AgentOrganize(ag, organize.NewRepo(s, nr, pr), func(context.Context) string { return "ko" }, func() int64 { return 9 })
+	setting := func() (bool, string) { return false, "leave" }
+	h := AgentOrganize(ag, organize.NewRepo(s, nr, pr), func() (bool, string) { return setting() }, func(context.Context) string { return "ko" }, func() int64 { return 9 })
 	params := json.RawMessage(`{"project_id":"` + p.ID + `","node_id":"` + sc.ID + `"}`)
 	res, err := h(ctx, params)
 	if err != nil {
@@ -50,6 +51,29 @@ func TestAgentOrganizeStartsOnChangedScenesAndRecordsTheOutcome(t *testing.T) {
 	_ = json.Unmarshal(res, &out)
 	if out.Started || out.Unchanged != 1 || ag.organized != nil {
 		t.Fatalf("second ask = %+v", out)
+	}
+
+	// On its own it runs only when switched on for that trigger, and reads
+	// only scenes that changed by enough.
+	ag.organized = nil
+	auto := json.RawMessage(`{"project_id":"` + p.ID + `","node_id":"` + sc.ID + `","trigger":"leave","force":true}`)
+	res, _ = h(ctx, auto)
+	_ = json.Unmarshal(res, &out)
+	if !out.Off || ag.organized != nil {
+		t.Fatalf("switched off = %+v", out)
+	}
+	setting = func() (bool, string) { return true, "idle" }
+	res, _ = h(ctx, auto)
+	_ = json.Unmarshal(res, &out)
+	if !out.Off {
+		t.Fatalf("another trigger = %+v", out)
+	}
+	setting = func() (bool, string) { return true, "leave" }
+	res, _ = h(ctx, auto)
+	out = organizeResult{}
+	_ = json.Unmarshal(res, &out)
+	if out.Off || out.Started || out.Unchanged != 1 {
+		t.Fatalf("on, nothing new (force ignored) = %+v", out)
 	}
 
 	ag.organizeErr = &rpc.ReasonError{Reason: rpc.ReasonOrganizeTrial, Err: errors.New("trial")}

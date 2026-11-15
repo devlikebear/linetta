@@ -1107,6 +1107,10 @@ export interface Settings {
   summarizer_provider_enabled?: boolean;
   agent_settlement_enabled?: boolean;
   agent_impact_review_enabled?: boolean;
+  /** Organizing on its own (#387): off unless the writer turns it on. */
+  agent_organize_enabled?: boolean;
+  /** When: leaving an episode (default), a long rest, or only on request. */
+  agent_organize_trigger?: "leave" | "idle" | "manual" | "";
   /** Phrases to keep out of every work. */
   style_avoid_phrases?: string[];
   /** The writer's own length presets (#239); the built-in ones live in the app. */
@@ -1190,6 +1194,10 @@ export interface SettingsPatch {
   summarizer_provider_enabled?: boolean;
   agent_settlement_enabled?: boolean;
   agent_impact_review_enabled?: boolean;
+  /** Organizing on its own (#387): off unless the writer turns it on. */
+  agent_organize_enabled?: boolean;
+  /** When: leaving an episode (default), a long rest, or only on request. */
+  agent_organize_trigger?: "leave" | "idle" | "manual" | "";
   /** Phrases to keep out of every work. */
   style_avoid_phrases?: string[];
   /** The writer's own length presets (#239); the built-in ones live in the app. */
@@ -2621,4 +2629,8 @@ export interface OrganizeResult {
   scenes: number;
   unchanged: number;
   short: number;
+  /** On its own: scenes changed by too little to read again. */
+  small?: number;
+  /** On its own: organizing is off, or set to another moment. */
+  off?: boolean;
 }
