@@ -1939,6 +1939,16 @@ export interface ContinuityRef {
   label?: string;
 }
 
+/** A passage to open: a scene and a paragraph range in it, numbered as the
+ *  engine numbers them (style.Paragraphs), with the quote to light. */
+export interface PassageTarget {
+  nodeId: string;
+  paragraphFrom: number;
+  /** Defaults to paragraphFrom. */
+  paragraphTo?: number;
+  quote?: string;
+}
+
 /** One stored continuity observation. */
 export interface ContinuityObservation {
   id: string;

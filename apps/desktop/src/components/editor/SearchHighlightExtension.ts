@@ -14,6 +14,17 @@ interface SearchHighlightMeta {
 
 export const SearchHighlightPluginKey = new PluginKey<DecorationSet>("linettaSearchHighlight");
 
+/** A passage opened from elsewhere (a continuity citation): the quote when it
+ *  was found, else the cited paragraphs. Kept apart from the find bar's
+ *  matches so neither clears the other. `null` clears it. */
+export interface RevealHighlightMeta {
+  from: number;
+  to: number;
+  kind: "quote" | "paragraph";
+}
+
+export const RevealHighlightPluginKey = new PluginKey<DecorationSet>("linettaRevealHighlight");
+
 export const SearchHighlightExtension = Extension.create({
   name: "searchHighlight",
 
@@ -34,6 +45,25 @@ export const SearchHighlightExtension = Extension.create({
         props: {
           decorations(state) {
             return SearchHighlightPluginKey.getState(state) ?? DecorationSet.empty;
+          },
+        },
+      }),
+      new Plugin({
+        key: RevealHighlightPluginKey,
+        state: {
+          init: () => DecorationSet.empty,
+          apply: (tr, old, _oldState, newState) => {
+            const meta = tr.getMeta(RevealHighlightPluginKey) as RevealHighlightMeta | null | undefined;
+            if (meta === undefined) return old.map(tr.mapping, tr.doc);
+            if (meta === null) return DecorationSet.empty;
+            return DecorationSet.create(newState.doc, [
+              Decoration.inline(meta.from, meta.to, { class: `tiptap-reveal tiptap-reveal-${meta.kind}` }),
+            ]);
+          },
+        },
+        props: {
+          decorations(state) {
+            return RevealHighlightPluginKey.getState(state) ?? DecorationSet.empty;
           },
         },
       }),

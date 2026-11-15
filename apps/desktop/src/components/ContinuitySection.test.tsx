@@ -97,6 +97,48 @@ describe("ContinuitySection", () => {
     expect(screen.getByRole("button", { name: "하린" })).toBeInTheDocument();
   });
 
+  it("opens the scene at the cited paragraph and quote from the ¶ line", async () => {
+    mocks.list.mockResolvedValue({
+      checks: [check({ observations: [observation({ paragraph_from: 4, paragraph_to: 5 })] })],
+    });
+    const onRevealPassage = vi.fn();
+    renderSection({ onRevealPassage });
+
+    const passage = await screen.findByRole("button", { name: /¶4–5/ });
+    passage.click();
+    expect(onRevealPassage).toHaveBeenCalledWith({
+      nodeId: "n1",
+      paragraphFrom: 4,
+      paragraphTo: 5,
+      quote: "하린은 오른손으로 검을 뽑았다.",
+    });
+  });
+
+  it("keeps the ¶ line as plain text when there is nowhere to open it", async () => {
+    mocks.list.mockResolvedValue({ checks: [check({ observations: [observation()] })] });
+    renderSection();
+
+    expect(await screen.findByText(/하린은 오른손으로 검을 뽑았다/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /¶1/ })).toBeNull();
+  });
+
+  it("opens a scene ref at the paragraph it names", async () => {
+    mocks.list.mockResolvedValue({
+      checks: [check({
+        observations: [observation({
+          refs: [{ type: "scene" as const, id: "n0", label: "1화 · 첫 장면", paragraph: 7, quote: "하린은 왼손으로 펜을 쥐었다." }],
+        })],
+      })],
+    });
+    const onRevealPassage = vi.fn();
+    const onOpenNode = vi.fn();
+    renderSection({ onRevealPassage, onOpenNode });
+
+    (await screen.findByRole("button", { name: "1화 · 첫 장면 · ¶7" })).click();
+    expect(onRevealPassage).toHaveBeenCalledWith({ nodeId: "n0", paragraphFrom: 7, quote: "하린은 왼손으로 펜을 쥐었다." });
+    expect(onOpenNode).not.toHaveBeenCalled();
+  });
+
   it("shows a clean check as 'no issues' rather than an empty list", async () => {
     mocks.list.mockResolvedValue({ checks: [check({ observations: [] })] });
     renderSection();

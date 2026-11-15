@@ -111,6 +111,39 @@
   box-shadow: 0 0 0 2px color-mix(in oklch, var(--accent) 32%, transparent);
 }
 
+/* A passage opened from a citation: lit, then fading out over three seconds.
+   The decoration itself is removed once the fade is done. */
+/* Background only: a quote across marks is several spans, and a per-span
+   border or shadow would draw a seam at each mark boundary. */
+.tiptap-editor .ProseMirror .tiptap-reveal {
+  animation: tiptap-reveal-fade 3s ease-in forwards;
+}
+
+.tiptap-editor .ProseMirror .tiptap-reveal-quote {
+  --reveal-tint: color-mix(in oklch, var(--accent) 30%, transparent);
+}
+
+.tiptap-editor .ProseMirror .tiptap-reveal-paragraph {
+  --reveal-tint: var(--accent-tint);
+}
+
+@keyframes tiptap-reveal-fade {
+  0%,
+  40% {
+    background: var(--reveal-tint);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tiptap-editor .ProseMirror .tiptap-reveal {
+    animation: none;
+    background: var(--reveal-tint);
+  }
+}
+
 /* Shown when the scene holds nodes this editor can't read; the editor is
    read-only and blank underneath it. */
 .tiptap-content-error {

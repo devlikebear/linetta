@@ -1,0 +1,140 @@
+{
+  "doc": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 2
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "1장"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "비가 내렸다."
+          }
+        ]
+      },
+      {
+        "type": "paragraph"
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "   "
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "수아는 "
+          },
+          {
+            "type": "text",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ],
+            "text": "은빛"
+          },
+          {
+            "type": "text",
+            "text": " "
+          },
+          {
+            "type": "text",
+            "marks": [
+              {
+                "type": "italic"
+              },
+              {
+                "type": "underline"
+              }
+            ],
+            "text": "열쇠"
+          },
+          {
+            "type": "text",
+            "text": "를 쥐었다."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": " "
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "마지막 문단."
+          }
+        ]
+      }
+    ]
+  },
+  "paragraphs": [
+    "1장",
+    "비가 내렸다.",
+    "수아는 은빛 열쇠를 쥐었다.",
+    "마지막 문단."
+  ],
+  "quotes": [
+    {
+      "from": 3,
+      "to": 3,
+      "quote": "은빛 열쇠를",
+      "found": true
+    },
+    {
+      "from": 3,
+      "to": 3,
+      "quote": "  수아는   은빛 ",
+      "found": true
+    },
+    {
+      "from": 2,
+      "to": 3,
+      "quote": "내렸다. 수아는",
+      "found": true
+    },
+    {
+      "from": 3,
+      "to": 3,
+      "quote": "은빛 열쇠",
+      "found": true
+    },
+    {
+      "from": 3,
+      "to": 3,
+      "quote": "비가",
+      "found": false
+    },
+    {
+      "from": 3,
+      "to": 3,
+      "quote": "은빛열쇠",
+      "found": false
+    }
+  ]
+}

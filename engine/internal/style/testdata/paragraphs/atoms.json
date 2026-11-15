@@ -1,0 +1,124 @@
+{
+  "doc": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "mention",
+            "attrs": {
+              "id": "e1",
+              "label": "수아"
+            }
+          },
+          {
+            "type": "text",
+            "text": "가 문을 열었다."
+          },
+          {
+            "type": "noteMarker",
+            "attrs": {
+              "noteId": "n1"
+            }
+          }
+        ]
+      },
+      {
+        "type": "illustration",
+        "attrs": {
+          "id": "ill-1",
+          "caption": "비 오는 음악실"
+        }
+      },
+      {
+        "type": "horizontalRule"
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "이름 없는 "
+          },
+          {
+            "type": "mention",
+            "attrs": {
+              "id": "e2",
+              "label": null
+            }
+          },
+          {
+            "type": "text",
+            "text": "언급"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "noteMarker",
+            "attrs": {
+              "noteId": "n2"
+            }
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "marks": [
+              {
+                "type": "link",
+                "attrs": {
+                  "href": "https://example.com"
+                }
+              }
+            ],
+            "text": "링크"
+          },
+          {
+            "type": "text",
+            "marks": [
+              {
+                "type": "code"
+              }
+            ],
+            "text": "코드"
+          },
+          {
+            "type": "text",
+            "marks": [
+              {
+                "type": "strike"
+              }
+            ],
+            "text": "취소"
+          }
+        ]
+      }
+    ]
+  },
+  "paragraphs": [
+    "수아가 문을 열었다.",
+    "이름 없는 언급",
+    "링크코드취소"
+  ],
+  "quotes": [
+    {
+      "from": 1,
+      "to": 1,
+      "quote": "수아가 문을",
+      "found": true
+    },
+    {
+      "from": 3,
+      "to": 3,
+      "quote": "링크코드",
+      "found": true
+    }
+  ]
+}

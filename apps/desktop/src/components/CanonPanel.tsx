@@ -6,7 +6,7 @@ import { SettlementPending } from "./SettlementPending";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Library, Search, X } from "lucide-react";
 import { entities as entitiesApi, proposals as proposalsApi, relationships as relationshipsApi } from "../lib/rpc";
-import type { Entity, EntityKind, Relationship } from "../lib/types";
+import type { Entity, EntityKind, PassageTarget, Relationship } from "../lib/types";
 import { useI18n } from "../lib/i18n";
 import { rpcErrorMessage } from "../lib/rpcMessage";
 import "./CanonPanel.css";
@@ -41,6 +41,8 @@ interface Props {
   onOpenWriterStyle?: () => void;
   /** Opens the Fact Book at a continuity observation's fact ref. */
   onOpenFact?: (factId: string) => void;
+  /** Opens a scene at a continuity observation's cited paragraph. */
+  onRevealPassage?: (target: PassageTarget) => void;
   /** Opens the suggestions inbox (story-assist Phase 3). Omitted entirely
    *  hides the badge — a caller that has nowhere to send the click should
    *  not show one. */
@@ -53,7 +55,7 @@ interface Props {
 
 export function CanonPanel({
   projectId, onOpenEntity, onClose, refreshKey = 0, nodeId, onOpenNode, onBeforeStyleCheck, onOpenWriterStyle, onOpenFact,
-  onOpenProposals, continuityFocusRequest,
+  onOpenProposals, continuityFocusRequest, onRevealPassage,
 }: Readonly<Props>) {
   const { t } = useI18n();
   const [all, setAll] = useState<Entity[]>([]);
@@ -162,6 +164,7 @@ export function CanonPanel({
           onOpenNode={onOpenNode}
           onOpenEntity={onOpenEntity}
           onOpenFact={onOpenFact}
+          onRevealPassage={onRevealPassage}
           focusRequest={continuityFocusRequest}
         />
 
