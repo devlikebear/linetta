@@ -305,6 +305,25 @@ func (s *Service) Accept(ctx context.Context, now int64, projectID string, itemI
 				continue
 			}
 
+			if it.Ledger != nil {
+				// A ledger item is written to the ledger, checked again
+				// as it goes in: the scene its quote names may have
+				// changed since it was proposed. It has no ref, no
+				// dependency and no storyops undo batch.
+				it.Result, it.Status = s.applyLedgerItem(ctx, now, projectID, it.Ledger)
+				if it.Status == StatusAccepted {
+					committed[it.ID] = true
+					kinds["ledger"] = true
+				}
+				it.StatusAt = now
+				if werr := s.updateItemStatus(ctx, s.store.DB(), it.ID, it.Status, it.Result, now); werr != nil {
+					return AcceptResult{}, fmt.Errorf("persist item %s status: %w", it.ID, werr)
+				}
+				outcomes[it.ID] = it
+				changed = true
+				continue
+			}
+
 			op := it.Op
 			if edited, ok := edits[it.ID]; ok {
 				validated, err := s.validateEditedOp(lookup, seeded, edited)
@@ -838,4 +857,27 @@ func (s *Service) validateEditedOp(lookup refLookup, seeded storyops.Refs, op st
 		}
 	}
 	return op, nil
+}
+
+// applyLedgerItem adds or changes the ledger entry l proposes. The result's
+// CreatedID is the entry's id either way.
+func (s *Service) applyLedgerItem(ctx context.Context, now int64, projectID string, l *LedgerItem) (ItemResult, string) {
+	if s.ledger == nil {
+		return ItemResult{Error: "the story ledger is not available in this build"}, StatusFailed
+	}
+	if l.EntryID == "" {
+		e, err := s.ledger.Add(ctx, now, l.entry(projectID))
+		if err != nil {
+			return ItemResult{Error: err.Error()}, StatusFailed
+		}
+		return ItemResult{CreatedID: e.ID}, StatusAccepted
+	}
+	if err := s.ledger.CheckUpdate(ctx, projectID, l.EntryID, l.patch()); err != nil {
+		return ItemResult{Error: err.Error()}, StatusFailed
+	}
+	e, err := s.ledger.Update(ctx, now, l.EntryID, l.patch())
+	if err != nil {
+		return ItemResult{Error: err.Error()}, StatusFailed
+	}
+	return ItemResult{CreatedID: e.ID}, StatusAccepted
 }

@@ -23,6 +23,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/episode"
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/forecast"
+	"github.com/devlikebear/linetta/engine/internal/ledger"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/store"
@@ -43,12 +44,17 @@ const (
 	// purpose create_outline_node and create_scene may appear under, and
 	// the only one that requires ForecastID. See Submit's doc comment.
 	PurposeForecast = "forecast"
+	// PurposeOrganize is what an agent found tidying up after the writer's
+	// own episodes (#387): new names, relationships, promises planted and
+	// paid. Proposed like general, and kept apart so the inbox can show it as
+	// its own batch.
+	PurposeOrganize = "organize"
 )
 
 // ValidPurpose reports whether v is a purpose this phase supports.
 func ValidPurpose(v string) bool {
 	switch v {
-	case PurposeGeneral, PurposeImportExtraction, PurposeForecast:
+	case PurposeGeneral, PurposeImportExtraction, PurposeForecast, PurposeOrganize:
 		return true
 	default:
 		return false
@@ -207,8 +213,36 @@ type EvidenceInput struct {
 }
 
 // ItemInput is one op a model proposes, exactly as submitted.
+// LedgerItem is a proposed story ledger change (#387): with no entry_id, an
+// entry to add; with one, a change to that entry, most often marking a
+// promise paid. It is checked the way linetta_edit_ledger checks an entry —
+// quotes in their scene, a paid entry with the scene that pays it — when it
+// is proposed and again when it is accepted.
+type LedgerItem struct {
+	EntryID       string `json:"entry_id,omitempty" jsonschema:"to change an entry, from linetta_list_ledger"`
+	Kind          string `json:"kind,omitempty" jsonschema:"to add: promise, gag, question, decision"`
+	Subject       string `json:"subject,omitempty"`
+	Body          string `json:"body,omitempty"`
+	Status        string `json:"status,omitempty"`
+	PlantedNodeID string `json:"planted_node_id,omitempty"`
+	PlantedQuote  string `json:"planted_quote,omitempty"`
+	DueNodeID     string `json:"due_node_id,omitempty"`
+	PaidNodeID    string `json:"paid_node_id,omitempty"`
+	PaidQuote     string `json:"paid_quote,omitempty"`
+}
+
+// ledgerKinds are what a ledger item may add: what the story owes, and the
+// writer's decisions. Facts with spans stay with linetta_edit_ledger, which
+// can see their conflicts.
+var ledgerKinds = map[string]bool{
+	ledger.KindPromise: true, ledger.KindGag: true, ledger.KindQuestion: true, ledger.KindDecision: true,
+}
+
 type ItemInput struct {
-	Op storyops.Op `json:"op"`
+	Op storyops.Op `json:"op,omitempty"`
+	// Ledger is a story ledger entry instead of an op; an item has one or
+	// the other.
+	Ledger *LedgerItem `json:"ledger,omitempty" jsonschema:"instead of op: a ledger entry to add, or a change to one"`
 	// Evidence cites where this item came from; verified against the
 	// scene's actual paragraphs the same way continuity.Validate verifies
 	// an observation's quote.
@@ -222,7 +256,7 @@ type ItemInput struct {
 type SubmitInput struct {
 	ProjectID string `json:"project_id"`
 	Summary   string `json:"summary,omitempty" jsonschema:"one line describing the whole batch"`
-	Purpose   string `json:"purpose,omitempty" jsonschema:"one of: general, import_extraction, forecast"`
+	Purpose   string `json:"purpose,omitempty" jsonschema:"one of: general, import_extraction, organize, forecast"`
 	// ForecastID is required when Purpose is PurposeForecast: the
 	// forecast this batch reflects into the outline. That forecast must
 	// have a selected branch — Submit refuses the batch otherwise.
@@ -279,6 +313,7 @@ type Item struct {
 	ProjectID   string          `json:"project_id"`
 	Ordinal     int             `json:"ordinal"`
 	Op          storyops.Op     `json:"op"`
+	Ledger      *LedgerItem     `json:"ledger,omitempty"`
 	DependsOn   []string        `json:"depends_on"`
 	Evidence    []EvidenceInput `json:"evidence"`
 	FromNodeIDs []string        `json:"from_node_ids"`
@@ -338,6 +373,9 @@ type Service struct {
 	// for purpose=forecast (to confirm ForecastID exists in this project
 	// and has a selected branch) — every other purpose never touches it.
 	forecasts *forecast.Service
+	// ledger is nil until WithLedger wires it; ledger items are refused
+	// without it.
+	ledger *ledger.Repo
 
 	// notify, when set, is called after Accept/Reject change a proposal's
 	// status — the Go -> ffi.rs -> frontend "proposals.changed" path
@@ -371,6 +409,13 @@ func New(
 // way a nil skills store answers "no skills" rather than panicking.
 func (s *Service) WithForecasts(f *forecast.Service) *Service {
 	s.forecasts = f
+	return s
+}
+
+// WithLedger wires the story ledger, which ledger items are checked against
+// and applied to.
+func (s *Service) WithLedger(l *ledger.Repo) *Service {
+	s.ledger = l
 	return s
 }
 

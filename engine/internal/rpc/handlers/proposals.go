@@ -30,11 +30,14 @@ type proposalEvidenceOut struct {
 // a row without resolving anything itself: a human summary, cited
 // evidence with breadcrumbs, and whether a dependency was rejected.
 type proposalItemOut struct {
-	ID                string                `json:"id"`
-	ProposalID        string                `json:"proposal_id"`
-	Ordinal           int                   `json:"ordinal"`
-	OpType            string                `json:"op_type"`
-	Op                storyops.Op           `json:"op"`
+	ID         string      `json:"id"`
+	ProposalID string      `json:"proposal_id"`
+	Ordinal    int         `json:"ordinal"`
+	OpType     string      `json:"op_type"`
+	Op         storyops.Op `json:"op"`
+	// Ledger is a ledger item's proposed entry or change (#387); OpType is
+	// then proposals.LedgerOpType.
+	Ledger            *proposals.LedgerItem `json:"ledger,omitempty"`
 	Summary           string                `json:"summary"`
 	DependsOn         []string              `json:"depends_on"`
 	BlockedByRejected bool                  `json:"blocked_by_rejected"`
@@ -100,8 +103,8 @@ func ListProposals(svc *proposals.Service, nodes *node.Repo) rpc.Handler {
 				}
 				items = append(items, proposalItemOut{
 					ID: it.ID, ProposalID: it.ProposalID, Ordinal: it.Ordinal,
-					OpType: it.Op.Type, Op: it.Op,
-					Summary:           svc.Summarize(ctx, it.Op, p.Items),
+					OpType: proposals.ItemOpType(it), Op: it.Op, Ledger: it.Ledger,
+					Summary:           svc.SummarizeItem(ctx, it, p.Items),
 					DependsOn:         it.DependsOn,
 					BlockedByRejected: proposals.DependencyRejected(it, p.Items),
 					Evidence:          evidence,

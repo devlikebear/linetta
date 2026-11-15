@@ -108,18 +108,26 @@ func (s *Service) insertItem(ctx context.Context, tx dbTx, it Item) error {
 	if err != nil {
 		return err
 	}
+	ledgerJSON := ""
+	if it.Ledger != nil {
+		b, err := json.Marshal(it.Ledger)
+		if err != nil {
+			return err
+		}
+		ledgerJSON = string(b)
+	}
 	_, err = tx.ExecContext(ctx,
 		`INSERT INTO story_proposal_items
 		    (id, proposal_id, project_id, ordinal, op_json, depends_on_json, evidence_json,
-		     from_node_ids_json, duplicates_json, status, result_json, status_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		     from_node_ids_json, duplicates_json, status, result_json, status_at, ledger_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		it.ID, it.ProposalID, it.ProjectID, it.Ordinal, string(opJSON), dependsJSON, string(evidenceJSON),
-		fromNodesJSON, string(dupesJSON), it.Status, string(resultJSON), it.StatusAt)
+		fromNodesJSON, string(dupesJSON), it.Status, string(resultJSON), it.StatusAt, ledgerJSON)
 	return err
 }
 
 const itemColumns = `id, proposal_id, project_id, ordinal, op_json, depends_on_json, evidence_json,
-       from_node_ids_json, duplicates_json, status, result_json, status_at, undo_batch_id`
+       from_node_ids_json, duplicates_json, status, result_json, status_at, undo_batch_id, ledger_json`
 
 func (s *Service) getItem(ctx context.Context, tx dbTx, id string) (Item, error) {
 	row := tx.QueryRowContext(ctx, `SELECT `+itemColumns+` FROM story_proposal_items WHERE id = ?`, id)
@@ -400,11 +408,17 @@ type rowScanner interface {
 
 func scanItem(row rowScanner) (Item, error) {
 	var it Item
-	var opJSON, dependsJSON, evidenceJSON, fromNodesJSON, dupesJSON, resultJSON string
+	var opJSON, dependsJSON, evidenceJSON, fromNodesJSON, dupesJSON, resultJSON, ledgerJSON string
 	var undoBatchID sql.NullString
 	if err := row.Scan(&it.ID, &it.ProposalID, &it.ProjectID, &it.Ordinal, &opJSON, &dependsJSON,
-		&evidenceJSON, &fromNodesJSON, &dupesJSON, &it.Status, &resultJSON, &it.StatusAt, &undoBatchID); err != nil {
+		&evidenceJSON, &fromNodesJSON, &dupesJSON, &it.Status, &resultJSON, &it.StatusAt, &undoBatchID, &ledgerJSON); err != nil {
 		return Item{}, err
+	}
+	if ledgerJSON != "" {
+		it.Ledger = &LedgerItem{}
+		if err := json.Unmarshal([]byte(ledgerJSON), it.Ledger); err != nil {
+			return Item{}, fmt.Errorf("decode ledger: %w", err)
+		}
 	}
 	it.UndoBatchID = undoBatchID.String
 	if err := json.Unmarshal([]byte(opJSON), &it.Op); err != nil {

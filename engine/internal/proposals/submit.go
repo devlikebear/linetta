@@ -2,12 +2,14 @@ package proposals
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
 
 	"github.com/devlikebear/linetta/engine/internal/evidence"
+	"github.com/devlikebear/linetta/engine/internal/ledger"
 	"github.com/devlikebear/linetta/engine/internal/storyops"
 )
 
@@ -49,7 +51,7 @@ func (s *Service) Submit(ctx context.Context, now int64, in SubmitInput, source 
 	opAllowList := allowedOpTypes
 	forecastID := ""
 	switch purpose {
-	case PurposeGeneral, PurposeImportExtraction:
+	case PurposeGeneral, PurposeImportExtraction, PurposeOrganize:
 		// ok
 	case PurposeForecast:
 		opAllowList = forecastOpTypes
@@ -68,7 +70,7 @@ func (s *Service) Submit(ctx context.Context, now int64, in SubmitInput, source 
 			}
 		}
 	default:
-		add(GlobalIndex, "purpose %q is not valid; use general, import_extraction or forecast", purpose)
+		add(GlobalIndex, "purpose %q is not valid; use general, import_extraction, organize or forecast", purpose)
 	}
 	if n := len(in.Items); n == 0 {
 		add(GlobalIndex, "items is required; propose at least one")
@@ -110,6 +112,16 @@ func (s *Service) Submit(ctx context.Context, now int64, in SubmitInput, source 
 	declaredRefs := map[string]int{} // ref -> item index
 	for i, item := range in.Items {
 		op := item.Op
+		if item.Ledger != nil {
+			if op.Type != "" {
+				add(i, "item %d: give op or ledger, not both", i+1)
+			} else if purpose == PurposeForecast {
+				add(i, "item %d: a forecast batch carries outline items only; propose ledger entries with purpose=general or organize", i+1)
+			} else {
+				s.checkLedgerItem(ctx, projectID, i, item.Ledger, add)
+			}
+			continue
+		}
 		if !opAllowList[op.Type] {
 			add(i, "item %d: op %q cannot be proposed for purpose=%s; use linetta_apply_story_ops for a "+
 				"direct small change or linetta_write_scene for manuscript text. Proposable ops: %s",
@@ -149,7 +161,7 @@ func (s *Service) Submit(ctx context.Context, now int64, in SubmitInput, source 
 	dependsOnIdx := make([][]int, len(in.Items))
 	for i, item := range in.Items {
 		op := ops[i]
-		if !opAllowList[op.Type] {
+		if item.Ledger == nil && !opAllowList[op.Type] {
 			continue // already reported in pass 1
 		}
 		num := i + 1
@@ -343,6 +355,7 @@ func (s *Service) Submit(ctx context.Context, now int64, in SubmitInput, source 
 			ID:          itemIDs[i],
 			Ordinal:     i,
 			Op:          ops[i],
+			Ledger:      trimLedger(item.Ledger),
 			DependsOn:   dependsOn,
 			Evidence:    item.Evidence,
 			FromNodeIDs: trimAll(item.FromNodeIDs),
@@ -416,5 +429,74 @@ func evidenceMessage(ev EvidenceInput, err error) string {
 			ev.NodeID, ee.To)
 	default:
 		return err.Error()
+	}
+}
+
+// checkLedgerItem holds a proposed ledger change to what the ledger itself
+// would accept, reporting through add. The entry is not written.
+func (s *Service) checkLedgerItem(ctx context.Context, projectID string, i int, l *LedgerItem, add func(int, string, ...any)) {
+	num := i + 1
+	if s.ledger == nil {
+		add(i, "item %d: the story ledger is not available in this build", num)
+		return
+	}
+	l = trimLedger(l)
+	var err error
+	if l.EntryID == "" {
+		if !ledgerKinds[l.Kind] {
+			add(i, "item %d: ledger kind %q cannot be proposed; use promise, gag, question or decision", num, l.Kind)
+			return
+		}
+		err = s.ledger.CheckAdd(ctx, l.entry(projectID))
+	} else {
+		if l.Kind != "" {
+			add(i, "item %d: an entry's kind cannot be changed; leave kind out to change entry %q", num, l.EntryID)
+			return
+		}
+		err = s.ledger.CheckUpdate(ctx, projectID, l.EntryID, l.patch())
+	}
+	switch {
+	case err == nil:
+	case errors.Is(err, ledger.ErrNotFound), errors.Is(err, ledger.ErrWrongWork):
+		add(i, "item %d: ledger entry %q is not in this work; check it with linetta_list_ledger", num, l.EntryID)
+	default:
+		add(i, "item %d: %v", num, err)
+	}
+}
+
+// trimLedger returns a copy of l with every field trimmed, or nil.
+func trimLedger(l *LedgerItem) *LedgerItem {
+	if l == nil {
+		return nil
+	}
+	t := *l
+	for _, f := range []*string{&t.EntryID, &t.Kind, &t.Subject, &t.Body, &t.Status, &t.PlantedNodeID,
+		&t.PlantedQuote, &t.DueNodeID, &t.PaidNodeID, &t.PaidQuote} {
+		*f = strings.TrimSpace(*f)
+	}
+	return &t
+}
+
+// entry is l as a new entry an agent proposed.
+func (l *LedgerItem) entry(projectID string) ledger.Entry {
+	return ledger.Entry{
+		ProjectID: projectID, Kind: l.Kind, Subject: l.Subject, Body: l.Body, Status: l.Status,
+		PlantedNodeID: l.PlantedNodeID, PlantedQuote: l.PlantedQuote, DueNodeID: l.DueNodeID,
+		PaidNodeID: l.PaidNodeID, PaidQuote: l.PaidQuote, Source: ledger.SourceAgent,
+	}
+}
+
+// patch is l as a change to an existing entry: what it names, nothing else.
+func (l *LedgerItem) patch() ledger.Patch {
+	set := func(v string) *string {
+		if v == "" {
+			return nil
+		}
+		return &v
+	}
+	return ledger.Patch{
+		Subject: set(l.Subject), Body: set(l.Body), Status: set(l.Status),
+		PlantedNodeID: set(l.PlantedNodeID), PlantedQuote: set(l.PlantedQuote), DueNodeID: set(l.DueNodeID),
+		PaidNodeID: set(l.PaidNodeID), PaidQuote: set(l.PaidQuote),
 	}
 }

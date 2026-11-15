@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/devlikebear/linetta/engine/internal/ledger"
 	"github.com/devlikebear/linetta/engine/internal/storyops"
 )
 
@@ -111,4 +112,61 @@ func entityKindLabelKo(kind string) string {
 	default:
 		return "인물"
 	}
+}
+
+// LedgerOpType is what the inbox and the agent's inbox listing call a ledger
+// item, which has no storyops op.
+const LedgerOpType = "ledger_entry"
+
+// ItemOpType is it's op type for display: its op's, or LedgerOpType.
+func ItemOpType(it Item) string {
+	if it.Ledger != nil {
+		return LedgerOpType
+	}
+	return it.Op.Type
+}
+
+// SummarizeItem is Summarize for any item, a ledger item included.
+func (s *Service) SummarizeItem(ctx context.Context, it Item, siblings []Item) string {
+	if it.Ledger == nil {
+		return s.Summarize(ctx, it.Op, siblings)
+	}
+	l := it.Ledger
+	if l.EntryID == "" {
+		return fmt.Sprintf("%s 추가: %s", ledgerKindLabelKo(l.Kind), ledgerLine(l.Subject, l.Body))
+	}
+	name := l.EntryID
+	if s.ledger != nil {
+		if e, err := s.ledger.Get(ctx, l.EntryID); err == nil {
+			name = ledgerLine(e.Subject, e.Body)
+		}
+	}
+	switch l.Status {
+	case ledger.StatusPaid:
+		return fmt.Sprintf("회수로 표시: %s", name)
+	case ledger.StatusDropped:
+		return fmt.Sprintf("버림으로 표시: %s", name)
+	}
+	return fmt.Sprintf("원장 수정: %s", name)
+}
+
+func ledgerLine(subject, body string) string {
+	if subject == "" {
+		return body
+	}
+	return subject + " — " + body
+}
+
+func ledgerKindLabelKo(kind string) string {
+	switch kind {
+	case ledger.KindPromise:
+		return "복선"
+	case ledger.KindGag:
+		return "반복 개그"
+	case ledger.KindQuestion:
+		return "독자의 질문"
+	case ledger.KindDecision:
+		return "결정"
+	}
+	return "원장 항목"
 }
