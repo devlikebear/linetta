@@ -503,14 +503,14 @@ export const en: Translation = {
       { name: 'Off', body: 'The default. Nothing listens, and nothing is exposed.' },
       {
         name: 'Read only',
-        body: 'Nineteen read tools. The write tools are never registered, so they do not appear in tools/list and cannot be called.'
+        body: 'Twenty read tools. The write tools are never registered, so they do not appear in tools/list and cannot be called.'
       },
       {
         name: 'Full',
-        body: 'All forty-six. A scene write is snapshotted first, and an outline restructuring can be undone in one call.'
+        body: 'All forty-seven. A scene write is snapshotted first, and an outline restructuring can be undone in one call.'
       }
     ],
-    toolsLabel: 'Forty-six tools, not a hundred RPCs',
+    toolsLabel: 'Forty-seven tools, not a hundred RPCs',
     toolsNote:
       'A client’s tool budget is finite and selection accuracy falls as the list grows, so the engine’s RPC surface is not exposed one-to-one. Access can also be pinned to a single work, and Settings → Tool budget shows what each optional group costs and turns it off.',
     readLabel: 'Read',
@@ -520,6 +520,7 @@ export const en: Translation = {
       { name: 'linetta_read_scene', note: 'Scene text with its content version' },
       { name: 'linetta_get_outline', note: 'The tree with labels, kinds, status and length' },
       { name: 'linetta_search_manuscript', note: 'Full-text search across the work' },
+      { name: 'linetta_cite_sources', note: 'Checks quoted passages against the text and numbers them as sources' },
       { name: 'linetta_list_works', note: 'Works, titles, status, scene counts' },
       { name: 'linetta_list_characters', note: 'Characters, places, objects, concepts' },
       { name: 'linetta_where_does_appear', note: 'Every scene an entity appears in' },
@@ -1060,14 +1061,14 @@ export const ko: Translation = {
       { name: '꺼짐', body: '기본값입니다. 아무것도 열리지 않고, 아무것도 노출되지 않습니다.' },
       {
         name: '읽기 전용',
-        body: '읽기 툴 19개. 쓰기 툴은 아예 등록되지 않아 tools/list에 나타나지도, 호출되지도 않습니다.'
+        body: '읽기 툴 20개. 쓰기 툴은 아예 등록되지 않아 tools/list에 나타나지도, 호출되지도 않습니다.'
       },
       {
         name: '전체',
-        body: '46개 전부. 씬 쓰기는 먼저 스냅샷되고, 아웃라인 구조 변경은 한 번의 호출로 되돌릴 수 있습니다.'
+        body: '47개 전부. 씬 쓰기는 먼저 스냅샷되고, 아웃라인 구조 변경은 한 번의 호출로 되돌릴 수 있습니다.'
       }
     ],
-    toolsLabel: 'RPC 100개가 아니라, 툴 46개',
+    toolsLabel: 'RPC 100개가 아니라, 툴 47개',
     toolsNote:
       '클라이언트의 툴 예산은 유한하고 목록이 길어질수록 선택 정확도가 떨어집니다. 그래서 엔진 RPC를 1:1로 노출하지 않습니다. 접근을 한 작품으로 제한할 수도 있고, 설정 → 툴 예산에서 선택 그룹별 비용을 보고 끌 수 있습니다.',
     readLabel: '읽기',
@@ -1077,6 +1078,7 @@ export const ko: Translation = {
       { name: 'linetta_read_scene', note: '본문과 content_version' },
       { name: 'linetta_get_outline', note: '라벨·종류·상태·분량이 붙은 트리' },
       { name: 'linetta_search_manuscript', note: '원고 전문 검색' },
+      { name: 'linetta_cite_sources', note: '인용한 문단을 원고와 대조해 번호 붙은 출처로 돌려줌' },
       { name: 'linetta_list_works', note: '작품, 제목, 상태, 씬 수' },
       { name: 'linetta_list_characters', note: '인물, 장소, 사물, 개념' },
       { name: 'linetta_where_does_appear', note: '특정 엔티티가 등장하는 모든 씬' },
@@ -1615,14 +1617,14 @@ export const ja: Translation = {
       { name: 'オフ', body: '既定値です。何も待ち受けず、何も公開されません。' },
       {
         name: '読み取り専用',
-        body: '読み取りツール19個。書き込みツールは登録すらされないので、tools/list に現れず、呼び出せません。'
+        body: '読み取りツール20個。書き込みツールは登録すらされないので、tools/list に現れず、呼び出せません。'
       },
       {
         name: 'フル',
-        body: '46個すべて。シーンの書き込みは先にスナップショットされ、アウトラインの構造変更は一度の呼び出しで取り消せます。'
+        body: '47個すべて。シーンの書き込みは先にスナップショットされ、アウトラインの構造変更は一度の呼び出しで取り消せます。'
       }
     ],
-    toolsLabel: 'RPC 百個ではなく、ツール46個',
+    toolsLabel: 'RPC 百個ではなく、ツール47個',
     toolsNote:
       'クライアントのツール予算は有限で、一覧が伸びるほど選択の精度は落ちます。だからエンジンの RPC を1対1では公開しません。アクセスを一つの作品に限定することもでき、設定 → ツール予算で任意グループごとのコストを見てオフにできます。',
     readLabel: '読み取り',
@@ -1632,6 +1634,7 @@ export const ja: Translation = {
       { name: 'linetta_read_scene', note: '本文と content_version' },
       { name: 'linetta_get_outline', note: 'ラベル・種類・状態・分量を伴うツリー' },
       { name: 'linetta_search_manuscript', note: '原稿の全文検索' },
+      { name: 'linetta_cite_sources', note: '引用した段落を原稿と照合し、番号付きの出典として返す' },
       { name: 'linetta_list_works', note: '作品、題、状態、シーン数' },
       { name: 'linetta_list_characters', note: '人物、場所、もの、概念' },
       { name: 'linetta_where_does_appear', note: '特定のエンティティが登場する全シーン' },

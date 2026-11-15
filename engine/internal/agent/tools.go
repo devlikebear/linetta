@@ -275,7 +275,10 @@ type toolResult struct {
 	// left, so the panel can put the writer's approval card under the line.
 	RequestID string
 	// Ask is the card linetta_ask_writer put in front of the writer.
-	Ask       *askCard
+	Ask *askCard
+	// Citations are the sources linetta_cite_sources verified, for the panel
+	// to draw under the reply (#385).
+	Citations []mcphost.CitedSource
 	Truncated bool
 }
 
@@ -310,7 +313,35 @@ func (s *toolSession) call(ctx context.Context, runID, name, arguments string) t
 	out := toolResult{IsError: res.IsError}
 	out.Text, out.Truncated = capText(textOf(res))
 	out.BatchID, out.SnapshotID, out.NodeIDs, out.RequestID = writeMetadata(res)
+	if name == citeToolName && !res.IsError {
+		out.Citations = citationsOf(res)
+	}
 	return out
+}
+
+// citeToolName is the one tool whose result carries sources for the panel.
+// Read by name rather than off any result with a "citations" key, the way
+// writeMetadata reads its fields: a source card is a claim that the engine
+// checked the quote, and only this tool checks it.
+const citeToolName = "linetta_cite_sources"
+
+// citationsOf reads linetta_cite_sources' verified list off its structured
+// result. Nil when there is none to read.
+func citationsOf(res *mcp.CallToolResult) []mcphost.CitedSource {
+	if res.StructuredContent == nil {
+		return nil
+	}
+	raw, err := json.Marshal(res.StructuredContent)
+	if err != nil {
+		return nil
+	}
+	var out struct {
+		Citations []mcphost.CitedSource `json:"citations"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil
+	}
+	return out.Citations
 }
 
 func textOf(res *mcp.CallToolResult) string {

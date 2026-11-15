@@ -138,7 +138,7 @@ Claude Code, Claude Desktop — can work on the manuscript. It is off until the
 writer consents and enables it under **Settings → Connect an external agent**,
 binds `127.0.0.1` only, and requires a locally generated bearer token.
 
-The default tool set has 45 tools (18 read, 27 write). Optional memory, skills,
+The default tool set has 47 tools (20 read, 27 write). Optional memory, skills,
 and visual-write groups can be switched off in Settings → Tool budget. Write tools appear
 only in `full` mode, so `read_only` omits them from `tools/list` entirely
 rather than refusing them at call time.
@@ -162,6 +162,11 @@ Read:
   deterministic and model-free; tone is left to the caller. The same call
   returns `stats` — counted measurements of the scenes read (`style.Measure`)
 - `linetta_search_manuscript`, `linetta_where_does_appear`, `linetta_get_plot`
+- `linetta_cite_sources`: checks the passages an answer quotes (scene, paragraphs
+  as `linetta_read_scene numbered=true` numbers them, quote) the same way a
+  continuity citation is checked, and returns them numbered for the reply to
+  cite as `[1]`, `[2]`. The built-in agent passes them on to the panel as
+  `citations` on the tool event and its transcript row (#385). Up to 6 per call
 - `linetta_read_skill`
 - `linetta_list_continuity`: recorded continuity observations and their ids,
   for `linetta_update_continuity`; open ones by default

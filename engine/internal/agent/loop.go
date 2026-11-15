@@ -11,6 +11,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/companion"
+	"github.com/devlikebear/linetta/engine/internal/mcphost"
 	"github.com/devlikebear/linetta/engine/internal/provider"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/tars/pkg/llm"
@@ -393,6 +394,9 @@ type toolPayload struct {
 	RequestID string `json:"request_id,omitempty"`
 	// Ask is the card linetta_ask_writer left for the writer to answer.
 	Ask *askCard `json:"ask,omitempty"`
+	// Citations are linetta_cite_sources' verified sources, which the panel
+	// draws under the reply (#385).
+	Citations []mcphost.CitedSource `json:"citations,omitempty"`
 }
 
 // usagePayload is the turn's own token count on agent.done. The cache fields
@@ -789,7 +793,7 @@ func (s *Service) runTool(ctx context.Context, st loopState, call llm.ToolCall) 
 	s.notify("agent.tool", toolPayload{
 		RunID: st.runID, ProjectID: st.projectID, Seq: s.runs.inTool(st.runID, ""), Name: call.Name, State: state,
 		Summary: summarize(result.Text), BatchID: result.BatchID, SnapshotID: result.SnapshotID,
-		NodeIDs: result.NodeIDs, RequestID: result.RequestID, Ask: result.Ask,
+		NodeIDs: result.NodeIDs, RequestID: result.RequestID, Ask: result.Ask, Citations: result.Citations,
 	})
 	// Recorded with a context that survives the turn's own cancellation,
 	// unlike the tool call above: the call already ran — and may already
@@ -800,7 +804,7 @@ func (s *Service) runTool(ctx context.Context, st loopState, call llm.ToolCall) 
 	if err := s.tr.appendToolEvent(context.WithoutCancel(ctx), st.req.ProjectID, st.req.NodeID, st.runID, toolEvent{
 		Name: call.Name, Summary: summarize(result.Text), OK: !result.IsError,
 		BatchID: result.BatchID, SnapshotID: result.SnapshotID, NodeIDs: result.NodeIDs, RequestID: result.RequestID,
-		Ask: result.Ask,
+		Ask: result.Ask, Citations: result.Citations,
 	}); err != nil {
 		logf("transcript: %v", err)
 	}

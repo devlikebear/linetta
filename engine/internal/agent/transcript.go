@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/devlikebear/linetta/engine/internal/companion"
+	"github.com/devlikebear/linetta/engine/internal/mcphost"
 )
 
 // transcriptIntent stamps every row this package writes, so the panel's own
@@ -81,6 +82,9 @@ type toolEvent struct {
 	// Ask mirrors toolPayload.Ask. This row is where a card waits for the
 	// writer, and what a later turn is told it asked (askedMessage).
 	Ask *askCard `json:"ask,omitempty"`
+	// Citations mirrors toolPayload.Citations, so a reopened conversation
+	// draws the same source cards the live turn did.
+	Citations []mcphost.CitedSource `json:"citations,omitempty"`
 }
 
 func (t *transcript) appendToolEvent(ctx context.Context, projectID, nodeID, runID string, ev toolEvent) error {

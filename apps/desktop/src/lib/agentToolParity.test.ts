@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseToolEvent } from "../components/agent/AgentPanel";
+import { parseToolEvent, readCitations } from "../components/agent/AgentPanel";
 import { readAppFile } from "../test/readSource";
 import { HISTORY_TOOL_NAMES, READ_TOOL_NAMES, WRITE_TOOL_NAMES, toolKind, toolLabelKey } from "./agentTools";
 import { messageCatalogs } from "./i18n";
@@ -103,10 +103,11 @@ describe("agent tool catalogue parity with the engine", () => {
  * from the names the panel expects.
  */
 
-/** The JSON tag names on a `type <name> struct { … }` block in a Go file,
- *  in declaration order, with any `,omitempty` stripped. */
+/** The JSON tag names on a `type <name> struct { … }` block in a Go file
+ *  under engine/internal (agent/ unless the path names a package), in
+ *  declaration order, with any `,omitempty` stripped. */
 async function goJSONTags(file: string, typeName: string): Promise<string[]> {
-  const src = await readAppFile(`../../engine/internal/agent/${file}`);
+  const src = await readAppFile(`../../engine/internal/${file.includes("/") ? file : `agent/${file}`}`);
   const start = src.indexOf(`type ${typeName} struct {`);
   if (start === -1) throw new Error(`${typeName} not found in ${file}`);
   const end = src.indexOf("\n}", start);
@@ -115,12 +116,23 @@ async function goJSONTags(file: string, typeName: string): Promise<string[]> {
 }
 
 const toolEventTags = () => goJSONTags("transcript.go", "toolEvent");
+const citedSourceTags = () => goJSONTags("mcphost/tools_cite.go", "CitedSource");
+
+/** A citation in the engine's own shape: numbers where the Go fields are ints. */
+async function engineCitation(): Promise<Record<string, unknown>> {
+  const citation: Record<string, unknown> = {};
+  for (const tag of await citedSourceTags()) {
+    citation[tag] = tag === "n" || tag.startsWith("paragraph_") ? 1 : `${tag}-value`;
+  }
+  return citation;
+}
 
 describe("restored tool row parity with the engine's toolEvent", () => {
   it("finds the Go struct's tags (guards against the extraction silently breaking)", async () => {
     // Without this, a broken extraction makes every assertion below pass
     // vacuously — the exact failure mode this file exists to prevent.
-    expect(await toolEventTags()).toHaveLength(8);
+    expect(await toolEventTags()).toHaveLength(9);
+    expect(await citedSourceTags()).toHaveLength(7);
   });
 
   it("reads a row written with the engine's own field names", async () => {
@@ -130,7 +142,10 @@ describe("restored tool row parity with the engine's toolEvent", () => {
     // a bool, and only the two the line cannot be drawn without are asserted
     // back out.
     const row: Record<string, unknown> = {};
-    for (const tag of tags) row[tag] = tag === "ok" ? true : tag === "node_ids" ? ["n1"] : `${tag}-value`;
+    const citation = await engineCitation();
+    for (const tag of tags) {
+      row[tag] = tag === "ok" ? true : tag === "node_ids" ? ["n1"] : tag === "citations" ? [citation] : `${tag}-value`;
+    }
 
     const parsed = parseToolEvent(JSON.stringify(row));
     expect(parsed, "parseToolEvent could not read a row in the engine's own shape").not.toBeNull();
@@ -139,6 +154,18 @@ describe("restored tool row parity with the engine's toolEvent", () => {
     expect(parsed?.batch_id).toBe("batch_id-value");
     expect(parsed?.snapshot_id).toBe("snapshot_id-value");
     expect(parsed?.request_id).toBe("request_id-value");
+    expect(parsed?.citations, "a restored row lost its sources").toEqual([citation]);
+  });
+
+  it("reads a source in the engine's CitedSource shape, and only that shape", async () => {
+    const citation = await engineCitation();
+    expect(readCitations([citation])).toEqual([citation]);
+    // The fields a card cannot be drawn without, renamed, must not read.
+    for (const needed of ["n", "node_id", "paragraph_from", "paragraph_to", "quote"]) {
+      expect(await citedSourceTags(), `the panel reads ${needed} off a source`).toContain(needed);
+      const { [needed]: _dropped, ...renamed } = citation;
+      expect(readCitations([{ ...renamed, [`${needed}_renamed`]: citation[needed] }])).toBeUndefined();
+    }
   });
 
   it("carries every required field the engine's struct declares", async () => {
@@ -150,9 +177,10 @@ describe("restored tool row parity with the engine's toolEvent", () => {
     // notes on `Line` and on AgentToolPayload — so this asserts the direction
     // that matters: everything the panel DOES read must still exist in Go.
     // `request_id` (illustration Phase 4) is the request whose approval card
-    // a restored linetta_request_illustration line still shows, and `ask` the
-    // questions a restored linetta_ask_writer line still shows.
-    for (const needed of ["name", "ok", "batch_id", "snapshot_id", "request_id", "ask"]) {
+    // a restored linetta_request_illustration line still shows, `ask` the
+    // questions a restored linetta_ask_writer line still shows, and
+    // `citations` the sources a restored linetta_cite_sources line carries.
+    for (const needed of ["name", "ok", "batch_id", "snapshot_id", "request_id", "ask", "citations"]) {
       expect(tags, `the panel reads ${needed} off a restored tool row`).toContain(needed);
     }
   });

@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { Bot, ImagePlus, Quote, Send, Square, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { agent as agentApi, proposals as proposalsApi, providers as providersApi, settings as settingsApi } from "../../lib/rpc";
-import type { AgentAsk, AgentHistoryRow, AgentPrompt, AgentRunStatus, ProposalsChangedPayload, ProviderStatus } from "../../lib/types";
+import type { AgentAsk, AgentCitation, AgentHistoryRow, AgentPrompt, AgentRunStatus, ProposalsChangedPayload, ProviderStatus } from "../../lib/types";
 import { useI18n } from "../../lib/i18n";
 import { toolKind, toolLabelKey, toolVerbKey } from "../../lib/agentTools";
 import { reasonMessage, rpcErrorMessage } from "../../lib/rpcMessage";
@@ -84,6 +84,9 @@ type Line =
       /** The questions linetta_ask_writer put to the writer; the card replaces
        *  the line. */
       ask?: AgentAsk;
+      /** The sources linetta_cite_sources checked, for the reply's source
+       *  cards (#385). */
+      citations?: AgentCitation[];
       undoing?: boolean;
       undone?: boolean;
       undoError?: string;
@@ -166,6 +169,8 @@ interface AgentToolPayload extends AgentEventBase {
   request_id?: string;
   /** linetta_ask_writer's questions, for the answer card. */
   ask?: AgentAsk;
+  /** linetta_cite_sources' checked sources. */
+  citations?: AgentCitation[];
 }
 
 /** The tool call the model has started writing. Its arguments are still
@@ -221,6 +226,7 @@ interface RestoredToolEvent {
   snapshot_id?: string;
   request_id?: string;
   ask?: AgentAsk;
+  citations?: AgentCitation[];
 }
 
 /** Parses one tool row's `content`. Null for anything that is not a usable
@@ -236,7 +242,7 @@ export function parseToolEvent(content: string): RestoredToolEvent | null {
     return null;
   }
   if (!parsed || typeof parsed !== "object") return null;
-  const { name, ok, batch_id: batchId, snapshot_id: snapshotId, request_id: requestId, ask } = parsed as Record<string, unknown>;
+  const { name, ok, batch_id: batchId, snapshot_id: snapshotId, request_id: requestId, ask, citations } = parsed as Record<string, unknown>;
   if (typeof name !== "string" || typeof ok !== "boolean") return null;
   return {
     name,
@@ -245,7 +251,24 @@ export function parseToolEvent(content: string): RestoredToolEvent | null {
     snapshot_id: typeof snapshotId === "string" ? snapshotId : undefined,
     request_id: typeof requestId === "string" ? requestId : undefined,
     ask: Array.isArray((ask as AgentAsk | undefined)?.questions) ? (ask as AgentAsk) : undefined,
+    citations: readCitations(citations),
   };
+}
+
+/** The sources on a tool row or event, keeping only entries a card can be
+ *  drawn from. Undefined when there are none. Exported for the parity test. */
+export function readCitations(raw: unknown): AgentCitation[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out = raw.filter((c): c is AgentCitation => {
+    if (!c || typeof c !== "object") return false;
+    const r = c as Record<string, unknown>;
+    return typeof r.n === "number"
+      && typeof r.node_id === "string"
+      && typeof r.paragraph_from === "number"
+      && typeof r.paragraph_to === "number"
+      && typeof r.quote === "string";
+  });
+  return out.length > 0 ? out : undefined;
 }
 
 /** How a restored turn ended, read off the last row of its run.
@@ -325,6 +348,7 @@ function linesFromHistory(rows: AgentHistoryRow[], liveRunId?: string): Line[] {
           snapshotId: ev.snapshot_id,
           requestId: ev.request_id,
           ask: ev.ask,
+          citations: ev.citations,
         });
       }
       // An unparseable tool row still counts as a row of its run for the
@@ -999,6 +1023,7 @@ export function AgentPanel({
               snapshotId: payload.snapshot_id ?? l.snapshotId,
               requestId: payload.request_id ?? l.requestId,
               ask: payload.ask ?? l.ask,
+              citations: readCitations(payload.citations) ?? l.citations,
             }
           : l,
       ),

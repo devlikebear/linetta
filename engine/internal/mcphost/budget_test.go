@@ -209,6 +209,10 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 		if name == "linetta_report_continuity" || name == "linetta_propose_story_ops" || name == "linetta_save_forecast" {
 			continue
 		}
+		// #385 Phase 2's citation tool carries its own allowance below.
+		if name == "linetta_cite_sources" {
+			continue
+		}
 		if name == "linetta_list_continuity" || name == "linetta_update_continuity" {
 			continuityTools += b
 			continue
@@ -263,6 +267,12 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	// describing a whole branch, repeated up to 5 times per call.
 	if save := sizes["linetta_save_forecast"]; save > 3900 {
 		t.Errorf("linetta_save_forecast costs %dB, want <= 3900B", save)
+	}
+	// #385 Phase 2 measured 1,381B for linetta_cite_sources: the citations[]
+	// input and the same fields back, numbered, with the scene's outline path
+	// and title, which the panel draws as a source card.
+	if cite := sizes["linetta_cite_sources"]; cite > 1450 {
+		t.Errorf("linetta_cite_sources costs %dB, want <= 1450B", cite)
 	}
 	writes := 0
 	for _, name := range VisualWriteToolNames {
