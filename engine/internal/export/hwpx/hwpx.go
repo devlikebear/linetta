@@ -48,7 +48,12 @@ type Options struct {
 	SceneBreak          string
 	Illustrations       bool
 	IllustrationLabel   string
-	Created             time.Time
+	// Pictures, Cover, Contents and ContentsLabel are docx.Options'.
+	Pictures      map[string]manuscriptir.Picture
+	Cover         bool
+	Contents      bool
+	ContentsLabel string
+	Created       time.Time
 }
 
 // DefaultOptions are Hangul's own defaults for a Korean manuscript: 함초롬바탕
@@ -56,7 +61,7 @@ type Options struct {
 func DefaultOptions() Options {
 	return Options{
 		Font: templateFont, SizePt: 10, LineSpacingPct: 160, FirstLineIndent: true,
-		PageBreakPerSection: true, SceneBreak: "* * *", IllustrationLabel: "삽화",
+		PageBreakPerSection: true, SceneBreak: "* * *", IllustrationLabel: "삽화", ContentsLabel: "차례",
 	}
 }
 
@@ -96,7 +101,7 @@ func Write(doc manuscriptir.Doc, opts Options) ([]byte, error) {
 		{"Preview/PrvText.txt", preview},
 		{"settings.xml", part("settings.xml")},
 		{"META-INF/container.rdf", part("container.rdf")},
-		{"Contents/content.hpf", contentHPF(doc.Title, opts.Created)},
+		{"Contents/content.hpf", contentHPF(doc.Title, opts.Created, w.bins)},
 		{"META-INF/container.xml", part("container.xml")},
 		{"META-INF/manifest.xml", part("manifest.xml")},
 	} {
@@ -105,6 +110,16 @@ func Write(doc manuscriptir.Doc, opts Options) ([]byte, error) {
 			return nil, err
 		}
 		if _, err := fw.Write([]byte(f.data)); err != nil {
+			return nil, err
+		}
+	}
+	// The pictures last, as a Hangul-opened python-hwpx file has them.
+	for _, bin := range w.bins {
+		fw, err := zw.CreateHeader(&zip.FileHeader{Name: "BinData/" + bin.file(), Method: zip.Store})
+		if err != nil {
+			return nil, err
+		}
+		if _, err := fw.Write(bin.data); err != nil {
 			return nil, err
 		}
 	}
@@ -133,6 +148,31 @@ type writer struct {
 	charBase, paraBase int // how many shapes the template header already defines
 	chars              map[charShape]int
 	paras              map[paraShape]int
+	// bins is each embedded picture once, in first-use order; binOf its
+	// index by gallery id.
+	bins  []binItem
+	binOf map[string]int
+}
+
+// binItem is one picture in BinData/, named imageN as content.hpf lists it.
+type binItem struct {
+	id, ext, mime string
+	data          []byte
+}
+
+func (b binItem) file() string { return b.id + "." + b.ext }
+
+func (w *writer) bin(id string, pic manuscriptir.Picture) binItem {
+	if w.binOf == nil {
+		w.binOf = map[string]int{}
+	}
+	if i, ok := w.binOf[id]; ok {
+		return w.bins[i]
+	}
+	item := binItem{id: fmt.Sprintf("image%d", len(w.bins)+1), ext: pic.Ext, mime: pic.MIME, data: pic.Data}
+	w.binOf[id] = len(w.bins)
+	w.bins = append(w.bins, item)
+	return item
 }
 
 func (w *writer) countIn(header, list string) int {
@@ -193,6 +233,13 @@ type paragraph struct {
 	pageBreak bool
 	runs      []manuscriptir.Run
 	charOf    func(manuscriptir.Run) charShape
+	// pic, when set, is the paragraph's only content: a picture.
+	pic *picRef
+}
+
+type picRef struct {
+	bin           binItem
+	width, height int // HWPUNIT
 }
 
 func (w *writer) body(doc manuscriptir.Doc) (section, preview string) {
@@ -215,6 +262,24 @@ func (w *writer) body(doc manuscriptir.Doc) (section, preview string) {
 
 	var paras []paragraph
 	var lines []string
+	// The cover and the contents each fill a page; the manuscript starts on
+	// the next one.
+	pendingBreak := false
+	if w.opts.Cover {
+		title := func(manuscriptir.Run) charShape { return charShape{height: w.base*2 + 400, bold: true} }
+		paras = append(paras, paragraph{para: w.paraID(paraShape{align: "CENTER", prev: 24000, next: 2400, pct: 100}), runs: []manuscriptir.Run{{Text: doc.Title}}, charOf: title})
+		lines = append(lines, doc.Title)
+		pendingBreak = true
+	}
+	if entries := doc.Contents(2); w.opts.Contents && len(entries) > 0 {
+		paras = append(paras, paragraph{para: w.paraID(w.headingPara()), pageBreak: pendingBreak, runs: []manuscriptir.Run{{Text: w.opts.ContentsLabel}}, charOf: heading(1)})
+		lines = append(lines, w.opts.ContentsLabel)
+		for _, e := range entries {
+			paras = append(paras, paragraph{para: w.paraID(paraShape{align: "LEFT", left: 1500 * (e.Level - 1), pct: w.opts.LineSpacingPct}), runs: []manuscriptir.Run{{Text: e.Heading}}, charOf: plain})
+			lines = append(lines, e.Heading)
+		}
+		pendingBreak = true
+	}
 	started, headingOnly := false, false
 	for _, sec := range doc.Sections {
 		breakBefore := false
@@ -223,6 +288,9 @@ func (w *writer) body(doc manuscriptir.Doc) (section, preview string) {
 			// under it: a part's title shares the page with its first episode.
 			breakBefore = started && !headingOnly
 			started = true
+		}
+		if pendingBreak {
+			breakBefore, pendingBreak = true, false
 		}
 		headingOnly = sec.Heading != "" && len(sec.Blocks) == 0
 		add := func(p paragraph) {
@@ -260,6 +328,16 @@ func (w *writer) body(doc manuscriptir.Doc) (section, preview string) {
 			case manuscriptir.CodeLine:
 				add(paragraph{para: w.paraID(paraShape{align: "LEFT", pct: w.opts.LineSpacingPct}), runs: b.Runs, charOf: plain})
 			case manuscriptir.IllustrationPlaceholder:
+				if pic, ok := w.opts.Pictures[b.ImageID]; ok && len(pic.Data) > 0 {
+					wmm, hmm := pic.SizeMM(pictureMaxWMM, pictureMaxHMM)
+					add(paragraph{para: w.paraID(paraShape{align: "CENTER", prev: 600, pct: 100}), charOf: plain,
+						pic: &picRef{bin: w.bin(b.ImageID, pic), width: mmToHWP(wmm), height: mmToHWP(hmm)}})
+					if caption := strings.TrimSpace(b.Text()); caption != "" {
+						small := func(manuscriptir.Run) charShape { return charShape{height: max(w.base-100, 600)} }
+						add(paragraph{para: w.paraID(paraShape{align: "CENTER", next: 600, pct: w.opts.LineSpacingPct}), runs: []manuscriptir.Run{{Text: caption}}, charOf: small})
+					}
+					continue
+				}
 				if !w.opts.Illustrations {
 					continue
 				}
@@ -301,6 +379,12 @@ func (w *writer) body(doc manuscriptir.Doc) (section, preview string) {
 			b.WriteString(secPr)
 		}
 		wrote := false
+		if p.pic != nil {
+			fmt.Fprintf(&b, `<hp:run charPrIDRef="%d">`, w.charID(charShape{height: w.base}))
+			b.WriteString(picXML(1000000+i, *p.pic))
+			b.WriteString(`</hp:run>`)
+			wrote = true
+		}
 		for _, r := range p.runs {
 			if r.Text == "" && !r.Break {
 				continue
@@ -327,6 +411,33 @@ func (w *writer) body(doc manuscriptir.Doc) (section, preview string) {
 		pv = string(r[:1000])
 	}
 	return b.String(), pv + "\r\n"
+}
+
+// The most a picture may take, in millimetres: the A4 text block, less a
+// little.
+const (
+	pictureMaxWMM = 150
+	pictureMaxHMM = 200
+)
+
+// mmToHWP is millimetres in HWPUNIT, 7200 to the inch.
+func mmToHWP(mm float64) int { return int(mm*7200/25.4 + 0.5) }
+
+// picXML is a picture set inline, as one character of its paragraph, in the
+// shape python-hwpx's add_picture writes and Hangul opens.
+func picXML(id int, p picRef) string {
+	w, h := p.width, p.height
+	return fmt.Sprintf(`<hp:pic textWrap="SQUARE" textFlow="BOTH_SIDES" reverse="0" id="%[1]d" zOrder="0" numberingType="PICTURE" lock="0" dropcapstyle="None" href="" groupLevel="0" instid="%[1]d">`+
+		`<hp:offset x="0" y="0"/><hp:orgSz width="%[2]d" height="%[3]d"/><hp:curSz width="%[2]d" height="%[3]d"/><hp:flip horizontal="0" vertical="0"/>`+
+		`<hp:rotationInfo angle="0" centerX="%[4]d" centerY="%[5]d" rotateimage="1"/>`+
+		`<hp:renderingInfo><hc:transMatrix e1="1" e2="0" e3="0" e4="0" e5="1" e6="0"/><hc:scaMatrix e1="1" e2="0" e3="0" e4="0" e5="1" e6="0"/><hc:rotMatrix e1="1" e2="0" e3="0" e4="0" e5="1" e6="0"/></hp:renderingInfo>`+
+		`<hp:imgRect><hc:pt0 x="0" y="0"/><hc:pt1 x="%[2]d" y="0"/><hc:pt2 x="%[2]d" y="%[3]d"/><hc:pt3 x="0" y="%[3]d"/></hp:imgRect>`+
+		`<hp:imgClip left="0" right="%[2]d" top="0" bottom="%[3]d"/><hp:inMargin left="0" right="0" top="0" bottom="0"/><hp:imgDim dimwidth="%[2]d" dimheight="%[3]d"/>`+
+		`<hc:img binaryItemIDRef="%[6]s" bright="0" contrast="0" effect="REAL_PIC" alpha="0"/><hp:effects/>`+
+		`<hp:sz width="%[2]d" height="%[3]d" widthRelTo="ABSOLUTE" heightRelTo="ABSOLUTE" protect="0"/>`+
+		`<hp:pos treatAsChar="1" affectLSpacing="0" flowWithText="1" allowOverlap="0" holdAnchorAndSO="0" vertRelTo="PARA" horzRelTo="COLUMN" vertAlign="TOP" horzAlign="CENTER" vertOffset="0" horzOffset="0"/>`+
+		`<hp:outMargin left="0" right="0" top="0" bottom="0"/><hp:shapeComment/></hp:pic>`,
+		id, w, h, w/2, h/2, p.bin.id)
 }
 
 // textXML escapes text for an hp:t element. A tab becomes Hangul's tab
@@ -446,8 +557,14 @@ func attr(s string) string {
 	return b.String()
 }
 
-// contentHPF is the package manifest, with the work's title and today's date.
-func contentHPF(title string, created time.Time) string {
+// contentHPF is the package manifest, with the work's title, today's date and
+// the pictures in BinData/. Hangul finds a picture through this manifest
+// alone; the header lists none, as Hangul's own files do.
+func contentHPF(title string, created time.Time, bins []binItem) string {
+	var items strings.Builder
+	for _, bin := range bins {
+		fmt.Fprintf(&items, `<opf:item id="%s" href="BinData/%s" media-type="%s" isEmbeded="1"/>`, bin.id, bin.file(), bin.mime)
+	}
 	stamp := created.UTC().Format("2006-01-02T15:04:05Z")
 	return `<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>` +
 		`<opf:package xmlns:ha="http://www.hancom.co.kr/hwpml/2011/app" xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph" ` +
@@ -466,6 +583,6 @@ func contentHPF(title string, created time.Time) string {
 		`<opf:meta name="date" content="text">` + stamp + `</opf:meta><opf:meta name="keyword" content="text"/></opf:metadata>` +
 		`<opf:manifest><opf:item id="header" href="Contents/header.xml" media-type="application/xml"/>` +
 		`<opf:item id="section0" href="Contents/section0.xml" media-type="application/xml"/>` +
-		`<opf:item id="settings" href="settings.xml" media-type="application/xml"/></opf:manifest>` +
+		`<opf:item id="settings" href="settings.xml" media-type="application/xml"/>` + items.String() + `</opf:manifest>` +
 		`<opf:spine><opf:itemref idref="header" linear="yes"/><opf:itemref idref="section0" linear="yes"/></opf:spine></opf:package>`
 }

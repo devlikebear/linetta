@@ -99,8 +99,8 @@ func ExportNodeText(nr *node.Repo) rpc.Handler {
 }
 
 // ExportDocument returns a handler for export.document (#383): the work, or
-// one part of it, as a DOCX or TXT file the app saves where the writer picks.
-func ExportDocument(projects *project.Repo, nr *node.Repo, language func(context.Context) string) rpc.Handler {
+// one part of it, as a DOCX, HWPX or TXT file the app saves where the writer picks.
+func ExportDocument(projects *project.Repo, nr *node.Repo, pictures export.IllustrationSource, language func(context.Context) string) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var req export.DocumentRequest
 		if err := json.Unmarshal(params, &req); err != nil || req.ProjectID == "" {
@@ -110,7 +110,7 @@ func ExportDocument(projects *project.Repo, nr *node.Repo, language func(context
 		if language != nil {
 			lang = language(ctx)
 		}
-		out, err := export.ExportDocument(ctx, projects, nr, req, lang)
+		out, err := export.ExportDocument(ctx, projects, nr, pictures, req, lang)
 		if err != nil {
 			var badReq *export.ErrBadDocumentRequest
 			if errors.As(err, &badReq) {

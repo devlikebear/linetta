@@ -1,9 +1,15 @@
 package export
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"image"
+	_ "image/gif"  // image.DecodeConfig reads the gallery's pictures
+	_ "image/jpeg" // as above
+	_ "image/png"  // as above
 	"strings"
 	"unicode/utf8"
 
@@ -32,7 +38,15 @@ type DocumentOptions struct {
 	PageBreakPerEpisode *bool   `json:"page_break_per_episode,omitempty"`
 	Headings            *bool   `json:"headings,omitempty"`
 	SceneBreak          *string `json:"scene_break,omitempty"`
-	Illustrations       bool    `json:"illustrations,omitempty"`
+	// Illustrations writes "[삽화: caption]" where a picture is.
+	Illustrations bool `json:"illustrations,omitempty"`
+	// IllustrationImages puts the pictures themselves in a DOCX or HWPX; a
+	// picture that cannot go in (gone from the gallery, or a format the
+	// document cannot hold, such as WebP) leaves the placeholder instead.
+	IllustrationImages bool `json:"illustration_images,omitempty"`
+	// Cover adds a title page and Contents a table of contents (DOCX, HWPX).
+	Cover    bool `json:"cover,omitempty"`
+	Contents bool `json:"contents,omitempty"`
 }
 
 // DocumentRequest names what to export: the whole work, or NodeID's subtree.
@@ -55,6 +69,9 @@ type DocumentPayload struct {
 	MIME              string `json:"mime,omitempty"`
 	Scenes            int    `json:"scenes"`
 	Chars             int    `json:"chars"`
+	// PicturesLeftOut counts the pictures asked for that the file shows as a
+	// placeholder instead, so the dialog can say so.
+	PicturesLeftOut int `json:"pictures_left_out,omitempty"`
 }
 
 // ErrBadDocumentRequest wraps a request the dialog should not have sent.
@@ -66,10 +83,11 @@ func bad(format string, args ...any) error {
 	return &ErrBadDocumentRequest{Reason: fmt.Sprintf(format, args...)}
 }
 
-// ExportDocument writes the work, or one part of it, as a DOCX or TXT file.
-// Nothing is written to disk here: the app saves the bytes where the writer
-// chooses, the same way the Markdown export does.
-func ExportDocument(ctx context.Context, projects *project.Repo, nr *node.Repo, req DocumentRequest, language string) (DocumentPayload, error) {
+// ExportDocument writes the work, or one part of it, as a DOCX, HWPX or TXT
+// file. Nothing is written to disk here: the app saves the bytes where the
+// writer chooses, the same way the Markdown export does. pictures may be nil
+// when the build has no gallery; every picture is then a placeholder.
+func ExportDocument(ctx context.Context, projects *project.Repo, nr *node.Repo, pictures IllustrationSource, req DocumentRequest, language string) (DocumentPayload, error) {
 	if req.Format != FormatDOCX && req.Format != FormatHWPX && req.Format != FormatTXT {
 		return DocumentPayload{}, bad("format %q is not docx, hwpx or txt", req.Format)
 	}
@@ -100,6 +118,13 @@ func ExportDocument(ctx context.Context, projects *project.Repo, nr *node.Repo, 
 	if err != nil {
 		return DocumentPayload{}, err
 	}
+	if req.Options.IllustrationImages && req.Format != FormatTXT {
+		opts.Illustrations = true
+		opts.Pictures, out.PicturesLeftOut, err = loadPictures(ctx, pictures, doc.ImageIDs())
+		if err != nil {
+			return DocumentPayload{}, err
+		}
+	}
 	var data []byte
 	switch req.Format {
 	case FormatDOCX:
@@ -114,6 +139,7 @@ func ExportDocument(ctx context.Context, projects *project.Repo, nr *node.Repo, 
 			Font: opts.Font, SizePt: opts.SizePt, LineSpacingPct: opts.LineSpacingPct,
 			FirstLineIndent: opts.FirstLineIndent, PageBreakPerSection: opts.PageBreakPerSection,
 			SceneBreak: opts.SceneBreak, Illustrations: opts.Illustrations, IllustrationLabel: opts.IllustrationLabel,
+			Pictures: opts.Pictures, Cover: opts.Cover, Contents: opts.Contents, ContentsLabel: opts.ContentsLabel,
 		})
 		if err != nil {
 			return DocumentPayload{}, err
@@ -164,7 +190,49 @@ func docxOptions(in DocumentOptions, language string) (docx.Options, error) {
 	}
 	o.Illustrations = in.Illustrations
 	o.IllustrationLabel = illustrationLabel(language)
+	o.Cover, o.Contents = in.Cover, in.Contents
+	o.ContentsLabel = contentsLabel(language)
 	return o, nil
+}
+
+func contentsLabel(language string) string {
+	switch {
+	case strings.HasPrefix(language, "en"):
+		return "Contents"
+	case strings.HasPrefix(language, "ja"):
+		return "目次"
+	}
+	return "차례"
+}
+
+// loadPictures reads each picture ids names from the gallery, keeping those a
+// document can hold (PNG, JPEG, GIF) with their pixel size. left counts the
+// ones it could not keep.
+func loadPictures(ctx context.Context, src IllustrationSource, ids []string) (map[string]manuscriptir.Picture, int, error) {
+	out := map[string]manuscriptir.Picture{}
+	left := 0
+	for _, id := range ids {
+		if src == nil {
+			left++
+			continue
+		}
+		// The bytes say what they are; the stored type is not consulted.
+		_, data, err := src.IllustrationImage(ctx, id)
+		if errors.Is(err, ErrIllustrationMissing) {
+			left++
+			continue
+		}
+		if err != nil {
+			return nil, 0, fmt.Errorf("export: illustration %s: %w", id, err)
+		}
+		cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
+		if err != nil || (format != "png" && format != "jpeg" && format != "gif") {
+			left++
+			continue
+		}
+		out[id] = manuscriptir.Picture{MIME: "image/" + format, Data: data, Width: cfg.Width, Height: cfg.Height, Ext: format}
+	}
+	return out, left, nil
 }
 
 func illustrationLabel(language string) string {

@@ -747,7 +747,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	}, settingsLanguage))
 	s.Handle("export.node", handlers.ExportNode(nodes, exportImages{illustrations}))
 	s.Handle("export.nodeText", handlers.ExportNodeText(nodes))
-	s.Handle("export.document", handlers.ExportDocument(projects, nodes, settingsLanguage))
+	s.Handle("export.document", handlers.ExportDocument(projects, nodes, exportImages{illustrations}, settingsLanguage))
 	s.Handle("export.companion_history", handlers.ExportCompanionHistory(projects, companionHistory, companionSvc, settingsLanguage))
 	s.Handle("imports.markdown", handlers.ImportMarkdown(projects, nodes, entities, relationships,
 		importmd.Extras{Threads: threads, Beats: beats, Notes: notes, Facts: facts}, illustrations, clock))

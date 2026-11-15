@@ -53,16 +53,19 @@ const (
 	// CodeLine is one line of a code block.
 	CodeLine
 	// IllustrationPlaceholder stands where a picture is; Runs hold its
-	// caption. A writer leaves it out unless asked for placeholders.
+	// caption and ImageID the gallery picture. A writer puts the picture
+	// there when it was given one, a "[삽화: caption]" line when asked for
+	// placeholders, and otherwise nothing.
 	IllustrationPlaceholder
 )
 
 // Block is one paragraph-level unit of the manuscript.
 type Block struct {
-	Kind   BlockKind
-	Level  int
-	Marker string
-	Runs   []Run
+	Kind    BlockKind
+	Level   int
+	Marker  string
+	Runs    []Run
+	ImageID string
 }
 
 // Run is a stretch of text with one set of marks, or a line break.
@@ -198,11 +201,11 @@ func appendBlocks(out *[]Block, nodes []map[string]any, ctx blockContext) {
 		case "horizontalRule":
 			*out = append(*out, Block{Kind: SceneBreak})
 		case illustref.NodeType:
-			_, caption, ok := illustref.Attrs(n)
+			id, caption, ok := illustref.Attrs(n)
 			if !ok {
 				continue
 			}
-			*out = append(*out, Block{Kind: IllustrationPlaceholder, Runs: []Run{{Text: caption}}})
+			*out = append(*out, Block{Kind: IllustrationPlaceholder, Runs: []Run{{Text: caption}}, ImageID: id})
 		default:
 			// A node this package does not know: keep what it holds rather
 			// than drop the writer's words (the schema test stops this

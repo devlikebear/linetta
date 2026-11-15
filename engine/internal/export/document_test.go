@@ -44,7 +44,7 @@ func documentFixture(t *testing.T) (context.Context, DocumentRequest, func(Docum
 		}
 	}
 	run := func(req DocumentRequest) (DocumentPayload, error) {
-		return ExportDocument(ctx, pr, nr, req, "ko")
+		return ExportDocument(ctx, pr, nr, nil, req, "ko")
 	}
 	return ctx, DocumentRequest{ProjectID: p.ID, Format: FormatTXT}, run, episode.ID
 }

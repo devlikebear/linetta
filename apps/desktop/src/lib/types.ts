@@ -1236,6 +1236,11 @@ export interface ExportDocumentOptions {
   headings?: boolean;
   scene_break?: string;
   illustrations?: boolean;
+  /** DOCX and HWPX: the pictures themselves; one that cannot go in is a
+   *  placeholder, counted in pictures_left_out. */
+  illustration_images?: boolean;
+  cover?: boolean;
+  contents?: boolean;
 }
 
 export interface ExportDocumentRequest {
@@ -1255,6 +1260,7 @@ export interface ExportDocumentPayload {
   scenes: number;
   /** In the work's own character count basis. */
   chars: number;
+  pictures_left_out?: number;
 }
 
 export interface ExportTextPayload {
