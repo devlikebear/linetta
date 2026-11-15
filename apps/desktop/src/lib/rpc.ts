@@ -50,7 +50,7 @@ import type {
   EngineStatus,
   Entity,
   ExportPayload,
-  ExportTextPayload,
+  ExportDocumentPayload, ExportDocumentRequest, ExportTextPayload,
   FactCard,
   FolderSyncResult,
   GitSyncInitResult,
@@ -441,6 +441,8 @@ export const exportApi = {
     rpcCall<ExportPayload>("export.node", { node_id: nodeId }),
   nodeText: (nodeId: string) =>
     rpcCall<ExportTextPayload>("export.nodeText", { node_id: nodeId }),
+  /** The work, or a part of it, as a DOCX or TXT file (#383). */
+  document: (req: ExportDocumentRequest) => rpcCall<ExportDocumentPayload>("export.document", req),
   /** Every project's companion transcript and remembered facts, in one
    *  markdown archive. Exists so the companion's removal does not take the
    *  writer's conversations with it. */

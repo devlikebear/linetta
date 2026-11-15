@@ -5,6 +5,8 @@ import (
 	"os"
 	"sort"
 	"testing"
+
+	"github.com/devlikebear/linetta/engine/internal/export/manuscriptir"
 )
 
 // testdata/editor_schema.json is the editor's real node and mark list:
@@ -44,4 +46,9 @@ func TestEditorSchemaIsFullyHandled(t *testing.T) {
 	}
 	check("nodes", schema.Nodes, editorNodes)
 	check("marks", schema.Marks, editorMarks)
+	// The document exports (DOCX, TXT, #383) go through manuscriptir, which
+	// keeps its own list: a node it has not decided on would drop out of a
+	// Word file without a word.
+	check("manuscriptir nodes", schema.Nodes, manuscriptir.EditorNodes)
+	check("manuscriptir marks", schema.Marks, manuscriptir.EditorMarks)
 }

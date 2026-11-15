@@ -13,7 +13,9 @@ const mocks = vi.hoisted(() => ({
   projectsArchive: vi.fn(),
   projectsDelete: vi.fn(),
   exportProject: vi.fn(),
+  exportDocument: vi.fn(),
   saveExportedMarkdown: vi.fn(),
+  saveExportedFile: vi.fn(),
   importsPreview: vi.fn(),
   importsMarkdown: vi.fn(),
   settingsGet: vi.fn(),
@@ -38,6 +40,7 @@ vi.mock("../lib/rpc", () => ({
   },
   exportApi: {
     project: mocks.exportProject,
+    document: mocks.exportDocument,
   },
   imports: {
     preview: mocks.importsPreview,
@@ -70,6 +73,7 @@ vi.mock("../lib/exportSave", async (importOriginal) => ({
   // this test checks is that the writer is told where the file went.
   ...(await importOriginal<typeof import("../lib/exportSave")>()),
   saveExportedMarkdown: mocks.saveExportedMarkdown,
+  saveExportedFile: mocks.saveExportedFile,
 }));
 
 function renderLibrary() {
@@ -111,6 +115,11 @@ describe("Library", () => {
       markdown: "# Quiet City\n",
     });
     mocks.saveExportedMarkdown.mockResolvedValue("/tmp/quiet-city.md");
+    mocks.exportDocument.mockImplementation((req: { preview?: boolean }) =>
+      Promise.resolve(req.preview
+        ? { scenes: 3, chars: 1200 }
+        : { scenes: 3, chars: 1200, bytes_base64: "UEs=", suggested_filename: "quiet-city.docx", mime: "x" }));
+    mocks.saveExportedFile.mockResolvedValue("/tmp/quiet-city.docx");
     mocks.createRecoveryBackup.mockResolvedValue({ path: "/tmp/library.linetta", format_version: 1 });
     mocks.settingsGet.mockResolvedValue({
       language: "ko",
@@ -308,12 +317,30 @@ describe("Library", () => {
     expect(screen.getByRole("link", { name: "전체 라이브러리 →" })).toBeInTheDocument();
   });
 
-  it("backs up a recent project from its card action menu", async () => {
+  it("exports a recent project from its card action menu, Word by default", async () => {
+    window.localStorage.clear();
     const user = userEvent.setup();
     renderLibrary();
 
     await user.click(await screen.findByLabelText("Quiet City 작품 옵션"));
-    await user.click(screen.getByRole("menuitem", { name: "읽기용 Markdown 내보내기" }));
+    await user.click(screen.getByRole("menuitem", { name: "내보내기…" }));
+    expect(await screen.findByText("장면 3개 · 1,200자")).toBeInTheDocument();
+    await user.click(screen.getByTestId("export-run"));
+
+    expect(mocks.exportDocument).toHaveBeenLastCalledWith(expect.objectContaining({ project_id: "project-1", format: "docx" }));
+    expect(mocks.saveExportedFile).toHaveBeenCalledWith(expect.objectContaining({ suggested_filename: "quiet-city.docx" }), "docx");
+    expect(await screen.findByText("/tmp에 저장했습니다.")).toBeInTheDocument();
+    expect(screen.queryByTestId("export-dialog")).toBeNull();
+  });
+
+  it("still exports the readable Markdown from the same dialog", async () => {
+    const user = userEvent.setup();
+    renderLibrary();
+
+    await user.click(await screen.findByLabelText("Quiet City 작품 옵션"));
+    await user.click(screen.getByRole("menuitem", { name: "내보내기…" }));
+    await user.click(screen.getByTestId("export-format-md"));
+    await user.click(screen.getByTestId("export-run"));
 
     expect(mocks.exportProject).toHaveBeenCalledWith("project-1");
     expect(mocks.saveExportedMarkdown).toHaveBeenCalledWith({

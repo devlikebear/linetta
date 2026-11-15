@@ -14,7 +14,7 @@ import { MentionPicker } from "../components/editor/MentionPicker";
 import { EntitySheet } from "../components/EntitySheet";
 import { ThreadSheet } from "../components/ThreadSheet";
 import { VersionSheet } from "../components/VersionSheet";
-import { exportDestinationMessage, saveExportedMarkdown } from "../lib/exportSave";
+import { ExportDialog, type ExportScope } from "../components/ExportDialog";
 import { TiptapEditor, type TiptapHandle, type TiptapSelectionMenuPayload } from "../components/editor/Tiptap";
 import { autoMentionDoc, countAutoMentionCandidates } from "../lib/editor/autoMention";
 import { ZenMode } from "../components/ZenMode";
@@ -167,6 +167,8 @@ export function Workspace() {
   const [proposalInboxOpen, setProposalInboxOpen] = useState(false);
   // "Where the story could go" (story-assist Phase 4).
   const [forecastSheetOpen, setForecastSheetOpen] = useState(false);
+  // The export dialog (#383), opened from the command palette.
+  const [exportOpen, setExportOpen] = useState(false);
   // Fills the agent panel's composer from outside it — the forecast
   // sheet's [개요 반영 제안 요청] button. The nonce is the dependency
   // AgentPanel's own effect keys off, so the identical sentence sent twice
@@ -1567,6 +1569,20 @@ export function Workspace() {
     walk(load?.tree ?? []);
     return out;
   }, [load?.tree, language]);
+  // What the export dialog offers (#383): the whole work, each container
+  // above the open scene from the top down, then the scene itself.
+  const exportScopes = useMemo<ExportScope[]>(() => {
+    const scopes: ExportScope[] = [{ label: t("exportDialog.scope.work") }];
+    if (!load) return scopes;
+    const byId = new Map(flatten(load.tree).map((n) => [n.id, n] as const));
+    const above: ExportScope[] = [];
+    for (let id = load.node.parent_id ?? undefined; id; id = byId.get(id)?.parent_id ?? undefined) {
+      above.unshift({ nodeId: id, label: t("exportDialog.scope.container", { label: nodeLabels.get(id) ?? "" }) });
+    }
+    scopes.push(...above);
+    if (load.node.kind === "leaf") scopes.push({ nodeId: load.node.id, label: t("exportDialog.scope.scene"), leaf: true });
+    return scopes;
+  }, [load, nodeLabels, t]);
   const representativeTargets = useMemo<RepresentativeTarget[]>(() => {
     if (!load) return [];
     const targets: RepresentativeTarget[] = [];
@@ -1790,32 +1806,11 @@ export function Workspace() {
       },
     });
     cmds.push({
-      id: "export-project",
+      id: "export-document",
       section: sectionExport,
-      label: t("workspace.command.exportProject"),
-      run: async () => {
-        try {
-          const payload = await exportApi.project(load.project.id);
-          const path = await saveExportedMarkdown(payload);
-          if (path) showToast(exportDestinationMessage(t, path));
-        } catch (e) {
-          showToast(t("workspace.toast.exportFailed", { error: String(e) }));
-        }
-      },
-    });
-    cmds.push({
-      id: "export-node",
-      section: sectionExport,
-      label: t("workspace.command.exportScene"),
-      run: async () => {
-        try {
-          const payload = await exportApi.node(load.node.id);
-          const path = await saveExportedMarkdown(payload);
-          if (path) showToast(exportDestinationMessage(t, path));
-        } catch (e) {
-          showToast(t("workspace.toast.exportFailed", { error: String(e) }));
-        }
-      },
+      label: t("workspace.command.exportDocument"),
+      keywords: ["export", "docx", "word", "txt", "markdown", "내보내기", "워드", "한글"],
+      run: () => setExportOpen(true),
     });
     if (outlinePreset.id === "webnovel") {
       cmds.push({
@@ -2610,6 +2605,15 @@ export function Workspace() {
         onClose={() => setPaletteOpen(false)}
         commands={commands}
       />
+
+      {exportOpen && load ? (
+        <ExportDialog
+          projectId={load.project.id}
+          scopes={exportScopes}
+          onClose={() => setExportOpen(false)}
+          onMessage={showToast}
+        />
+      ) : null}
 
       <SearchModal
         open={searchOpen}

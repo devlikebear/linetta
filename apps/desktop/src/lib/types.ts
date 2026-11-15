@@ -1220,6 +1220,43 @@ export interface ExportPayload {
   suggested_filename: string;
 }
 
+/** What the export dialog writes (#383). Markdown goes through
+ *  export.project / export.node; the other two through export.document. */
+export type ExportFormat = "docx" | "txt" | "md";
+
+/** export.document's layout choices. Mirrors export.DocumentOptions
+ *  (engine/internal/export/document.go); a field left out takes the engine's
+ *  default. */
+export interface ExportDocumentOptions {
+  font?: string;
+  size_pt?: number;
+  line_spacing_pct?: number;
+  first_line_indent?: boolean;
+  page_break_per_episode?: boolean;
+  headings?: boolean;
+  scene_break?: string;
+  illustrations?: boolean;
+}
+
+export interface ExportDocumentRequest {
+  project_id: string;
+  node_id?: string;
+  format: "docx" | "txt";
+  options?: ExportDocumentOptions;
+  /** Count only: scenes and characters, no file. */
+  preview?: boolean;
+}
+
+export interface ExportDocumentPayload {
+  /** Empty on a preview. */
+  bytes_base64?: string;
+  suggested_filename?: string;
+  mime?: string;
+  scenes: number;
+  /** In the work's own character count basis. */
+  chars: number;
+}
+
 export interface ExportTextPayload {
   text: string;
   char_count: number;
