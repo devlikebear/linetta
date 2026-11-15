@@ -138,6 +138,17 @@ The quote goes with your message and stays in the conversation, so a follow-up
 such as "make it shorter" still knows which paragraph you meant. Asked only a
 question, the agent changes nothing.
 
+To ask about the manuscript itself — "which episode did she first get the
+sword?" — switch the panel from **Write** to **Ask**. A question turn gets
+only the tools that read, so it cannot change anything, and it starts none of
+the background passes. The agent answers from the manuscript and checks every
+passage it quotes against the text before you see it; each one appears as a
+source card under the reply, and the reply's [1], [2] point at them. Click a
+card or a number and the scene opens at that paragraph with the quote lit.
+When the manuscript does not settle the question, the agent says so instead of
+guessing. The panel remembers the mode for each work, and sending a selection
+from the editor switches it back to Write.
+
 When only you can settle something, the agent asks on a card instead of
 listing options in its reply. Each question shows its choices, with the one
 the agent recommends marked, and room for your own answer; some let you pick

@@ -22,8 +22,8 @@ import (
 
 // PromptSlotsMeta is the _meta key on a listed prompt naming where the panel
 // shows it: "start" before the first turn, "followup" once there is writing to
-// check, "longform" under the long-form tools button. An external client
-// ignores it.
+// check, "longform" under the long-form tools button, "ask" in question mode
+// (#385). An external client ignores it.
 const PromptSlotsMeta = "linetta/slots"
 
 type promptDef struct {
@@ -86,6 +86,27 @@ var promptDefs = []promptDef{
 		tools: []string{"linetta_list_ledger"},
 		title: map[string]string{"ko": "부 전체 비평", "en": "Critique this part", "ja": "部全体を批評"},
 		text:  map[string]string{"ko": "지금 부를 처음부터 끝까지 읽고 작품 원장과 부 목표에 비춰 비평해 줘. 회수되지 않은 약속, 긴장이 처지는 구간, 반복되는 패턴을 근거와 함께 알려 줘. 원고는 고치지 마.", "en": "Read this part from start to finish and critique it against the ledger and the part's goal. Point out unpaid promises, sagging stretches and repeated patterns, with evidence. Don't change the manuscript.", "ja": "この部を最初から最後まで読み、作品台帳と部の目標に照らして批評してください。未回収の約束、緊張がたるむ箇所、繰り返しのパターンを根拠とともに示してください。原稿は変えないでください。"},
+	},
+	{
+		name:  "first_appearances",
+		slots: []string{"ask"},
+		tools: []string{"linetta_cite_sources"},
+		title: map[string]string{"ko": "처음 등장한 곳", "en": "Where they first appear", "ja": "初登場の場所"},
+		text:  map[string]string{"ko": "지금 장면에 나오는 인물들이 각각 처음 등장한 회차와 장면을 출처와 함께 알려 줘.", "en": "For each character in the current scene, tell me the episode and scene where they first appear, with sources.", "ja": "今のシーンに出てくる人物それぞれが初めて登場した話とシーンを、出典と一緒に教えて。"},
+	},
+	{
+		name:  "where_it_was_set",
+		slots: []string{"ask"},
+		tools: []string{"linetta_cite_sources"},
+		title: map[string]string{"ko": "이 설정 어디서 정했지", "en": "Where was this set up", "ja": "この設定はどこで決めた"},
+		text:  map[string]string{"ko": "지금 장면에 나오는 장소, 물건, 규칙 같은 설정이 원고에서 처음 정해진 곳을 출처와 함께 알려 줘.", "en": "Tell me where in the manuscript the places, objects and rules in the current scene were first set up, with sources.", "ja": "今のシーンに出てくる場所、物、ルールなどの設定が原稿で最初に決まった箇所を、出典と一緒に教えて。"},
+	},
+	{
+		name:  "story_so_far",
+		slots: []string{"ask"},
+		tools: []string{"linetta_cite_sources"},
+		title: map[string]string{"ko": "여기까지 줄거리", "en": "The story so far", "ja": "ここまでのあらすじ"},
+		text:  map[string]string{"ko": "지금 장면 직전까지 무슨 일이 있었는지 원고를 근거로 짧게 정리해 줘.", "en": "Briefly sum up what has happened before the current scene, drawing on the manuscript.", "ja": "今のシーンの直前までに何が起きたか、原稿を根拠に短くまとめて。"},
 	},
 	{
 		name:  "close_arc",

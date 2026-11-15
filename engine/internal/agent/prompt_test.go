@@ -1156,13 +1156,15 @@ func TestSystemPrompt_namesOnlyToolsTheTurnHolds(t *testing.T) {
 			for _, review := range []bool{true, false} {
 				for _, visualOff := range []bool{true, false} {
 					for _, trial := range []bool{false, true} {
-						g := toolGroups{memory: memory, skills: skill, review: review, disableVisualWrites: visualOff}
-						g = g.withTrial(trial)
-						got := systemPrompt("en", doc(agentmemory.ScopeWriterProfile, "writes at night"),
-							emptyDoc(agentmemory.ScopeWorkNotes), skills, g)
-						for _, name := range toolNamePattern.FindAllString(got, -1) {
-							if !g.offers(name) {
-								t.Errorf("%+v: the prompt names %s, which this turn does not hold", g, name)
+						for _, ask := range []bool{false, true} {
+							g := toolGroups{memory: memory, skills: skill, review: review, disableVisualWrites: visualOff}
+							g = g.withTrial(trial).withAsk(ask)
+							got := systemPrompt("en", doc(agentmemory.ScopeWriterProfile, "writes at night"),
+								emptyDoc(agentmemory.ScopeWorkNotes), skills, g)
+							for _, name := range toolNamePattern.FindAllString(got, -1) {
+								if !g.offers(name) {
+									t.Errorf("%+v: the prompt names %s, which this turn does not hold", g, name)
+								}
 							}
 						}
 					}

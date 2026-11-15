@@ -16,8 +16,9 @@ import (
 // link tars/pkg/llm.
 type AgentController interface {
 	// selection is a passage the writer highlighted in the open scene, or "";
-	// images are pictures attached to the message.
-	Run(ctx context.Context, projectID, nodeID, prompt, selection string, images []AgentImage) (string, error)
+	// images are pictures attached to the message. ask is a question turn
+	// (#385): read tools only, answered from the manuscript with sources.
+	Run(ctx context.Context, projectID, nodeID, prompt, selection string, images []AgentImage, ask bool) (string, error)
 	Cancel(ctx context.Context, runID string) error
 	History(ctx context.Context, projectID string, limit int) (json.RawMessage, error)
 	// Status reports the turn running for a work, if any — what a panel that
@@ -48,7 +49,10 @@ type agentRunParams struct {
 	NodeID    string `json:"node_id,omitempty"`
 	Prompt    string `json:"prompt"`
 	Selection string `json:"selection,omitempty"`
-	Images    []struct {
+	// Intent is "ask" for a question about the manuscript, "write" or empty
+	// for an ordinary turn.
+	Intent string `json:"intent,omitempty"`
+	Images []struct {
 		MIME       string `json:"mime"`
 		DataBase64 string `json:"data_base64"`
 	} `json:"images,omitempty"`
@@ -69,6 +73,14 @@ func AgentRun(ctrl AgentController) rpc.Handler {
 		if strings.TrimSpace(p.Prompt) == "" {
 			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "prompt is required"}
 		}
+		var ask bool
+		switch strings.TrimSpace(p.Intent) {
+		case "", "write":
+		case "ask":
+			ask = true
+		default:
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: fmt.Sprintf("intent %q is not ask or write", p.Intent)}
+		}
 		images := make([]AgentImage, 0, len(p.Images))
 		for i, img := range p.Images {
 			data, err := base64.StdEncoding.DecodeString(img.DataBase64)
@@ -77,7 +89,7 @@ func AgentRun(ctrl AgentController) rpc.Handler {
 			}
 			images = append(images, AgentImage{MIME: img.MIME, Data: data})
 		}
-		runID, err := ctrl.Run(ctx, p.ProjectID, p.NodeID, p.Prompt, p.Selection, images)
+		runID, err := ctrl.Run(ctx, p.ProjectID, p.NodeID, p.Prompt, p.Selection, images, ask)
 		if err != nil {
 			return nil, rpc.MethodErrorFrom(err)
 		}

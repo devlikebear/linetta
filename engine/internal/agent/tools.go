@@ -79,7 +79,12 @@ func (g toolGroups) hostGroups() mcphost.ToolGroups {
 // tools/list — plus the one tool the loop appends itself. Full mode always:
 // the built-in agent registers the full set whatever settings.MCPMode says.
 func (g toolGroups) offers(names ...string) bool {
-	held := mcphost.ToolNames(settings.MCPModeFull, g.hostGroups())
+	mode := settings.MCPModeFull
+	if g.ask {
+		// A question turn holds what a read-only server serves.
+		mode = settings.MCPModeReadOnly
+	}
+	held := mcphost.ToolNames(mode, g.hostGroups())
 	held = append(held, askWriterTool)
 	for _, n := range names {
 		if !slices.Contains(held, n) {

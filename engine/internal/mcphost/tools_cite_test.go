@@ -16,8 +16,8 @@ import (
 )
 
 type citeFixture struct {
-	d       ToolDeps
-	work    project.Project
+	d         ToolDeps
+	work      project.Project
 	sceneID   string
 	episodeID string
 	other     project.Project

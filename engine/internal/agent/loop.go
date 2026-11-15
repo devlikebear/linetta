@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime/debug"
+	"slices"
 	"strings"
 
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
@@ -61,6 +62,10 @@ type RunRequest struct {
 	// Images are pictures attached to the message. They go to the model
 	// with this message only; the transcript keeps a marker (withImages).
 	Images []Image
+	// Ask makes this a question about the manuscript (#385): the turn holds
+	// only the read tools, answers with sources it checked through
+	// linetta_cite_sources, and starts no background pass. See withAsk.
+	Ask bool
 }
 
 // Run starts a turn and returns its id immediately; progress arrives as
@@ -131,6 +136,14 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 		return "", err
 	}
 	schemas = append(schemas, askWriterSchema())
+	// A question turn is cut down after the session is chosen, not before:
+	// the session stays the one a writing turn uses (it is cached by these
+	// groups), and what the model is offered, the prompt it reads and the
+	// calls runTool lets through all follow the cut groups instead.
+	groups = groups.withAsk(req.Ask)
+	if groups.ask {
+		schemas = slices.DeleteFunc(schemas, func(t llm.ToolSchema) bool { return !groups.offers(t.Function.Name) })
+	}
 
 	runID := newRunID()
 	// Deliberately NOT derived from the caller's ctx: that context belongs to
@@ -583,6 +596,11 @@ func (s *Service) endDone(ctx context.Context, st loopState, usage usagePayload,
 // so this returns immediately.
 func (s *Service) afterReply(ctx context.Context, st loopState, toolCalls int, usedTools []string) {
 	s.runs.release(st.projectID, st.runID)
+	// A question changed nothing, so there is nothing for a pass to review
+	// or settle, and a pass would be a cost the writer did not ask for.
+	if st.groups.ask {
+		return
+	}
 	s.maybeSelfReview(ctx, st, toolCalls, usedTools)
 	s.maybeEpisodeReview(ctx, st)
 }
@@ -761,7 +779,11 @@ func (s *Service) runTool(ctx context.Context, st loopState, call llm.ToolCall) 
 	})
 
 	var result toolResult
-	if call.Name == askWriterTool {
+	if st.groups.ask && !st.groups.offers(call.Name) {
+		// The model was never offered it, but a call is the model's word, not
+		// a guarantee: a question turn changes nothing however it is asked.
+		result = toolResult{IsError: true, Text: askRefusal(call.Name)}
+	} else if call.Name == askWriterTool {
 		result = askWriter(call.Arguments)
 	} else if refusal := st.brief.refusal(call.Name); refusal != "" {
 		result = toolResult{IsError: true, Text: refusal}

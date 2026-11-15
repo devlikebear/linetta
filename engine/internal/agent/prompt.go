@@ -81,6 +81,10 @@ type toolGroups struct {
 	// prompt line that names a tool asks offers, so the cut reaches the
 	// prompt without a branch of its own.
 	trial bool
+	// ask is a question turn (#385, see withAsk): the turn holds the read
+	// tools only. Like trial it is a cut offers applies, so every line naming
+	// a write tool leaves the prompt on its own.
+	ask bool
 }
 
 func allToolGroups() toolGroups { return toolGroups{memory: true, skills: true, review: true} }
@@ -96,6 +100,20 @@ func (g toolGroups) withTrial(trial bool) toolGroups {
 		return g
 	}
 	g.trial = true
+	g.memory, g.skills, g.disableVisualWrites = false, false, true
+	return g
+}
+
+// withAsk cuts a question turn to the read tools. Memory and skills go with
+// their write tools, as when the writer switches them off: the memory
+// documents stay and lose their budget line, and the skills list, a menu of
+// procedures for writing, goes. Applied after the turn's session is chosen
+// (Run), so it never changes which session a turn shares.
+func (g toolGroups) withAsk(ask bool) toolGroups {
+	if !ask {
+		return g
+	}
+	g.ask = true
 	g.memory, g.skills, g.disableVisualWrites = false, false, true
 	return g
 }
@@ -146,6 +164,9 @@ func systemPrompt(lang string, profile, notes agentmemory.Document, skills []age
 Reply to the writer in %q (their app language). Write manuscript prose in the language the existing manuscript is written in — read a scene first if you are unsure.
 
 How you work:`, lang)
+	if groups.ask {
+		writeAskBlock(&b, groups)
+	}
 	for _, line := range []string{
 		"\n- Call linetta_get_story_context before you write or revise any prose in a turn — a one-line fix included — so you write from the work's actual state and the writer's style notes rather than a guess. A scene write is refused until the turn has read it.",
 		"\n- For illustrations, read designs with linetta_get_character_visuals and compose the prompt with linetta_build_illustration_prompt. linetta_list_illustrations shows the gallery and what became of your picture requests.",
@@ -161,7 +182,11 @@ How you work:`, lang)
 		"\n- The story brief's Writer's Direction section is the writer's own instruction. Follow it over your own judgment; if a request conflicts with it, say so before acting. You cannot edit it — if it looks out of date, tell the writer.",
 		"\n- When only the writer can settle something, call linetta_ask_writer instead of listing options in your reply. Put every open decision in one call, say in your reply what you found and why it needs deciding, and leave the options themselves to the card. Mark what you recommend. The call ends your turn, and their answers arrive as their next message, so finish what does not depend on them first. Decide for yourself what the work's record already settles.",
 	} {
-		writeOffered(&b, groups, line)
+		// A question turn writes nothing, so the writing habits above are not
+		// its to follow; its own block replaces them.
+		if !groups.ask {
+			writeOffered(&b, groups, line)
+		}
 	}
 	if !groups.disableVisualWrites {
 		b.WriteString("\n- Save designs with linetta_set_character_visuals / linetta_set_art_style, and manage references with linetta_add_reference_image / linetta_delete_reference_image. To keep an image the writer attached as a character's reference, pass its number as attachment; to keep a gallery picture whose face is right, pass its illustration_id. Omitted patch fields stay unchanged; empty strings clear them.")
@@ -202,6 +227,28 @@ How you work:`, lang)
 		b.WriteString(skillsBlock(skills))
 	}
 	return b.String()
+}
+
+// writeAskBlock is a question turn's "how you work" (#385). Its answer has to
+// be one the writer can check, so it rests on passages linetta_cite_sources
+// verified and points at them by number; the panel draws each number as a
+// card that opens the passage. A turn without the tool (the trial) still
+// names where each part of its answer comes from.
+func writeAskBlock(b *strings.Builder, groups toolGroups) {
+	b.WriteString("\n- This turn is a question about the manuscript. Answer it from the manuscript itself. Nothing can be changed in this turn: do not offer to edit, and if the writer wants a change, tell them to switch the panel to writing.")
+	if groups.offers("linetta_cite_sources") {
+		writeOffered(b, groups, "\n- Find the passages with linetta_search_manuscript, whose hits name the paragraphs they were found in, and read them with linetta_read_scene numbered=true. Before you reply, call linetta_cite_sources once with the passages your answer rests on, and point at each in your reply as [1], [2] with the numbers it returned. Never write [n] for a source it did not return.")
+	} else {
+		writeOffered(b, groups, "\n- Find the passages with linetta_search_manuscript and linetta_read_scene, and say which episode and scene each part of your answer comes from, quoting the words.")
+	}
+	b.WriteString("\n- If the manuscript does not settle the question, say you found no basis for it in the manuscript rather than guessing. A question about craft or general knowledge needs no source: answer it, and say the answer is not from the manuscript.")
+	b.WriteString("\n- Images the writer attaches arrive with their message, numbered 1, 2, ... in order.")
+}
+
+// askRefusal answers a call to a tool a question turn does not hold.
+func askRefusal(name string) string {
+	return fmt.Sprintf("not run: %s changes the work, and this turn is a question; nothing is changed in question mode. "+
+		"Answer from what you have read, and tell the writer to switch the panel to writing if they want the change.", name)
 }
 
 // toolNamePattern finds the tools a prompt line names.

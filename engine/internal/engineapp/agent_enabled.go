@@ -276,8 +276,8 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 	return &agentController{svc: svc, tools: tools, deps: built, notify: deps.notify}, svc.Close
 }
 
-func (c *agentController) Run(ctx context.Context, projectID, nodeID, prompt, selection string, images []handlers.AgentImage) (string, error) {
-	req := agent.RunRequest{ProjectID: projectID, NodeID: nodeID, Prompt: prompt, Selection: selection}
+func (c *agentController) Run(ctx context.Context, projectID, nodeID, prompt, selection string, images []handlers.AgentImage, ask bool) (string, error) {
+	req := agent.RunRequest{ProjectID: projectID, NodeID: nodeID, Prompt: prompt, Selection: selection, Ask: ask}
 	for _, img := range images {
 		req.Images = append(req.Images, agent.Image{MIME: img.MIME, Data: img.Data})
 	}
