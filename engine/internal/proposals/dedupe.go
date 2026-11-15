@@ -42,6 +42,11 @@ type dedupeCandidate struct {
 // findDuplicates compares name/kind against every candidate's name and
 // aliases, normalized, and reports every match. It never merges or chooses
 // for the writer — see the package doc comment above.
+//
+// With no exact match, a candidate of the same kind can still match in part
+// (#387): a given name written without the surname ("민준" for "강민준"), or a
+// name that is one word of a longer one ("Harin" for "Harin Kang"). Those are
+// marked "partial" — likely the same character, written short.
 func findDuplicates(name, kind string, candidates []dedupeCandidate) []Duplicate {
 	target := normalizeForDedupe(name)
 	if target == "" {
@@ -52,21 +57,64 @@ func findDuplicates(name, kind string, candidates []dedupeCandidate) []Duplicate
 		terms := make([]string, 0, len(c.Aliases)+1)
 		terms = append(terms, c.Name)
 		terms = append(terms, c.Aliases...)
+		matched := ""
 		for _, term := range terms {
 			if normalizeForDedupe(term) != target {
 				continue
 			}
-			matched := "exact"
+			matched = "exact"
 			if c.Kind != "" && kind != "" && c.Kind != kind {
 				matched = "exact_kind_mismatch"
 			}
+			break
+		}
+		if matched == "" && c.Kind == kind {
+			for _, term := range terms {
+				if partialName(name, term) {
+					matched = "partial"
+					break
+				}
+			}
+		}
+		if matched != "" {
 			dups = append(dups, Duplicate{
 				EntityID: c.EntityID, ItemID: c.ItemID, Name: c.Name, Kind: c.Kind, Matched: matched,
 			})
-			break
 		}
 	}
 	return dups
+}
+
+// maxSurnameRunes is how much longer a full name may be than the given name
+// it ends with: a Korean surname is one rune, two at most.
+const maxSurnameRunes = 2
+
+// partialName reports whether one of a and b is the other written short:
+// the end of it with at most a surname's runes before ("민준" and "강민준"),
+// or one of its words ("Harin" and "Harin Kang"). The shorter has to be two
+// runes or more, so a single syllable never matches everything that has it.
+func partialName(a, b string) bool {
+	na, nb := normalizeForDedupe(a), normalizeForDedupe(b)
+	if na == "" || nb == "" || na == nb {
+		return false
+	}
+	short, long, longRaw := na, nb, b
+	if len([]rune(na)) > len([]rune(nb)) {
+		short, long, longRaw = nb, na, a
+	}
+	n := len([]rune(short))
+	if n < 2 {
+		return false
+	}
+	if strings.HasSuffix(long, short) && len([]rune(long))-n <= maxSurnameRunes {
+		return true
+	}
+	for _, word := range strings.Fields(longRaw) {
+		if normalizeForDedupe(word) == short {
+			return true
+		}
+	}
+	return false
 }
 
 // attachDuplicates fills Duplicates on every create_entity item in items by

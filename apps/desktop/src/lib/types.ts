@@ -2129,7 +2129,15 @@ export interface SuggestionDuplicate {
   item_id?: string;
   name: string;
   kind: string;
-  matched: "exact" | "exact_kind_mismatch";
+  /** partial: likely the same, written short — "민준" for "강민준" (#387). */
+  matched: "exact" | "exact_kind_mismatch" | "partial";
+}
+
+/** A name the writer turned down; a tidy-up may not propose it again (#387). */
+export interface DismissedName {
+  kind: string;
+  name: string;
+  dismissed_at: number;
 }
 
 export interface SuggestionItemResult {

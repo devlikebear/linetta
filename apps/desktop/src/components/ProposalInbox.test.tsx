@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   undo: vi.fn(),
   extractionProgress: vi.fn(),
   settingsGet: vi.fn(),
+  dismissed: vi.fn(),
+  forgetDismissed: vi.fn(),
 }));
 
 vi.mock("../lib/rpc", () => ({
@@ -33,6 +35,8 @@ vi.mock("../lib/rpc", () => ({
     pendingCount: vi.fn().mockResolvedValue({ count: 0 }),
     extractionEstimate: vi.fn(),
     extractionProgress: mocks.extractionProgress,
+    dismissed: mocks.dismissed,
+    forgetDismissed: mocks.forgetDismissed,
   },
 }));
 
@@ -85,7 +89,34 @@ describe("ProposalInbox", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.settingsGet.mockResolvedValue({ language: "ko" });
+    mocks.dismissed.mockResolvedValue({ names: [] });
+    mocks.forgetDismissed.mockResolvedValue({ ok: true });
     events.listeners.clear();
+  });
+
+  it("says a short name is similar to one in the work, not the same", async () => {
+    mocks.list.mockResolvedValue({
+      proposals: [batch([item({
+        op: { op: "create_entity", name: "민준", kind: "character" },
+        summary: "새 인물: 민준",
+        duplicates: [{ entity_id: "e1", name: "강민준", kind: "character", matched: "partial" }],
+      })])],
+    });
+    renderInbox();
+    expect(await screen.findByText("비슷한 이름: 강민준(인물)")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /강민준/ })).toBeInTheDocument();
+  });
+
+  it("lists the names turned down, even with an empty inbox, and lets one back in", async () => {
+    mocks.list.mockResolvedValue({ proposals: [] });
+    mocks.dismissed.mockResolvedValue({ names: [{ kind: "character", name: "김민호", dismissed_at: 1 }] });
+    renderInbox();
+    const list = await screen.findByTestId("proposal-dismissed");
+    expect(list.textContent).toContain("다시 제안하지 않을 이름 1개");
+    expect(list.textContent).toContain("김민호");
+    await userEvent.click(screen.getByRole("button", { name: "다시 허용" }));
+    expect(mocks.forgetDismissed).toHaveBeenCalledWith("project-1", "character", "김민호");
+    await waitFor(() => expect(screen.queryByTestId("proposal-dismissed")).toBeNull());
   });
 
   it("groups a proposed ledger change under the ledger, with its quotes, and names a tidy-up batch", async () => {

@@ -106,6 +106,7 @@ func seedWork(t *testing.T, db *sql.DB, id string) {
 		 VALUES ('P-f1', 'P', '질문', 3, '[]', 'fp', '{}', 'agent', 1)`,
 		`INSERT INTO story_proposals (id, project_id, purpose, source, created_at, forecast_id) VALUES ('P-g1', 'P', 'general', 'agent', 1, 'P-f1')`,
 		`INSERT INTO story_proposal_items (id, proposal_id, project_id, ordinal, op_json, status_at) VALUES ('P-g2', 'P-g1', 'P', 0, '{}', 1)`,
+		`INSERT INTO proposal_dismissed_names (project_id, kind, normalized, name, dismissed_at) VALUES ('P', 'character', '하린', '하린', 1)`,
 	}
 	for _, statement := range statements {
 		replaced := strings.NewReplacer("'P-", "'"+id+"-", "'P'", "'"+id+"'").Replace(statement)

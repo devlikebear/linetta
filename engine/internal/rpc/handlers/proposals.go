@@ -237,3 +237,42 @@ func ExtractionProgress(svc *proposals.Service) rpc.Handler {
 		return json.Marshal(progress)
 	}
 }
+
+// ProposalsDismissed returns a handler for proposals.dismissed (#387): the
+// names the writer turned down in a work, which a tidy-up may not propose.
+func ProposalsDismissed(svc *proposals.Service) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var in struct {
+			ProjectID string `json:"project_id"`
+		}
+		if err := json.Unmarshal(params, &in); err != nil || strings.TrimSpace(in.ProjectID) == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: errIDRequired}
+		}
+		names, err := svc.Dismissed(ctx, in.ProjectID)
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.Marshal(struct {
+			Names []proposals.DismissedName `json:"names"`
+		}{names})
+	}
+}
+
+// ProposalsForgetDismissed returns a handler for proposals.forget_dismissed:
+// the writer lets a turned-down name be proposed again.
+func ProposalsForgetDismissed(svc *proposals.Service) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var in struct {
+			ProjectID string `json:"project_id"`
+			Kind      string `json:"kind"`
+			Name      string `json:"name"`
+		}
+		if err := json.Unmarshal(params, &in); err != nil || strings.TrimSpace(in.ProjectID) == "" || strings.TrimSpace(in.Name) == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project_id and name are required"}
+		}
+		if err := svc.ForgetDismissed(ctx, in.ProjectID, in.Kind, in.Name); err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.RawMessage(`{"ok":true}`), nil
+	}
+}

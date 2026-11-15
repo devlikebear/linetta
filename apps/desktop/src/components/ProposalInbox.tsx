@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useEngineEvent } from "../hooks/useEngineEvent";
 import type { McpChangedPayload } from "../hooks/useMcpChanges";
 import { proposals as proposalsApi } from "../lib/rpc";
-import type {
+import type { DismissedName,
   ExtractionProgress,
   ProposalOp,
   ProposalOpType,
@@ -134,6 +134,32 @@ export function ProposalInbox({ projectId, onClose, onOpenNode }: Readonly<Props
     if (event.project_id && event.project_id !== projectId) return;
     setRevision((n) => n + 1);
   });
+
+  // Names the writer turned down (#387), reread with the inbox: a reject
+  // adds one.
+  const [dismissed, setDismissed] = useState<DismissedName[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    proposalsApi
+      .dismissed(projectId)
+      .then((res) => {
+        if (!cancelled) setDismissed(res.names ?? []);
+      })
+      .catch(() => {
+        // The list is a courtesy; the inbox works without it.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, revision]);
+  const forgetDismissed = async (d: DismissedName) => {
+    try {
+      await proposalsApi.forgetDismissed(projectId, d.kind, d.name);
+      setDismissed((cur) => cur.filter((x) => !(x.kind === d.kind && x.name === d.name)));
+    } catch (e) {
+      setError(e);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -471,7 +497,7 @@ export function ProposalInbox({ projectId, onClose, onOpenNode }: Readonly<Props
                           {item.duplicates.map((dup, i) => (
                             <div key={i} className="pi-duplicate">
                               <span>
-                                {t("proposals.duplicate.maybeSame", {
+                                {t(dup.matched === "partial" ? "proposals.duplicate.similar" : "proposals.duplicate.maybeSame", {
                                   name: dup.name,
                                   kind: t(`entity.kind.${dup.kind}` as never),
                                 })}
@@ -556,6 +582,24 @@ export function ProposalInbox({ projectId, onClose, onOpenNode }: Readonly<Props
             </button>
           </div>
         </>
+      )}
+
+      {dismissed.length > 0 && (
+        <details className="pi-dismissed" data-testid="proposal-dismissed">
+          <summary>{t("proposals.dismissed.summary", { count: String(dismissed.length) })}</summary>
+          <p className="pi-note">{t("proposals.dismissed.hint")}</p>
+          <ul>
+            {dismissed.map((d) => (
+              <li key={`${d.kind}:${d.name}`}>
+                <span>{d.name}</span>
+                <span className="pi-breadcrumb">{t(`entity.kind.${d.kind}` as never)}</span>
+                <button type="button" className="pi-link" onClick={() => void forgetDismissed(d)}>
+                  {t("proposals.dismissed.forget")}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
     </aside>
   );

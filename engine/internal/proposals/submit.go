@@ -86,6 +86,16 @@ func (s *Service) Submit(ctx context.Context, now int64, in SubmitInput, source 
 
 	lookup := s.lookupFor(ctx, projectID)
 
+	// A tidy-up batch may not bring back a name the writer turned down; a
+	// batch they asked for may.
+	var dismissed map[string]string
+	if purpose == PurposeOrganize {
+		var err error
+		if dismissed, err = s.dismissedSet(ctx, projectID); err != nil {
+			return SubmitResult{}, nil, err
+		}
+	}
+
 	// itemIDs are generated up front so an op's own Ref (the one it
 	// declares, for create_entity/create_thread) and this item's stored id
 	// can be the same token when the model did not supply one — see the
@@ -136,6 +146,11 @@ func (s *Service) Submit(ctx context.Context, now int64, in SubmitInput, source 
 			continue
 		}
 		op = single.Ops[0]
+		if op.Type == "create_entity" && dismissed != nil {
+			if name, ok := dismissed[op.Kind+"\x00"+normalizeForDedupe(op.Name)]; ok {
+				add(i, "%s", dismissedMessage(i+1, name))
+			}
+		}
 		// add_beat gets an auto ref too, same as the others, purely so
 		// Accept's createdIDFor can read its created beat id back —
 		// nothing else in the op catalogue ever depends ON a beat's ref,

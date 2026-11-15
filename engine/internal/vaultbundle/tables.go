@@ -96,6 +96,9 @@ var dependents = []Table{
 	{"forecasts", byProject, ""},
 	{"story_proposals", byProject, ""},
 	{"story_proposal_items", byProject, ""},
+	// Names the writer turned down for a tidy-up (#387): their decision, so
+	// it travels with the work.
+	{"proposal_dismissed_names", byProject, ""},
 	{"story_ledger", byProject, ""},
 	{"part_arcs", byProject, ""},
 	{"scene_settlements", byProject, ""},
