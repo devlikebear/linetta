@@ -17,6 +17,7 @@ type fakeAgent struct {
 	sawNode    string
 	sawSel     string
 	sawImages  []AgentImage
+	sawAsk     bool
 
 	cancelErr error
 	cancelled string
@@ -40,8 +41,8 @@ type fakeAgent struct {
 	undoneSnap string
 }
 
-func (f *fakeAgent) Run(_ context.Context, projectID, nodeID, prompt, selection string, images []AgentImage) (string, error) {
-	f.sawProject, f.sawPrompt, f.sawNode, f.sawSel, f.sawImages = projectID, prompt, nodeID, selection, images
+func (f *fakeAgent) Run(_ context.Context, projectID, nodeID, prompt, selection string, images []AgentImage, ask bool) (string, error) {
+	f.sawProject, f.sawPrompt, f.sawNode, f.sawSel, f.sawImages, f.sawAsk = projectID, prompt, nodeID, selection, images, ask
 	return f.runID, f.runErr
 }
 func (f *fakeAgent) Cancel(_ context.Context, runID string) error {
@@ -92,6 +93,30 @@ func TestAgentRun_decodesAttachedImages(t *testing.T) {
 	var me *rpc.MethodError
 	if !errors.As(err, &me) || me.Code != rpc.CodeInvalidParams {
 		t.Fatalf("bad base64 = %v", err)
+	}
+}
+
+// A question turn (#385) is asked for by name; anything else the panel did
+// not mean is refused rather than run as a writing turn.
+func TestAgentRun_readsTheIntent(t *testing.T) {
+	for params, ask := range map[string]bool{
+		`{"project_id":"p1","prompt":"몇 화야?","intent":"ask"}`: true,
+		`{"project_id":"p1","prompt":"써 줘","intent":"write"}`: false,
+		`{"project_id":"p1","prompt":"써 줘"}`:                  false,
+	} {
+		f := &fakeAgent{runID: "run-1"}
+		if _, err := AgentRun(f)(context.Background(), json.RawMessage(params)); err != nil {
+			t.Fatalf("%s: %v", params, err)
+		}
+		if f.sawAsk != ask {
+			t.Errorf("%s: ask = %v", params, f.sawAsk)
+		}
+	}
+	f := &fakeAgent{runID: "run-1"}
+	_, err := AgentRun(f)(context.Background(), json.RawMessage(`{"project_id":"p1","prompt":"x","intent":"question"}`))
+	var me *rpc.MethodError
+	if !errors.As(err, &me) || me.Code != rpc.CodeInvalidParams || f.sawPrompt != "" {
+		t.Fatalf("unknown intent = %v, ran = %q", err, f.sawPrompt)
 	}
 }
 

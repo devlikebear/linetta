@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { Bot, ImagePlus, Quote, Send, Square, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { agent as agentApi, proposals as proposalsApi, providers as providersApi, settings as settingsApi } from "../../lib/rpc";
-import type { AgentAsk, AgentCitation, AgentHistoryRow, AgentPrompt, AgentRunStatus, ProposalsChangedPayload, ProviderStatus } from "../../lib/types";
+import type { AgentAsk, AgentCitation, AgentHistoryRow, AgentPrompt, AgentRunStatus, PassageTarget, ProposalsChangedPayload, ProviderStatus } from "../../lib/types";
 import { useI18n } from "../../lib/i18n";
 import { toolKind, toolLabelKey, toolVerbKey } from "../../lib/agentTools";
 import { reasonMessage, rpcErrorMessage } from "../../lib/rpcMessage";
@@ -15,6 +15,7 @@ import { formatMillions, TRIAL_LOW_TOKENS, useTrialStatus } from "../../hooks/us
 import { AgentSetup } from "./AgentSetup";
 import { AskCard } from "./AskCard";
 import { Markdown } from "./Markdown";
+import { SourceCards, sourcePlace, sourceTarget } from "./SourceCards";
 import { ProviderPicker } from "./ProviderPicker";
 import { IllustrationRequestCard } from "../illustration/IllustrationRequestCard";
 import "./AgentPanel.css";
@@ -481,6 +482,62 @@ interface Props {
   /** Opens Settings → image generation, for an illustration request card
    *  whose provider is not set up yet. */
   onOpenImageSettings?: () => void;
+  /** Opens a scene at a source a question's answer cites (#385). */
+  onRevealPassage?: (target: PassageTarget) => void;
+}
+
+/** Writing or asking about the manuscript (#385). A question turn holds only
+ *  the read tools and answers with sources it checked. */
+type AgentIntent = "write" | "ask";
+
+const INTENT_KEY = "linetta.agentIntent.";
+
+/** The mode this work's panel was last in. Remembered per work, in this
+ *  browser only; a storage that cannot be read means writing, the default. */
+function readIntent(projectId: string): AgentIntent {
+  try {
+    return window.localStorage.getItem(INTENT_KEY + projectId) === "ask" ? "ask" : "write";
+  } catch {
+    return "write";
+  }
+}
+
+function saveIntent(projectId: string, intent: AgentIntent) {
+  try {
+    window.localStorage.setItem(INTENT_KEY + projectId, intent);
+  } catch {
+    // Remembering the mode is a convenience; the panel works without it.
+  }
+}
+
+/** Which assistant line of each turn carries that turn's sources: the last
+ *  reply of the turn, under which the cards go and whose [n] become chips. A
+ *  turn is the lines between two of the writer's messages, which reads the
+ *  same live and restored. When a turn checked sources more than once, the
+ *  last check is what its reply numbers. A turn with sources and no reply
+ *  puts them under the check's own line. */
+export function turnSources(lines: readonly Line[]): Map<string, AgentCitation[]> {
+  const out = new Map<string, AgentCitation[]>();
+  let reply: string | null = null;
+  let check: string | null = null;
+  let sources: AgentCitation[] | null = null;
+  const close = () => {
+    const at = reply ?? check;
+    if (sources && at) out.set(at, sources);
+    reply = check = sources = null;
+  };
+  for (const line of lines) {
+    if (line.kind === "user") {
+      close();
+    } else if (line.kind === "assistant") {
+      reply = line.id;
+    } else if (line.kind === "tool" && line.citations) {
+      sources = line.citations;
+      check = line.id;
+    }
+  }
+  close();
+  return out;
 }
 
 export function AgentPanel({
@@ -494,6 +551,7 @@ export function AgentPanel({
   onExternalDraftApplied,
   onOpenImageSettings,
   onOpenProposals,
+  onRevealPassage,
 }: Props) {
   const { t, language } = useI18n();
   // "Ready" means the active row is both configured AND consented. A
@@ -568,6 +626,15 @@ export function AgentPanel({
   const [sendError, setSendError] = useState<string | null>(null);
   const [confirmFresh, setConfirmFresh] = useState(false);
   const [showLongform, setShowLongform] = useState(false);
+  const [intent, setIntentState] = useState<AgentIntent>(() => readIntent(projectId));
+  const setIntent = (next: AgentIntent) => {
+    setIntentState(next);
+    saveIntent(projectId, next);
+  };
+  // Another work keeps its own mode.
+  useEffect(() => {
+    setIntentState(readIntent(projectId));
+  }, [projectId]);
   // Pictures waiting to go with the next message, picked, pasted or dropped.
   const [images, setImages] = useState<ReadImage[]>([]);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -1207,15 +1274,13 @@ export function AgentPanel({
     // minted this turn's run id by the time run() returns, and an event for
     // it can reach the listener before the response reaches us.
     pendingSendRef.current = true;
-    agentApi
-      .run(
-        projectId,
-        prompt,
-        nodeId,
-        sentAttachment?.text,
-        // Only a message with pictures carries the argument at all.
-        ...(sentImages.length > 0 ? [sentImages.map(({ mime, data_base64 }) => ({ mime, data_base64 }))] : []),
-      )
+    // Only a message with pictures carries them, and only a question its
+    // intent: a writing turn's call is the one it always was.
+    const sentImageArgs = sentImages.length > 0 ? sentImages.map(({ mime, data_base64 }) => ({ mime, data_base64 })) : undefined;
+    const run = intent === "ask"
+      ? agentApi.run(projectId, prompt, nodeId, sentAttachment?.text, sentImageArgs, "ask")
+      : agentApi.run(projectId, prompt, nodeId, sentAttachment?.text, ...(sentImageArgs ? [sentImageArgs] : []));
+    run
       .then((result) => {
         if (sendTokenRef.current !== token) {
           // The writer jumped to another work while this send was in flight
@@ -1381,6 +1446,10 @@ export function AgentPanel({
   const startPrompts = prompts.filter((p) => p.slots.includes("start"));
   const followupPrompts = prompts.filter((p) => p.slots.includes("followup"));
   const longformPrompts = prompts.filter((p) => p.slots.includes("longform"));
+  const askPrompts = prompts.filter((p) => p.slots.includes("ask"));
+  const sourcesAt = turnSources(lines);
+  const citeTitle = (c: AgentCitation) => `${sourcePlace(language, c)} — “${c.quote}”`;
+  const revealSource = onRevealPassage ? (c: AgentCitation) => onRevealPassage(sourceTarget(c)) : undefined;
 
   useEffect(() => {
     let cancelled = false;
@@ -1511,6 +1580,8 @@ export function AgentPanel({
     if (!selectionRequest || selectionRequest.id === seenSelectionIdRef.current) return;
     seenSelectionIdRef.current = selectionRequest.id;
     setAttached({ text: selectionRequest.text, nodeId: selectionRequest.nodeId });
+    // A passage is sent to be worked on: the panel opens on writing.
+    setIntentState("write");
   }, [selectionRequest]);
   // The writer came here to type a question about the passage. `ready`
   // because the composer does not exist until the provider check lands.
@@ -1587,6 +1658,23 @@ export function AgentPanel({
     <aside className="panel agent-panel" onMouseDown={(e) => e.stopPropagation()}>
       <div className="panel-head">
         <span className="ttl"><span className="ic"><Bot size={16} /></span> {t("agentPanel.title")}</span>
+        {ready ? (
+          <div className="agent-mode" role="group" aria-label={t("agentPanel.mode.label")} data-testid="agent-mode">
+            {(["write", "ask"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                className={intent === m ? "is-on" : undefined}
+                aria-pressed={intent === m}
+                data-testid={`agent-mode-${m}`}
+                disabled={busy}
+                onClick={() => setIntent(m)}
+              >
+                {t(`agentPanel.mode.${m}`)}
+              </button>
+            ))}
+          </div>
+        ) : null}
         {ready && onTrial && trialStatus && (trialStatus.state === "available" || trialStatus.state === "not_started") ? (
           <span
             className={`agent-trial-remaining${trialStatus.remaining_tokens < TRIAL_LOW_TOKENS ? " is-low" : ""}`}
@@ -1695,11 +1783,13 @@ export function AgentPanel({
             }
             if (line.kind === "assistant") {
               const text = line.id === activeAssistantId ? shownActiveText : line.text;
+              const sources = sourcesAt.get(line.id);
               return (
                 <div key={line.id} className="msg bot">
                   <div className="msg-bubble">
-                    <Markdown text={text} />
+                    <Markdown text={text} citations={sources} onCite={revealSource} citeTitle={citeTitle} />
                   </div>
+                  {sources ? <SourceCards citations={sources} onReveal={onRevealPassage} /> : null}
                   {line.usage ? (
                     // No cost figure: prices differ per provider and change
                     // often, and a wrong number is worse than none.
@@ -1780,6 +1870,12 @@ export function AgentPanel({
             // "done"/"error" it is the JSON the go-sdk serialised from the
             // tool's output, or an English engine sentence. See
             // lib/agentTools.ts for the full trace.
+            // A source check that came back with sources is drawn as the
+            // cards under the reply, not as a line of its own.
+            if (line.citations && line.state === "ok") {
+              const sources = sourcesAt.get(line.id);
+              return sources ? <SourceCards key={line.id} citations={sources} onReveal={onRevealPassage} /> : null;
+            }
             const kind = toolKind(line.name);
             const labelKey = toolLabelKey(line.name);
             // Revertible whenever the line carries something to undo — a
@@ -1867,6 +1963,22 @@ export function AgentPanel({
               </button>
             ))}
           </div>
+        ) : intent === "ask" ? (
+          !busy && !askOpen && askPrompts.length > 0 && draft.trim() === "" ? (
+            <div className="ai-chiprow agent-starters" data-testid="agent-question-chips">
+              {askPrompts.map((p) => (
+                <button
+                  key={p.name}
+                  type="button"
+                  className="chip"
+                  data-testid={`agent-ask-${p.name}`}
+                  onClick={() => setDraft(p.text)}
+                >
+                  {p.title}
+                </button>
+              ))}
+            </div>
+          ) : null
         ) : lines.length === 0 && !busy && startPrompts.length > 0 ? (
           // Starting chips fill the composer and stop there — the writer gets
           // to edit the sentence before it goes anywhere. They only make
@@ -1995,7 +2107,13 @@ export function AgentPanel({
               // Both buttons beside this box carry one; the box the panel
               // exists for should too.
               aria-label={t("agentPanel.composer.label")}
-              placeholder={t(attachment ? "agentPanel.composer.placeholderSelection" : "agentPanel.composer.placeholder")}
+              placeholder={t(
+                attachment
+                  ? "agentPanel.composer.placeholderSelection"
+                  : intent === "ask"
+                    ? "agentPanel.composer.placeholderAsk"
+                    : "agentPanel.composer.placeholder",
+              )}
               rows={2}
             />
             {busy ? (

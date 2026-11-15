@@ -302,5 +302,8 @@ func (s *Service) loopCLI(ctx context.Context, st loopState) {
 	// switches, off until they turn them on. The work is freed first, as in
 	// afterReply.
 	s.runs.release(st.projectID, st.runID)
+	if st.groups.ask {
+		return
+	}
 	s.maybeEpisodeReview(ctx, st)
 }

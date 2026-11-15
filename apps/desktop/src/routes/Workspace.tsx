@@ -2573,6 +2573,7 @@ export function Workspace() {
             onOpenProposals={() => setProposalInboxOpen(true)}
             onExternalDraftApplied={clearAgentDraftRequest}
             onOpenImageSettings={openImageSettings}
+            onRevealPassage={(target) => { void revealPassage(target); }}
             onClose={() => {
               setAgentOpen(false);
               focusEditor();

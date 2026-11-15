@@ -627,14 +627,16 @@ export const syncApi = {
  *  the alternative until the panel calls them. */
 export const agent = {
   /** selection: a passage the writer highlighted in the open scene;
-   *  images: pictures attached to the message. */
-  run: (projectId: string, prompt: string, nodeId?: string, selection?: string, images?: AgentImage[]) =>
+   *  images: pictures attached to the message; intent "ask" makes it a
+   *  question about the manuscript, answered with checked sources (#385). */
+  run: (projectId: string, prompt: string, nodeId?: string, selection?: string, images?: AgentImage[], intent?: "ask" | "write") =>
     rpcCall<AgentRunResult>("agent.run", {
       project_id: projectId,
       node_id: nodeId,
       prompt,
       selection,
       images: images && images.length > 0 ? images : undefined,
+      intent,
     }),
   cancel: (runId: string) => rpcCall<{ ok: true }>("agent.cancel", { run_id: runId }),
   history: (projectId: string, limit?: number) =>

@@ -41,6 +41,9 @@ func TestPromptListSnapshot(t *testing.T) {
 		{"forecast_next_episode", "다음 전개 갈래", "start,followup"},
 		{"review_episode", "이 화 검수", "followup"},
 		{"review_part", "부 전체 비평", "followup"},
+		{"first_appearances", "처음 등장한 곳", "ask"},
+		{"where_it_was_set", "이 설정 어디서 정했지", "ask"},
+		{"story_so_far", "여기까지 줄거리", "ask"},
 		{"close_arc", "아크 결산", "longform"},
 		{"rebuild_record", "정본 재구축", "longform"},
 		{"find_impact", "최근 결정의 영향 찾기", "longform"},
@@ -103,14 +106,15 @@ func TestPromptArgumentsAreOptionalProjectAndNode(t *testing.T) {
 
 // A prompt whose tools a server does not serve is not listed there.
 func TestPromptsFollowTheToolsTheServerHas(t *testing.T) {
-	// A read-only server keeps the two that only read: a critique is said,
-	// not recorded.
-	if got := panelNames(t, "ko", settings.MCPModeReadOnly, allOn()); !slices.Equal(got, []string{"suggest_next_scene", "review_part"}) {
+	// A read-only server keeps the ones that only read: a critique is said,
+	// not recorded, and a question is answered with sources it only checks.
+	questions := []string{"first_appearances", "where_it_was_set", "story_so_far"}
+	if got := panelNames(t, "ko", settings.MCPModeReadOnly, allOn()); !slices.Equal(got, append([]string{"suggest_next_scene", "review_part"}, questions...)) {
 		t.Errorf("read-only server lists %v", got)
 	}
 	noReview := allOn()
 	noReview.Review = false
-	if got := panelNames(t, "ko", settings.MCPModeFull, noReview); !slices.Equal(got, []string{"draft_current_scene", "suggest_next_scene"}) {
+	if got := panelNames(t, "ko", settings.MCPModeFull, noReview); !slices.Equal(got, append([]string{"draft_current_scene", "suggest_next_scene"}, questions...)) {
 		t.Errorf("review tools off lists %v", got)
 	}
 }

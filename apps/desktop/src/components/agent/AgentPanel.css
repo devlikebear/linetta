@@ -479,3 +479,86 @@
 }
 
 .agent-trial-remaining.is-low { color: var(--danger); }
+
+/* Writing or asking (#385): a two-way switch beside the title. */
+.agent-mode {
+  display: inline-flex;
+  margin-left: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  flex: none;
+}
+.agent-mode button {
+  padding: 2px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.agent-mode button + button { border-left: 1px solid var(--line); }
+.agent-mode button.is-on { background: var(--accent-tint2); color: var(--ink); }
+.agent-mode button:disabled { cursor: default; opacity: 0.6; }
+
+/* A reply's [n], pointing at its source card. */
+.agent-cite {
+  display: inline-block;
+  min-width: 1.4em;
+  margin: 0 1px;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--accent-deep);
+  font-size: 0.78em;
+  line-height: 1.4;
+  vertical-align: 0.15em;
+  cursor: pointer;
+}
+.agent-cite:hover:not(:disabled) { border-color: var(--accent); }
+.agent-cite:disabled { cursor: default; }
+
+/* The sources under a reply: one card per scene, one row per passage. */
+.agent-sources { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.agent-sources-title { font-size: 11px; color: var(--muted); letter-spacing: 0.02em; }
+.agent-source {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  padding: 6px 8px;
+}
+.agent-source-place { font-size: 12px; color: var(--ink-soft); margin-bottom: 2px; }
+.agent-source-item {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  width: 100%;
+  padding: 3px 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  color: var(--ink);
+  font-size: 12px;
+  cursor: pointer;
+}
+.agent-source-item:hover:not(:disabled) .agent-source-quote { color: var(--ink); text-decoration: underline; }
+.agent-source-item:disabled { cursor: default; }
+.agent-source-n {
+  flex: none;
+  min-width: 1.4em;
+  border-radius: 999px;
+  background: var(--accent-tint2);
+  color: var(--accent-deep);
+  text-align: center;
+  font-size: 11px;
+}
+.agent-source-para { flex: none; color: var(--accent-deep); font-variant-numeric: tabular-nums; }
+.agent-source-quote {
+  color: var(--ink-soft);
+  font-style: italic;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
