@@ -14,7 +14,7 @@ import type {
   Forecast,
   ProposalOp,
   SelectForecastResult,
-  SuggestionBatch,
+  DismissedName, SuggestionBatch,
   SuggestionItemStatus,
 } from "./types";
 import type { IllustrationComposition, IllustrationFormat, IllustrationGenerateInput, IllustrationMeta, IllustrationRepresentatives, IllustrationRequest, IllustrationRequestEdits, IllustrationRequestStatus, ImageProviderStatus } from "./types";
@@ -903,6 +903,10 @@ export const proposals = {
    *  beat an add_beat item added onto a scene the batch created. */
   undo: (projectId: string, batchId: string) =>
     rpcCall<{ ok: boolean }>("proposals.undo", { project_id: projectId, batch_id: batchId }),
+  /** Names the writer turned down, which a tidy-up may not propose (#387). */
+  dismissed: (projectId: string) => rpcCall<{ names: DismissedName[] }>("proposals.dismissed", { project_id: projectId }),
+  forgetDismissed: (projectId: string, kind: string, name: string) =>
+    rpcCall<{ ok: true }>("proposals.forget_dismissed", { project_id: projectId, kind, name }),
 };
 
 /** "Where the story could go" (story-assist Phase 4): possible

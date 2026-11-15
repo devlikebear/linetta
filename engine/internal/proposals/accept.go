@@ -514,6 +514,11 @@ func (s *Service) Reject(ctx context.Context, now int64, projectID string, itemI
 		if err := s.updateItemStatus(ctx, tx, id, StatusRejected, ItemResult{}, now); err != nil {
 			return 0, err
 		}
+		// A new name turned down is remembered, so a tidy-up does not
+		// bring it back (#387).
+		if err := s.rememberDismissed(ctx, tx, now, projectID, it); err != nil {
+			return 0, err
+		}
 		items[id] = Item{Status: StatusRejected}
 		rejected++
 	}

@@ -193,3 +193,9 @@
   padding: 10px 14px;
   border-top: 1px solid var(--line);
 }
+
+/* Names the writer turned down (#387). */
+.proposal-inbox .pi-dismissed { margin: 8px 12px; font-size: 12px; color: var(--ink-soft); }
+.proposal-inbox .pi-dismissed summary { cursor: pointer; }
+.proposal-inbox .pi-dismissed ul { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.proposal-inbox .pi-dismissed li { display: flex; gap: 8px; align-items: baseline; }
