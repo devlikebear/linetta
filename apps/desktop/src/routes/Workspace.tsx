@@ -55,6 +55,7 @@ import { reconcileInspector } from "../hooks/inspector";
 import type { InspectorState } from "../hooks/inspector";
 import { useKeyedDebouncedCallback } from "../hooks/useDebouncedCallback";
 import { useIdleTimer } from "../hooks/useIdleTimer";
+import { useAutoOrganize } from "../hooks/useAutoOrganize";
 import { useThrottledCallback } from "../hooks/useThrottledCallback";
 import { subscribeAppEvent, type LinettaEventMap } from "../lib/appEvents";
 import { useToast } from "../components/ToastProvider";
@@ -1124,6 +1125,20 @@ export function Workspace() {
     debouncedSave.flush();
     await sceneSaveQueue.idle();
   }, [debouncedSave, sceneSaveQueue]);
+
+  // Organizing on its own (#387): the engine runs it only when the writer
+  // switched it on for that moment.
+  const openEpisodeId = useMemo(
+    () => (load ? findEpisodeNode(load.tree, load.node.id, outlinePreset)?.id ?? null : null),
+    [load, outlinePreset],
+  );
+  const markOrganizeActivity = useAutoOrganize({
+    projectId: load?.project.id ?? null,
+    nodeId: load?.node.id ?? null,
+    episodeId: openEpisodeId,
+    organize: (projectId, nodeId, trigger) => agentApi.organize(projectId, nodeId, false, trigger),
+    flush: flushPendingSave,
+  });
 
   /** Asks for the open scene's episode to be read for what the record lacks
    *  (#387). It runs in the background; what it finds lands in the inbox. */
@@ -2402,6 +2417,7 @@ export function Workspace() {
                 setEditorDirty(true);
                 setAutoMentionScanKey((k) => k + 1);
                 markActivity();
+                markOrganizeActivity();
                 throttledLastOpened();
               }}
               onCharCount={setCharCount}
@@ -2742,6 +2758,7 @@ export function Workspace() {
             // in ZEN (#106) — same contract as the normal-mode onChange.
             setEditorDirty(true);
             markActivity();
+            markOrganizeActivity();
           }}
           onCharCount={setCharCount}
           charCountBasis={charCountBasis}

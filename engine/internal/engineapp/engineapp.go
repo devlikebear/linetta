@@ -738,7 +738,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	}))
 	s.Handle("continuity.sample_check", handlers.SampleCheck(continuityRepo, ledgerRepo, agentCtrl, clock))
 	s.Handle("agent.undo", handlers.AgentUndo(agentCtrl))
-	s.Handle("agent.organize", handlers.AgentOrganize(agentCtrl, organize.NewRepo(st, nodes, projects), settingsLanguage, clock))
+	s.Handle("agent.organize", handlers.AgentOrganize(agentCtrl, organize.NewRepo(st, nodes, projects), settingsStore.AgentOrganize, settingsLanguage, clock))
 	s.Handle("agent.usage", handlers.AgentUsage(agentUsage, clock))
 	s.Handle("snapshots.list_for_node", handlers.ListSnapshotsForNode(snaps))
 	s.Handle("snapshots.compare", handlers.CompareSnapshots(snaps))

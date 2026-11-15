@@ -6,6 +6,7 @@ package organize
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"slices"
@@ -21,6 +22,11 @@ import (
 
 // MinSceneRunes is the shortest scene worth reading: the summariser's floor.
 const MinSceneRunes = 60
+
+// MinAutoChange is how much a scene's length must have moved since it was
+// last read before a pass that runs on its own reads it again: the
+// summariser's floor for a change worth a call. A request reads any change.
+const MinAutoChange = 300
 
 // MaxScenes caps one pass: an episode is a few scenes, and a pass over more
 // would cost more than the writer expects from one request.
@@ -41,6 +47,7 @@ type Scene struct {
 	NodeID  string `json:"node_id"`
 	Version int    `json:"-"`
 	Hash    string `json:"-"`
+	Chars   int    `json:"-"`
 	// LedgerSettled says the settlement pass already took this version into
 	// the ledger: the organize pass leaves its foreshadowing alone.
 	LedgerSettled bool `json:"ledger_settled,omitempty"`
@@ -53,9 +60,11 @@ type Plan struct {
 	EpisodeLabel  string  `json:"episode_label"`
 	Scenes        []Scene `json:"scenes"`
 	// Unchanged counts the scenes already read as they are; Short the ones
-	// too short to read.
+	// too short to read; Small, on a pass that runs on its own, the ones
+	// changed by less than MinAutoChange.
 	Unchanged int `json:"unchanged"`
 	Short     int `json:"short"`
+	Small     int `json:"small,omitempty"`
 }
 
 // Repo is the record.
@@ -71,8 +80,10 @@ func NewRepo(s *store.Store, nodes *node.Repo, projects *project.Repo) *Repo {
 
 // Plan finds the episode nodeID is in (a scene or the episode itself) and the
 // scenes of it the writer has changed since a pass last finished them. force
-// reads them all again.
-func (r *Repo) Plan(ctx context.Context, projectID, nodeID string, force bool) (Plan, error) {
+// reads them all again. minChange, for a pass that runs on its own, also
+// leaves out a scene whose length moved by less than that since it was last
+// read (a scene never read counts its whole length).
+func (r *Repo) Plan(ctx context.Context, projectID, nodeID string, force bool, minChange int) (Plan, error) {
 	p, err := r.projects.Get(ctx, projectID)
 	if err != nil {
 		return Plan{}, err
@@ -111,14 +122,18 @@ func (r *Repo) Plan(ctx context.Context, projectID, nodeID string, force bool) (
 			plan.Short++
 			continue
 		}
-		sc := Scene{NodeID: id, Version: n.ContentVersion, Hash: ledger.ProseHash(n.ContentDoc)}
+		sc := Scene{NodeID: id, Version: n.ContentVersion, Hash: ledger.ProseHash(n.ContentDoc), Chars: utf8.RuneCountInString(text)}
 		if !force {
-			done, err := r.doneFor(ctx, id, sc.Hash)
+			done, readChars, err := r.lastDone(ctx, id, sc.Hash)
 			if err != nil {
 				return Plan{}, err
 			}
 			if done {
 				plan.Unchanged++
+				continue
+			}
+			if minChange > 0 && abs(sc.Chars-readChars) < minChange {
+				plan.Small++
 				continue
 			}
 		}
@@ -132,12 +147,27 @@ func (r *Repo) Plan(ctx context.Context, projectID, nodeID string, force bool) (
 	return plan, nil
 }
 
-func (r *Repo) doneFor(ctx context.Context, nodeID, hash string) (bool, error) {
-	var n int
-	err := r.s.DB().QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM scene_organize WHERE node_id = ? AND outcome = 'done' AND text_hash = ? AND text_hash <> ''`,
-		nodeID, hash).Scan(&n)
-	return n > 0, err
+// lastDone reports whether the scene's words, hash, were already read to the
+// end, and how long the prose was when a pass last finished it (0: never).
+func (r *Repo) lastDone(ctx context.Context, nodeID, hash string) (same bool, chars int, err error) {
+	var readHash string
+	err = r.s.DB().QueryRowContext(ctx,
+		`SELECT text_hash, char_count FROM scene_organize WHERE node_id = ? AND outcome = 'done'`,
+		nodeID).Scan(&readHash, &chars)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, 0, nil
+	}
+	if err != nil {
+		return false, 0, err
+	}
+	return readHash != "" && readHash == hash, chars, nil
+}
+
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
 }
 
 func (r *Repo) settled(ctx context.Context, nodeID string, version int) (bool, error) {
@@ -155,17 +185,18 @@ func (r *Repo) Record(ctx context.Context, projectID string, sc Scene, outcome s
 		return fmt.Errorf("organize: unknown outcome %q", outcome)
 	}
 	_, err := r.s.DB().ExecContext(ctx, `
-INSERT INTO scene_organize (node_id, project_id, content_version, text_hash, outcome, organized_at)
-VALUES (?, ?, ?, ?, ?, ?)
+INSERT INTO scene_organize (node_id, project_id, content_version, text_hash, outcome, organized_at, char_count)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(node_id) DO UPDATE SET
   project_id = excluded.project_id,
   content_version = excluded.content_version,
   text_hash = excluded.text_hash,
   outcome = excluded.outcome,
-  organized_at = excluded.organized_at
+  organized_at = excluded.organized_at,
+  char_count = excluded.char_count
 WHERE NOT (scene_organize.outcome = 'done'
            AND scene_organize.text_hash = excluded.text_hash
            AND excluded.outcome <> 'done')`,
-		sc.NodeID, projectID, sc.Version, sc.Hash, outcome, now)
+		sc.NodeID, projectID, sc.Version, sc.Hash, outcome, now, sc.Chars)
 	return err
 }

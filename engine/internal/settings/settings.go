@@ -195,6 +195,15 @@ type Config struct {
 	// fact no longer agrees with. Off by default: it reads scenes the writer did
 	// not ask about.
 	AgentImpactReviewEnabled bool `json:"agent_impact_review_enabled"`
+	// AgentOrganizeEnabled lets the organize pass run on its own (#387): it
+	// reads the writer's own prose and proposes, into the suggestions inbox,
+	// what the work's record lacks. Off by default: it sends the manuscript.
+	// A request from the command palette runs whether this is on or not.
+	AgentOrganizeEnabled bool `json:"agent_organize_enabled"`
+	// AgentOrganizeTrigger is when it runs on its own: on leaving an episode
+	// ("leave", the default), after a long idle ("idle"), or only on request
+	// ("manual").
+	AgentOrganizeTrigger string `json:"agent_organize_trigger,omitempty"`
 	// StyleAvoidPhrases are checked in every work, on top of a work's own list.
 	StyleAvoidPhrases []string `json:"style_avoid_phrases,omitempty"`
 	// CharCountPresets are the writer's own length rules (#239), applied to a
@@ -414,6 +423,8 @@ type Patch struct {
 	SummarizerProviderEnabled *bool                    `json:"summarizer_provider_enabled,omitempty"`
 	AgentSettlementEnabled    *bool                    `json:"agent_settlement_enabled,omitempty"`
 	AgentImpactReviewEnabled  *bool                    `json:"agent_impact_review_enabled,omitempty"`
+	AgentOrganizeEnabled      *bool                    `json:"agent_organize_enabled,omitempty"`
+	AgentOrganizeTrigger      *string                  `json:"agent_organize_trigger,omitempty"`
 	StyleAvoidPhrases         *[]string                `json:"style_avoid_phrases,omitempty"`
 	CharCountPresets          *[]CharCountPreset       `json:"char_count_presets,omitempty"`
 	AgentMaxToolCalls         *int                     `json:"agent_max_tool_calls,omitempty"`
@@ -615,6 +626,10 @@ func (s *Store) load() error {
 		settlementSinceBackfilled = true
 	}
 	s.cfg.AgentImpactReviewEnabled = disk.AgentImpactReviewEnabled
+	s.cfg.AgentOrganizeEnabled = disk.AgentOrganizeEnabled
+	if validOrganizeTrigger(disk.AgentOrganizeTrigger) {
+		s.cfg.AgentOrganizeTrigger = disk.AgentOrganizeTrigger
+	}
 	s.cfg.StyleAvoidPhrases = disk.StyleAvoidPhrases
 	// Out of range — including the zero a file from a build that predates
 	// the key decodes to — keeps the default.
@@ -760,6 +775,29 @@ func (s *Store) AgentImpactReviewEnabled() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.cfg.AgentImpactReviewEnabled
+}
+
+// When the organize pass runs on its own (#387).
+const (
+	OrganizeOnLeave  = "leave"
+	OrganizeOnIdle   = "idle"
+	OrganizeOnDemand = "manual"
+)
+
+func validOrganizeTrigger(t string) bool {
+	return t == "" || t == OrganizeOnLeave || t == OrganizeOnIdle || t == OrganizeOnDemand
+}
+
+// AgentOrganize reports whether the organize pass may run on its own, and on
+// which trigger; leaving an episode when none was chosen.
+func (s *Store) AgentOrganize() (enabled bool, trigger string) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	trigger = s.cfg.AgentOrganizeTrigger
+	if trigger == "" {
+		trigger = OrganizeOnLeave
+	}
+	return s.cfg.AgentOrganizeEnabled, trigger
 }
 
 // AgentSettlementEnabled reports whether a finished episode's changes are
@@ -1085,6 +1123,16 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	if p.AgentImpactReviewEnabled != nil {
 		next.AgentImpactReviewEnabled = *p.AgentImpactReviewEnabled
 	}
+	if p.AgentOrganizeEnabled != nil {
+		next.AgentOrganizeEnabled = *p.AgentOrganizeEnabled
+	}
+	if p.AgentOrganizeTrigger != nil {
+		trigger := strings.TrimSpace(*p.AgentOrganizeTrigger)
+		if !validOrganizeTrigger(trigger) {
+			return Config{}, fmt.Errorf("settings: unknown agent_organize_trigger %q", trigger)
+		}
+		next.AgentOrganizeTrigger = trigger
+	}
 	if p.StyleAvoidPhrases != nil {
 		next.StyleAvoidPhrases = *p.StyleAvoidPhrases
 	}
@@ -1276,6 +1324,8 @@ func (s *Store) persistWith(next Config, legacy legacyPlaintextKeys) error {
 		AgentSettlementEnabled:    next.AgentSettlementEnabled,
 		AgentSettlementSince:      next.AgentSettlementSince,
 		AgentImpactReviewEnabled:  next.AgentImpactReviewEnabled,
+		AgentOrganizeEnabled:      next.AgentOrganizeEnabled,
+		AgentOrganizeTrigger:      next.AgentOrganizeTrigger,
 		StyleAvoidPhrases:         next.StyleAvoidPhrases,
 		AgentMaxToolCalls:         next.AgentMaxToolCalls,
 		AgentHistoryBudget:        next.AgentHistoryBudget,

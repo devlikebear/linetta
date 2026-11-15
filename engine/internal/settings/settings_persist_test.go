@@ -119,6 +119,7 @@ func validSeeds() map[string]any {
 		"AgentMaxToolCalls":    MinAgentMaxToolCalls + 1,
 		"AgentHistoryBudget":   MinAgentHistoryBudget + 1,
 		"AgentReasoningEffort": "medium",
+		"AgentOrganizeTrigger": "idle",
 		"PublishAccount":       &PublishAccount{Handle: "writer"},
 		"CharCountPresets": []CharCountPreset{{
 			ID: "persist-check", Name: "persist-check", CharCountBasis: "without_spaces", EpisodeCharTarget: 4321,

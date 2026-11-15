@@ -906,6 +906,41 @@ export function Settings() {
                 </span>
                 <span className={`switch${current.agent_impact_review_enabled === true ? " on" : ""}`} />
               </button>
+              <button
+                type="button"
+                className="set-row set-row-btn"
+                data-testid="organize-enabled"
+                onClick={() =>
+                  !saving &&
+                  apply({ agent_organize_enabled: current.agent_organize_enabled !== true })
+                }
+                disabled={saving}
+              >
+                <span className="sk-wrap">
+                  <span className="sk">{t("settings.skills.organize.enabled")}</span>
+                  <span className="sd">{t("settings.skills.organize.description")}</span>
+                </span>
+                <span className={`switch${current.agent_organize_enabled === true ? " on" : ""}`} />
+              </button>
+              {current.agent_organize_enabled === true && (
+                <div className="set-row">
+                  <span className="sk-wrap">
+                    <label className="sk" htmlFor="organize-trigger">{t("settings.skills.organize.trigger")}</label>
+                    <span className="sd">{t("settings.skills.organize.triggerDescription")}</span>
+                  </span>
+                  <select
+                    id="organize-trigger"
+                    data-testid="organize-trigger"
+                    value={current.agent_organize_trigger || "leave"}
+                    onChange={(e) => apply({ agent_organize_trigger: e.target.value as "leave" | "idle" | "manual" })}
+                    disabled={saving}
+                  >
+                    <option value="leave">{t("settings.skills.organize.trigger.leave")}</option>
+                    <option value="idle">{t("settings.skills.organize.trigger.idle")}</option>
+                    <option value="manual">{t("settings.skills.organize.trigger.manual")}</option>
+                  </select>
+                </div>
+              )}
             </section>
             <SkillsSection />
             </>
