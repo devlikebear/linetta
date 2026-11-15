@@ -5,7 +5,6 @@ import {
   imports as importsApi,
   settings as settingsApi,
   diagnostics as diagnosticsApi,
-  exportApi,
   backupApi,
   openPath,
   proposals as proposalsApi,
@@ -26,11 +25,11 @@ import { isProviderReady, nameKeyFor } from "../lib/providers";
 import { NewProjectModal } from "../components/NewProjectModal";
 import { ImportPreviewModal } from "../components/ImportPreviewModal";
 import { ImportFillDialog } from "../components/ImportFillDialog";
+import { ExportDialog } from "../components/ExportDialog";
 import { SearchModal } from "../components/SearchModal";
 import { SyncStatusNotice } from "../components/SyncStatusNotice";
 import { VaultNotice } from "../components/VaultNotice";
 import { pickAndReadMarkdown } from "../lib/importLoad";
-import { exportDestinationMessage, saveExportedMarkdown } from "../lib/exportSave";
 import { Archive, Download, FolderOpen, Globe, MoreHorizontal, Settings, Plus, Search, Trash2, Upload } from "../lib/icons";
 import { useToast } from "../components/ToastProvider";
 import { formatWordCount, lengthLabel, useI18n } from "../lib/i18n";
@@ -82,6 +81,9 @@ export function Library() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
   const [projectMenuOpenId, setProjectMenuOpenId] = useState<string | null>(null);
+  // The work whose export dialog is open (#383). From the library only the
+  // whole work can be picked; a part of it is exported from the workspace.
+  const [exportingProject, setExportingProject] = useState<Project | null>(null);
   const [providerRows, setProviderRows] = useState<ProviderStatus[]>([]);
   // The project a Markdown import just created, while the "Story World
   // 채우기" dialog decides whether to send the writer straight to
@@ -313,15 +315,9 @@ export function Library() {
     setProjectMenuOpenId(projectId);
   };
 
-  const handleProjectBackup = async (p: Project) => {
+  const handleProjectExport = (p: Project) => {
     setProjectMenuOpenId(null);
-    try {
-      const payload = await exportApi.project(p.id);
-      const path = await saveExportedMarkdown(payload);
-      if (path) showToast(exportDestinationMessage(t, path));
-    } catch (err) {
-      showToast(t("library.toast.projectBackupFailed", { error: String(err) }));
-    }
+    setExportingProject(p);
   };
 
   const handleProjectArchive = async (p: Project) => {
@@ -551,8 +547,8 @@ export function Library() {
                 </button>
                 {projectMenuOpenId === p.id && (
                   <div className="lib-menu book-menu" role="menu">
-                    <button type="button" role="menuitem" onClick={() => handleProjectBackup(p)}>
-                      <Download size={15} /> <span>{t("library.projectBackup")}</span>
+                    <button type="button" role="menuitem" onClick={() => handleProjectExport(p)}>
+                      <Download size={15} /> <span>{t("library.projectExport")}</span>
                     </button>
                     {foldersAvailable && (
                       <button type="button" role="menuitem" onClick={openBackupFolder}>
@@ -596,6 +592,15 @@ export function Library() {
           busy={importing}
           onConfirm={confirmImport}
           onCancel={() => setPending(null)}
+        />
+      )}
+
+      {exportingProject && (
+        <ExportDialog
+          projectId={exportingProject.id}
+          scopes={[{ label: t("exportDialog.scope.work") }]}
+          onClose={() => setExportingProject(null)}
+          onMessage={showToast}
         />
       )}
 

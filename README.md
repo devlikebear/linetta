@@ -29,7 +29,7 @@ Linetta is made for novelists and web-fiction writers who want their manuscript,
 - **Own your work.** Projects are saved in a SQLite database on your device with version snapshots and daily backups. Writing needs no Linetta account, and nothing leaves until you choose to publish or sync.
 - **Publish when you choose.** Optionally connect an account on [Linetta Works](https://works.marvin-42.com) and put an episode up for readers straight from the app. Only the episodes you publish — and the Story World sheets and cover you choose to make public — leave your device. Share a published episode to X, Threads, Naver Blog, KakaoTalk, or Instagram from the publish dialog.
 - **Carry a work between devices.** If the site's operator has approved your account, Linetta Works sync keeps a work sealed under a recovery key only you hold, so you can pick it up on another computer or on iOS. It is a free beta and never your only copy.
-- **Move your manuscript freely.** Import and export Markdown, and optionally sync exported work through Git.
+- **Move your manuscript freely.** Import and export Markdown, export the work or one episode as Word (DOCX) or plain text for a publisher or a contest, and optionally sync exported work through Git.
 
 ## See Linetta in action
 
@@ -883,7 +883,7 @@ credential at all.
 
 ### Can I bring an existing manuscript?
 
-Yes. Linetta supports Markdown import and export so your writing is not locked into the app.
+Yes. Linetta supports Markdown import and export so your writing is not locked into the app. **Export…** in the command palette, or a work's menu in the library, also writes the whole work, a part, an episode or a scene as a Word document (DOCX) or plain text. The DOCX uses named styles (body, headings, quote, scene break), so whoever receives it can restyle the manuscript in one place; mention links and note markers never go into it.
 
 ### Is my work uploaded to a Linetta cloud?
 

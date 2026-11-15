@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/devlikebear/linetta/engine/internal/export"
@@ -91,6 +92,30 @@ func ExportNodeText(nr *node.Repo) rpc.Handler {
 		}
 		out, err := export.ExportNodeText(ctx, nr, p.NodeID)
 		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.Marshal(out)
+	}
+}
+
+// ExportDocument returns a handler for export.document (#383): the work, or
+// one part of it, as a DOCX or TXT file the app saves where the writer picks.
+func ExportDocument(projects *project.Repo, nr *node.Repo, language func(context.Context) string) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var req export.DocumentRequest
+		if err := json.Unmarshal(params, &req); err != nil || req.ProjectID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project_id required"}
+		}
+		lang := ""
+		if language != nil {
+			lang = language(ctx)
+		}
+		out, err := export.ExportDocument(ctx, projects, nr, req, lang)
+		if err != nil {
+			var badReq *export.ErrBadDocumentRequest
+			if errors.As(err, &badReq) {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
+			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
 		return json.Marshal(out)
