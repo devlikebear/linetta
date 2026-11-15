@@ -172,6 +172,8 @@ const (
 	ReasonOrganizeTrial        = "organize_trial"
 	ReasonOrganizeUnavailable  = "organize_unavailable"
 	ReasonOrganizeNotInEpisode = "organize_not_in_episode"
+	// search.semantic_enable on a build that cannot run the model (#384).
+	ReasonSemanticUnsupported = "semantic_unsupported"
 
 	// proposals.undo asking to revert a structural batch (story-assist
 	// Phase 4's purpose=forecast outline-reflection) that has aged out of

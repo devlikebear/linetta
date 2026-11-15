@@ -62,7 +62,13 @@ func chunkParagraphs(paras []string) []Chunk {
 }
 
 func (c Chunk) paragraphs() []string {
-	return strings.Split(c.Text, chunkSeparator)
+	return ChunkParagraphs(c.Text)
+}
+
+// ChunkParagraphs splits a stored chunk's text back into its paragraphs, the
+// first of which is para_from: what meaning search (#384) embeds one by one.
+func ChunkParagraphs(text string) []string {
+	return strings.Split(text, chunkSeparator)
 }
 
 func chunkHash(text string) string {

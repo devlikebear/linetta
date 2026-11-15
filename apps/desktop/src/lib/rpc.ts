@@ -107,6 +107,7 @@ import type {
   UpdateNoteInput,
   UpdateProjectInput,
   UpdateRelationshipInput,
+  SemanticStatus,
   OrganizeResult,
   ChangeRelationshipInput,
   RelationshipGraph,
@@ -772,6 +773,16 @@ export const facts = {
   createFromUrl: (input: NewFactFromUrlInput) => rpcCall<FactCard>("facts.create_from_url", input),
   update: (input: UpdateFactInput) => rpcCall<FactCard>("facts.update", input),
   delete: (id: string) => rpcCall<{ ok: true }>("facts.delete", { id }),
+};
+
+/** Meaning search (#384): the model is fetched once when the writer switches
+ *  it on, and each work's paragraphs are embedded on this device. */
+export const semanticSearch = {
+  status: (projectId?: string) =>
+    rpcCall<SemanticStatus>("search.semantic_status", { project_id: projectId }),
+  enable: () => rpcCall<SemanticStatus>("search.semantic_enable"),
+  disable: (deleteModel = false) =>
+    rpcCall<SemanticStatus>("search.semantic_disable", { delete_model: deleteModel }),
 };
 
 export const relationships = {

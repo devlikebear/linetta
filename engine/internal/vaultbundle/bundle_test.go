@@ -246,6 +246,10 @@ func TestEveryBlobColumnBecomesAPart(t *testing.T) {
 		if err := rows.Scan(&table, &column); err != nil {
 			t.Fatal(err)
 		}
+		// A table the bundle leaves out is never read as text either.
+		if _, out := excluded[table]; out {
+			continue
+		}
 		seen[table] = column
 	}
 	if !reflect.DeepEqual(seen, imageColumns) {
