@@ -1,5 +1,58 @@
 # Changelog
 
+## v1.26.0 - 2026-11-16
+
+- Added: ask mode in the agent panel. Switch between Write and Ask; in Ask,
+  the agent answers from the manuscript only, changes nothing, and puts the
+  sources it relied on under the answer as cards. The engine checks every
+  quote against the scene first. Clicking a card or an [n] in the answer
+  opens the scene at that paragraph. If the manuscript has no answer, the
+  agent says so instead of guessing. Ask turns run no reviews afterwards.
+- Added: export to Word (DOCX), Hangul (HWPX) and plain text (TXT), for the
+  whole work, a part, an episode or a scene, from one export window that
+  also keeps Markdown. DOCX and HWPX take font, size, line spacing,
+  first-line indent and a new page per episode, and use named styles so the
+  whole manuscript can be restyled at once. They can also include the
+  illustrations themselves (PNG, JPEG, GIF), a title page and a table of
+  contents. Pictures that cannot go in are left as "[Illustration: caption]"
+  and the save message says how many.
+- Added: the foreshadowing map. Promises, running gags and reader questions
+  from the story ledger are drawn on an episode axis: where each was
+  planted, when it is due, when it paid off. Overdue items stand out, and
+  you can filter by kind, status and part.
+- Added: relationships that change over time ("colleagues until episode 12,
+  enemies from 30"). The entity sheet shows each relationship's history,
+  and with a scene open, "Change" records a change from that scene on. The
+  agent records changes the same way, through the proposal box.
+- Added: the relationship graph, from the story world panel or the command
+  palette. Move the episode slider to see the relationships as of that
+  episode, with the ones that began or changed there highlighted. Click a
+  line to see its history and the quote behind it, a node to open its sheet.
+- Added: the proposal box takes story ledger items (new promises, gags,
+  questions, decisions, or marking one paid off) and relationship changes.
+  Names you turn down are remembered per work and not proposed again by a
+  tidy-up; the list under the proposal box lets you allow them again. A
+  proposed name that partly matches an existing one ("Minjun" and
+  "Kang Minjun") is marked as similar.
+- Added: tidy-up suggestions. "Suggest updates from this episode" in the
+  command palette reads the episode's changed scenes and puts new
+  characters, places, relationships and ledger items into the proposal box,
+  each with a quoted paragraph; nothing changes until you accept. Under
+  Settings → Agent → "Suggest updates from episodes you write" you can let
+  it run on its own when you move to another episode or after 10 minutes
+  without typing. It is off by default, sends the manuscript to your
+  provider (which costs tokens) and does not run on the trial.
+- Added: search by meaning, on this device. Turn it on in Settings → Writing
+  → Search by meaning, or from the search window: Linetta downloads a search
+  model once (about 129MB) and indexes your paragraphs in the background.
+  The search window (Cmd+F) then has a Words | Meaning switch, and a
+  meaning result opens the scene at the matching paragraph. It is off by
+  default, and the manuscript never leaves your device. The agent's
+  manuscript search also uses it when it is on. Turning it off can delete
+  the model and the index.
+- Changed: the engine is built with Go 1.27, and is about 18MB larger
+  because it carries the search runtime.
+
 ## v1.25.0 - 2026-11-15
 
 - Added: the Linetta trial. With no provider set up, the agent panel offers
