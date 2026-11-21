@@ -25,6 +25,12 @@ func (f *fakeProviderService) Test(_ context.Context, id string) error {
 	f.seenID = id
 	return f.err
 }
+func (f *fakeProviderService) UpdateCLI(context.Context) (string, error) {
+	if f.err != nil {
+		return "", f.err
+	}
+	return "2.1.330 (Claude Code)", nil
+}
 
 func TestProvidersList_returnsTheServicePayload(t *testing.T) {
 	svc := &fakeProviderService{list: json.RawMessage(`[{"id":"anthropic","auth":"api_key"}]`)}
@@ -82,5 +88,15 @@ func TestProvidersTest_okPayload(t *testing.T) {
 	}
 	if svc.seenID != "gemini-native" || string(res) != `{"ok":true}` {
 		t.Errorf("id=%q payload=%s", svc.seenID, res)
+	}
+}
+
+func TestProvidersUpdateCLI_reportsTheVersion(t *testing.T) {
+	out, err := ProvidersUpdateCLI(&fakeProviderService{})(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(out) != `{"ok":true,"version":"2.1.330 (Claude Code)"}` {
+		t.Errorf("got %s", out)
 	}
 }

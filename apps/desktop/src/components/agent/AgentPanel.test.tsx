@@ -9,6 +9,7 @@ const rpc = vi.hoisted(() => ({
   proposalsList: vi.fn().mockResolvedValue({ proposals: [] }),
   proposalsAccept: vi.fn().mockResolvedValue({ items: [] }),
   providersList: vi.fn(),
+  providersUpdateCli: vi.fn(),
   agentUndo: vi.fn(),
   agentRun: vi.fn(),
   agentCancel: vi.fn(),
@@ -45,7 +46,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 }));
 
 vi.mock("../../lib/rpc", () => ({
-  providers: { list: rpc.providersList },
+  providers: { list: rpc.providersList, updateCli: rpc.providersUpdateCli },
   agent: { undo: rpc.agentUndo, run: rpc.agentRun, cancel: rpc.agentCancel, history: rpc.agentHistory, startFresh: rpc.agentStartFresh, prompts: rpc.agentPrompts },
   settings: { get: rpc.settingsGet },
   proposals: { list: rpc.proposalsList, accept: rpc.proposalsAccept },
@@ -1310,6 +1311,23 @@ describe("AgentPanel send window and IME composition (#95 Task 6 review)", () =>
 
     expect(screen.queryByTestId("agent-stop")).toBeNull();
     expect(screen.getByTestId("agent-send")).toBeTruthy();
+  });
+
+  it("offers to update Claude Code when the CLI is too old for the model", async () => {
+    const pending = await secondSendPending();
+    await emit("agent-error", { run_id: "r2", reason: "provider_cli_outdated", message: "claude-code: needs 2.1.290" });
+    await act(async () => {
+      pending.resolve({ run_id: "r2" });
+    });
+    rpc.providersUpdateCli.mockImplementation(() => Promise.resolve({ ok: true, version: "2.1.330 (Claude Code)" }));
+
+    expect(screen.getByTestId("agent-notice").textContent).toContain("errors.providerCliOutdated");
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("update-cli-button"));
+    });
+
+    expect(rpc.providersUpdateCli).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("update-cli-message").textContent).toContain("agentPanel.updatedCli");
   });
 
   it("shows a usage line per finished turn", async () => {

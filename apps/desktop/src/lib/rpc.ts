@@ -473,6 +473,9 @@ export const providers = {
   listModels: (provider: string) =>
     rpcCall<{ models: string[] }>("providers.list_models", { provider }),
   test: (provider: string) => rpcCall<{ ok: true }>("providers.test", { provider }),
+  // Runs `claude update` on the Claude Code CLI Linetta uses. Takes as long as
+  // the download does.
+  updateCli: () => rpcCall<{ ok: true; version?: string }>("providers.update_cli"),
 };
 
 export const imageProviders = {

@@ -2,7 +2,10 @@ package provider
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -10,6 +13,7 @@ import (
 	"time"
 
 	"github.com/devlikebear/linetta/engine/internal/clidetect"
+	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/tars/pkg/llm"
 )
@@ -228,4 +232,45 @@ func instructionsAsPrompt(messages []llm.ChatMessage) []llm.ChatMessage {
 		out = append(out, m)
 	}
 	return out
+}
+
+// cliUpdateTimeout bounds `claude update`: it downloads a release, which on a
+// slow connection takes a while, but a hung one must not hold the RPC forever.
+const cliUpdateTimeout = 5 * time.Minute
+
+// runCLI runs the detected binary with args and returns its output. A seam
+// for tests.
+var runCLI = func(ctx context.Context, path string, args ...string) ([]byte, error) {
+	return exec.CommandContext(ctx, path, args...).CombinedOutput()
+}
+
+// UpdateCLI runs `claude update` on the binary Linetta uses, for a writer
+// whose model needs a newer Claude Code (provider_cli_outdated), and reports
+// the version it ends on. Detection is forgotten afterwards, so an update that
+// moved the binary is found again. Whatever the CLI printed stays in the
+// error's English message for the log; the pane shows its own sentence.
+func (s *Source) UpdateCLI(ctx context.Context) (string, error) {
+	path := s.cli.Path()
+	if path == "" {
+		return "", &rpc.ReasonError{Reason: rpc.ReasonProviderNotConfigured, Err: errors.New("claude-code: the Claude Code CLI was not found")}
+	}
+	pointTarsAtCLI(path) // its directory on PATH: an npm install asks env for node.
+	defer s.cli.Forget()
+	uctx, cancel := context.WithTimeout(ctx, cliUpdateTimeout)
+	defer cancel()
+	if out, err := runCLI(uctx, path, "update"); err != nil {
+		return "", &rpc.ReasonError{Reason: rpc.ReasonProviderCLIUpdateFailed, Err: fmt.Errorf("claude-code: claude update: %w: %s", err, lastLine(string(out)))}
+	}
+	vctx, vcancel := context.WithTimeout(ctx, 10*time.Second)
+	defer vcancel()
+	out, err := runCLI(vctx, path, "--version")
+	if err != nil {
+		return "", nil
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func lastLine(s string) string {
+	lines := strings.Split(strings.TrimSpace(s), "\n")
+	return strings.TrimSpace(lines[len(lines)-1])
 }

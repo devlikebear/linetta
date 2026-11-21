@@ -11,6 +11,7 @@ import { reasonOf, rpcErrorMessage } from "../../lib/rpcMessage";
 import { isTrial, nameKeyFor, offeredProviders, takesApiKey } from "../../lib/providers";
 import { TrialSetup } from "../trial/TrialSetup";
 import type { CodexStatus, ProviderID, ProviderStatus } from "../../lib/types";
+import { UpdateCliButton } from "./UpdateCliButton";
 
 /** Connect an AI provider (BYOK).
  *
@@ -861,6 +862,13 @@ export function ProviderSection() {
           >
             {t("settings.providers.cli.recheck")}
           </button>
+          {current?.cli_path ? (
+            <UpdateCliButton
+              label={t("settings.providers.cli.update")}
+              updatedLabel={(version) => t("settings.providers.cli.updated", { version })}
+              onUpdated={() => void guard(refresh)}
+            />
+          ) : null}
         </div>
       ) : null}
 

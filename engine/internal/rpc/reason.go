@@ -93,6 +93,12 @@ const (
 	// the one asked for. Its own code because the fix is a different model,
 	// not a retry.
 	ReasonProviderModelUnsupported = "provider_model_unsupported"
+	// The Claude Code CLI is older than the model needs. Its own code because
+	// the fix is updating the CLI, which the settings pane can do.
+	ReasonProviderCLIOutdated = "provider_cli_outdated"
+	// `claude update` itself failed: a permissions problem on the install,
+	// or no connection.
+	ReasonProviderCLIUpdateFailed = "provider_cli_update_failed"
 	// The Linetta trial (docs/plans/trial): the Works account has used its
 	// tokens, or the site is not taking trial requests right now. Their own
 	// codes because the fix is the writer's own provider, not a retry.
