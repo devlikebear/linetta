@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.27.0 - 2026-11-21
+
+- Added: web search for the agent on a Mac with the Aside browser
+  installed. The agent can look up real-world facts (places, periods, jobs,
+  how things work) and say where it found them; it reads Google, Naver or
+  DuckDuckGo results in a background tab of your own browser, with no
+  search key. It works with every provider, Claude Code included, while
+  Claude Code's own web tools stay off. Only the question goes out: the
+  agent is told never to put the manuscript's sentences, plot or invented
+  names into a search. Not in the trial, the App Store build or on mobile.
+- Fixed: with Claude Code installed more than once (an npm install in
+  ~/.local and a Homebrew one, say), Linetta could keep using the older one
+  after you updated, and a newer model failed with a message telling you
+  to check your internet connection. Linetta now uses the newest install it
+  finds, says when Claude Code is too old for the model, and offers an
+  "Update Claude Code" button there and in Settings, which needs no restart.
+
 ## v1.26.0 - 2026-11-16
 
 - Added: ask mode in the agent panel. Switch between Write and Ask; in Ask,
