@@ -1210,3 +1210,25 @@ func TestWithTrial_falseChangesNothing(t *testing.T) {
 		t.Errorf("withTrial(true) = %+v, want trial with memory, skills and visual writes off and review kept", on)
 	}
 }
+
+// The search line rides on the tool: a turn without linetta_web_search is not
+// told to search, and a trial never is.
+func TestSystemPromptOffersWebSearchOnlyWithTheTool(t *testing.T) {
+	prompt := func(g toolGroups) string {
+		return systemPrompt("ko", emptyDoc(agentmemory.ScopeWriterProfile), emptyDoc(agentmemory.ScopeWorkNotes), nil, g)
+	}
+	web := allToolGroups()
+	web.web = true
+	if !strings.Contains(prompt(web), "linetta_web_search") {
+		t.Error("a turn with web search is not told about it")
+	}
+	if strings.Contains(prompt(allToolGroups()), "linetta_web_search") {
+		t.Error("a turn without web search is told to search")
+	}
+	if strings.Contains(prompt(web.withTrial(true)), "linetta_web_search") {
+		t.Error("a trial turn is told to search")
+	}
+	if !strings.Contains(prompt(web.withAsk(true)), "linetta_web_search") {
+		t.Error("a question turn lost web search")
+	}
+}

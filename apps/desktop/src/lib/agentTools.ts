@@ -53,6 +53,10 @@ export const HISTORY_TOOL_NAMES = [
   "linetta_read_history",
 ] as const;
 
+/** The built-in agent's web search: engine/internal/mcphost/tools_web.go
+ *  WebToolNames. A lookup, so the panel calls it a read. */
+export const WEB_TOOL_NAMES = ["linetta_web_search"] as const;
+
 export const WRITE_TOOL_NAMES = [
   "linetta_set_character_visuals",
   "linetta_set_art_style",
@@ -83,7 +87,7 @@ export const WRITE_TOOL_NAMES = [
   "linetta_set_part_arc",
 ] as const;
 
-const READS: ReadonlySet<string> = new Set([...READ_TOOL_NAMES, ...HISTORY_TOOL_NAMES]);
+const READS: ReadonlySet<string> = new Set([...READ_TOOL_NAMES, ...HISTORY_TOOL_NAMES, ...WEB_TOOL_NAMES]);
 const WRITES: ReadonlySet<string> = new Set(WRITE_TOOL_NAMES);
 
 /** The tools that change what the continuity list shows. */

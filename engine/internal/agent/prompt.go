@@ -85,6 +85,9 @@ type toolGroups struct {
 	// tools only. Like trial it is a cut offers applies, so every line naming
 	// a write tool leaves the prompt on its own.
 	ask bool
+	// web is linetta_web_search: on when this computer can search the web
+	// (Deps.WebSearchAvailable), never in a trial.
+	web bool
 }
 
 func allToolGroups() toolGroups { return toolGroups{memory: true, skills: true, review: true} }
@@ -101,6 +104,7 @@ func (g toolGroups) withTrial(trial bool) toolGroups {
 	}
 	g.trial = true
 	g.memory, g.skills, g.disableVisualWrites = false, false, true
+	g.web = false
 	return g
 }
 
@@ -222,6 +226,7 @@ How you work:`, lang)
 		writeOffered(&b, groups, "- When asked to fill Story World from the manuscript, work episode by episode in outline order, starting where the tool's progress says. Check what already exists first, propose with purpose=import_extraction and from_node_ids, and stop before your tool budget runs out to tell the writer how far you got and to say \"continue\".\n", "linetta_propose_story_ops")
 		writeOffered(&b, groups, "- Asked where the story could go next, read the brief and save the options with linetta_save_forecast instead of only describing them; the writer compares and picks in the app. A chosen branch appears in the brief's direction section as a plan, not canon. Asked to put a chosen branch into the outline, propose it with linetta_propose_story_ops purpose=forecast.\n")
 	}
+	writeOffered(&b, groups, webSearchLine)
 	b.WriteString(memoryBlock(profile, notes, groups.memory))
 	if groups.skills {
 		b.WriteString(skillsBlock(skills))
@@ -637,3 +642,8 @@ func windowFrom(replayable []companion.HistoryMessage, start string, budget int)
 	}
 	return -1
 }
+
+// webSearchLine is offered only when the turn holds linetta_web_search. The
+// query is the one thing in a turn that leaves for somewhere other than the
+// provider, so the line says what may go into it.
+const webSearchLine = "- When the writer asks you to look something up, or a scene needs a real-world fact you are not sure of (a place, a period, a job, how something works), search with linetta_web_search and say what you found and where. Query in general terms: never put the manuscript's sentences, plot or invented names into a query.\n"

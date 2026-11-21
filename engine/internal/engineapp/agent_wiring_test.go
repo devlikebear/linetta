@@ -169,6 +169,9 @@ func TestProductionToolDepsCarryEveryCollaborator(t *testing.T) {
 	if app.agentCtrl.tools.Attachment == nil {
 		t.Error("built-in agent tool deps: ToolDeps.Attachment is nil — linetta_add_reference_image cannot keep an image the writer attached")
 	}
+	if app.agentCtrl.tools.WebSearch == nil {
+		t.Error("built-in agent tool deps: ToolDeps.WebSearch is nil — linetta_web_search refuses every search")
+	}
 
 	// Memory in particular must be the SAME repo on both, not two instances.
 	// The two documents are one row each and the settings pane edits those
@@ -194,6 +197,12 @@ func skipToolDep(name string) string {
 		// agent's server; an external client has none to read. The agent's
 		// side is asserted in TestProductionToolDepsCarryEveryCollaborator.
 		return "only the built-in agent has attachments"
+	}
+	if name == "WebSearch" {
+		// linetta_web_search is the built-in agent's (ToolGroups.Web); an
+		// external client has a web of its own. The agent's side is asserted
+		// in TestProductionToolDepsCarryEveryCollaborator.
+		return "only the built-in agent searches the web"
 	}
 	return ""
 }

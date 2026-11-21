@@ -187,6 +187,9 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 	tools.Source = mcphost.SourceAgent
 	tools.Limiter = mcphost.NewLimiter()
 	tools.Story = deps.story
+	// Web search is the built-in agent's alone (ToolGroups.Web), so its
+	// searcher goes on this copy of the deps and not on the shared one.
+	tools.WebSearch = newAsideWebSearch()
 	// The service is built below, from deps that hold these tools; the
 	// tools reach its attachments through this variable once it is.
 	var svc *agent.Service
@@ -252,6 +255,7 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 		MemoryToolsEnabled:       deps.settings.MemoryToolsEnabled,
 		SkillToolsEnabled:        deps.settings.SkillToolsEnabled,
 		ReviewToolsEnabled:       deps.settings.ReviewToolsEnabled,
+		WebSearchAvailable:       webSearchAvailable,
 		Undo: func(ctx context.Context, batchID, snapshotID string) (string, string, error) {
 			if batchID != "" {
 				return "", "", deps.story.UndoApply(ctx, batchID, deps.clock)

@@ -150,6 +150,11 @@ type Deps struct {
 	// Read the same way and for the same reason as MemoryToolsEnabled and
 	// SkillToolsEnabled above — a nil func means enabled.
 	ReviewToolsEnabled func() bool
+	// WebSearchAvailable reports whether this computer can search the web
+	// for linetta_web_search (the Aside browser's CLI is installed). Read
+	// per turn with the switches above, so installing Aside needs no
+	// restart. Nil means no web search.
+	WebSearchAvailable func() bool
 	// Undo reverts what the agent last did. Exactly one of batchID, snapshotID
 	// is expected to be non-empty — the caller (agent.undo's RPC handler)
 	// validates that before this is reached. A batch id must be bound to the
@@ -429,3 +434,7 @@ func (s *Service) Cancel(runID string) error {
 }
 
 func newRunID() string { return uuid.NewString() }
+
+func (s *Service) webSearchAvailable() bool {
+	return s.deps.WebSearchAvailable != nil && s.deps.WebSearchAvailable()
+}

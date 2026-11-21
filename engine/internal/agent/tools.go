@@ -68,6 +68,7 @@ func (g toolGroups) hostGroups() mcphost.ToolGroups {
 		Memory: g.memory, Skills: g.skills, Review: g.review,
 		DisableVisualWrites: g.disableVisualWrites,
 		History:             true,
+		Web:                 g.web,
 		Trial:               g.trial,
 	}
 }
