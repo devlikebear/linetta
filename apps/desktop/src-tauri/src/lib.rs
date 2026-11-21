@@ -170,6 +170,7 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
     "providers.list",
     "providers.list_models",
     "providers.test",
+    "providers.update_cli",
     "publish.approval_answer",
     "publish.approvals_pending",
     "publish.connect_start",

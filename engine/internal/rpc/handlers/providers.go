@@ -15,6 +15,9 @@ type ProviderService interface {
 	List(ctx context.Context) (json.RawMessage, error)
 	ListModels(ctx context.Context, id string) ([]string, error)
 	Test(ctx context.Context, id string) error
+	// UpdateCLI runs `claude update` on the Claude Code CLI Linetta uses and
+	// returns the version it ends on ("" when it cannot tell).
+	UpdateCLI(ctx context.Context) (string, error)
 }
 
 type providerParams struct {
@@ -68,5 +71,20 @@ func ProvidersTest(svc ProviderService) rpc.Handler {
 			return nil, rpc.MethodErrorFrom(err)
 		}
 		return json.RawMessage(`{"ok":true}`), nil
+	}
+}
+
+// ProvidersUpdateCLI returns a handler for providers.update_cli: update the
+// Claude Code CLI, for a model that needs a newer one.
+func ProvidersUpdateCLI(svc ProviderService) rpc.Handler {
+	return func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
+		version, err := svc.UpdateCLI(ctx)
+		if err != nil {
+			return nil, rpc.MethodErrorFrom(err)
+		}
+		return json.Marshal(struct {
+			OK      bool   `json:"ok"`
+			Version string `json:"version,omitempty"`
+		}{true, version})
 	}
 }

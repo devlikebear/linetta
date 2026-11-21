@@ -26,6 +26,10 @@ func (p providerService) Test(ctx context.Context, id string) error {
 	return p.src.Test(ctx, id)
 }
 
+func (p providerService) UpdateCLI(ctx context.Context) (string, error) {
+	return p.src.UpdateCLI(ctx)
+}
+
 type imageProviderService struct {
 	src *provider.Source
 }

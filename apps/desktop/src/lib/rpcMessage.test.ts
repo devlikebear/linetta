@@ -105,6 +105,8 @@ describe("rpcErrorMessage", () => {
       "provider_rejected",
       "provider_unavailable",
       "provider_model_unsupported",
+      "provider_cli_outdated",
+      "provider_cli_update_failed",
       "provider_trial_exhausted",
       "provider_trial_paused",
     ]) {

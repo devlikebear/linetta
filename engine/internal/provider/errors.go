@@ -51,6 +51,11 @@ func Classify(id string, err error) error {
 		// an HTTP status, so its failures are only ever recognisable here.
 		case strings.Contains(msg, "executable not found"):
 			reason = rpc.ReasonProviderNotConfigured
+		// "Claude Code 2.1.280 does not support this model; version 2.1.290
+		// or newer is required. Run 'claude update'…"
+		case strings.Contains(msg, "claude update"),
+			strings.Contains(msg, "or newer is required"):
+			reason = rpc.ReasonProviderCLIOutdated
 		case strings.Contains(msg, "/login"),
 			strings.Contains(msg, "not logged in"),
 			strings.Contains(msg, "failed to authenticate"),

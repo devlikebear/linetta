@@ -62,6 +62,8 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   provider_rejected: "errors.providerRejected",
   provider_unavailable: "errors.providerUnavailable",
   provider_model_unsupported: "errors.providerModelUnsupported",
+  provider_cli_outdated: "errors.providerCliOutdated",
+  provider_cli_update_failed: "errors.providerCliUpdateFailed",
   provider_trial_exhausted: "errors.providerTrialExhausted",
   provider_trial_paused: "errors.providerTrialPaused",
   // Illustration drawing: what only drawing has. The provider failures above
