@@ -18,6 +18,7 @@ import { Markdown } from "./Markdown";
 import { SourceCards, sourcePlace, sourceTarget } from "./SourceCards";
 import { ProviderPicker } from "./ProviderPicker";
 import { IllustrationRequestCard } from "../illustration/IllustrationRequestCard";
+import { UpdateCliButton } from "../settings/UpdateCliButton";
 import "./AgentPanel.css";
 
 /** The built-in agent's panel (#95).
@@ -1837,6 +1838,15 @@ export function AgentPanel({
                       <Link to="/settings">
                         {onTrial ? t("agentPanel.trial.reconnect") : t("agentPanel.openSettings")}
                       </Link>
+                    </>
+                  ) : null}
+                  {line.variant === "error" && line.reason === "provider_cli_outdated" ? (
+                    <>
+                      {" "}
+                      <UpdateCliButton
+                        label={t("agentPanel.updateCli")}
+                        updatedLabel={() => t("agentPanel.updatedCli")}
+                      />
                     </>
                   ) : null}
                   {line.variant === "error" &&

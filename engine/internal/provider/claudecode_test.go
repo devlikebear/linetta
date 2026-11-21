@@ -243,6 +243,7 @@ func TestClassify_readsTheCLIsOwnWords(t *testing.T) {
 		"claude-code-cli request: Credit balance is too low":                                                rpc.ReasonProviderRateLimited,
 		"claude-code-cli request: cli timed out: no output for 15m0s":                                       rpc.ReasonProviderTimeout,
 		"claude-code-cli request: cli failed: exit status 1: something we have not seen yet":                rpc.ReasonProviderUnreachable,
+		"claude-code-cli request: API Error: 400 Claude Code 2.1.280 does not support this model; version 2.1.290 or newer is required. Run 'claude update', or update the Claude desktop app, then try again.": rpc.ReasonProviderCLIOutdated,
 		// Another process holding the refresh lock passes on its own; signing in
 		// again would not be the fix.
 		"claude-code-cli request: OAuth access token could not be refreshed: another Claude Code process is holding the refresh lock": rpc.ReasonProviderUnreachable,
@@ -252,5 +253,42 @@ func TestClassify_readsTheCLIsOwnWords(t *testing.T) {
 		if !errors.As(Classify(settings.ProviderClaudeCode, errors.New(msg)), &re) || re.Reason != want {
 			t.Errorf("%q → %v, want %s", msg, re, want)
 		}
+	}
+}
+
+func TestUpdateCLI_runsUpdateOnTheDetectedBinaryAndReportsTheVersion(t *testing.T) {
+	var calls [][]string
+	orig := runCLI
+	runCLI = func(_ context.Context, path string, args ...string) ([]byte, error) {
+		calls = append(calls, append([]string{path}, args...))
+		if args[0] == "--version" {
+			return []byte("2.1.330 (Claude Code)\n"), nil
+		}
+		return []byte("Successfully updated\n"), nil
+	}
+	t.Cleanup(func() { runCLI = orig })
+	bin := filepath.Join(t.TempDir(), "claude")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// UpdateCLI points tars at the binary, process-wide: put both back.
+	t.Setenv(claudeCodeCLIPathEnv, "")
+	t.Setenv("PATH", os.Getenv("PATH"))
+	src := NewSource(nil, t.TempDir()).WithCLIDetector(func(context.Context) string { return bin })
+	got, err := src.UpdateCLI(context.Background())
+	if err != nil || got != "2.1.330 (Claude Code)" {
+		t.Fatalf("UpdateCLI = %q, %v", got, err)
+	}
+	if len(calls) != 2 || calls[0][0] != bin || calls[0][1] != "update" {
+		t.Errorf("calls = %v", calls)
+	}
+}
+
+func TestUpdateCLI_withoutACLIIsNotConfigured(t *testing.T) {
+	src := NewSource(nil, t.TempDir()).WithCLIDetector(func(context.Context) string { return "" })
+	_, err := src.UpdateCLI(context.Background())
+	var re *rpc.ReasonError
+	if !errors.As(err, &re) || re.Reason != rpc.ReasonProviderNotConfigured {
+		t.Fatalf("err = %v", err)
 	}
 }

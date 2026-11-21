@@ -725,6 +725,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("providers.list", handlers.ProvidersList(providers))
 	s.Handle("providers.list_models", handlers.ProvidersListModels(providers))
 	s.Handle("providers.test", handlers.ProvidersTest(providers))
+	s.Handle("providers.update_cli", handlers.ProvidersUpdateCLI(providers))
 	// Illustration drawing. The painter is the provider's Draw, gated on the
 	// image consent; the gallery and the prompt preview never reach a provider.
 	imageProviders := imageProviderService{src: providerSrc}
