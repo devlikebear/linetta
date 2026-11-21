@@ -37,6 +37,11 @@ type ToolGroups struct {
 	// the writer pasted and said in passing, so only the built-in agent, whose
 	// conversation it is, gets these tools. An external client never does.
 	History bool
+	// Web is linetta_web_search. Like History, no switch sets it and
+	// ToolGroupsFrom leaves it off: the built-in agent turns it on when this
+	// computer can search (the Aside browser's CLI is installed), and an
+	// external client, which has a web of its own, never gets it.
+	Web bool
 	// Trial cuts the set down to TrialToolNames. It is not a writer's switch:
 	// the trial provider sets it for a turn paid for out of Linetta's own key,
 	// where every request carries the tool schemas and a short work makes
@@ -85,6 +90,7 @@ var TrialToolNames = []string{
 func (g ToolGroups) normalized() ToolGroups {
 	if g.Trial {
 		g.Memory, g.Skills, g.History, g.DisableVisualWrites = false, false, false, true
+		g.Web = false
 	}
 	return g
 }
@@ -178,6 +184,9 @@ func ToolNames(mode string, groups ToolGroups) []string {
 	}
 	if groups.normalized().History {
 		names = append(names, HistoryToolNames...)
+	}
+	if groups.normalized().Web {
+		names = append(names, WebToolNames...)
 	}
 	if mode == settings.MCPModeFull {
 		for _, n := range WriteToolNames {

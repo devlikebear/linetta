@@ -107,6 +107,7 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 	if s.deps.VisualWriteToolsDisabled != nil {
 		groups.disableVisualWrites = s.deps.VisualWriteToolsDisabled()
 	}
+	groups.web = s.webSearchAvailable()
 	// Last, because a trial overrides the writer's switches rather than
 	// combining with them. Decided by the provider this turn's client was
 	// built for, not a second read of the active one: a writer switching

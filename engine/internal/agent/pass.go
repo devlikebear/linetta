@@ -126,8 +126,11 @@ func (s *Service) standalone(ctx context.Context, projectID string) (loopState, 
 	if err != nil {
 		return loopState{}, nil, err
 	}
-	groups := resolveToolGroups(s.deps.MemoryToolsEnabled, s.deps.SkillToolsEnabled, s.deps.ReviewToolsEnabled).
-		withTrial(provider.IsTrial(resolved.ID))
+	groups := resolveToolGroups(s.deps.MemoryToolsEnabled, s.deps.SkillToolsEnabled, s.deps.ReviewToolsEnabled)
+	// The same reading as the turn's, so a pass reuses the turn's session
+	// rather than rebuilding it without the search tool.
+	groups.web = s.webSearchAvailable()
+	groups = groups.withTrial(provider.IsTrial(resolved.ID))
 	tools, err := s.session(ctx, groups)
 	if err != nil {
 		return loopState{}, nil, err

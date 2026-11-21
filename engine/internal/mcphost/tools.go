@@ -112,6 +112,10 @@ type ToolDeps struct {
 	// it. Nil in a build with no database open; the tools refuse.
 	History *companion.HistoryRepo
 
+	// WebSearch backs linetta_web_search, which only ToolGroups.Web
+	// registers. Nil refuses the call.
+	WebSearch WebSearcher
+
 	// Skills are the SKILL.md documents an agent writes for itself and the
 	// writer can read, edit and revert. Skills is the filesystem store under
 	// the Linetta home; SkillHistory is the version row every write lands, so
@@ -220,6 +224,9 @@ func (d ToolDeps) Register(s *mcp.Server, mode string, groups ToolGroups) {
 	d.registerReadTools(s, groups)
 	if groups.History {
 		d.registerHistoryTools(s)
+	}
+	if groups.Web {
+		d.registerWebTools(s)
 	}
 	if mode == settings.MCPModeFull {
 		d.registerWriteTools(s, groups)
