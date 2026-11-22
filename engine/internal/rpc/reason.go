@@ -227,6 +227,11 @@ const (
 	// The writer answered a publish approval that had already timed out or
 	// whose agent call gave up (#238).
 	ReasonPublishApprovalGone = "publish_approval_gone"
+	// The site's operator hid the work; the writer cannot change whether
+	// readers see it.
+	ReasonPublishHiddenByOperator = "publish_hidden_by_operator"
+	// The site does not have the route yet (an older Linetta Works).
+	ReasonPublishNotSupported = "publish_not_supported"
 )
 
 // The BYOK summarizer (#135).

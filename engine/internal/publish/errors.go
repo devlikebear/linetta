@@ -54,6 +54,8 @@ func reasonForAPIError(e *APIError) string {
 		return rpc.ReasonPublishSlugTaken
 	case CodeRateLimited:
 		return rpc.ReasonPublishRateLimited
+	case CodeHiddenByOperator:
+		return rpc.ReasonPublishHiddenByOperator
 	}
 	switch {
 	case e.Status == 401:

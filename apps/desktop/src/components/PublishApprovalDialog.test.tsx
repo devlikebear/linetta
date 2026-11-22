@@ -93,6 +93,47 @@ describe("PublishApprovalDialog", () => {
     expect(dialog).toHaveTextContent("publishApproval.republish");
   });
 
+  it("asks to hide an episode as a change the writer can undo", async () => {
+    render(<PublishApprovalDialog />);
+    announce([request({ kind: "episode_visibility", visibility: "private" })]);
+    const dialog = screen.getByTestId("publish-approval");
+    expect(dialog).toHaveTextContent("publishApproval.titleHideEpisode");
+    expect(dialog).toHaveTextContent("publishApproval.hidden");
+    expect(dialog).not.toHaveTextContent("publishApproval.public");
+    expect(dialog).toHaveTextContent("publishApproval.expiresChange");
+    expect(screen.getByRole("button", { name: "publishApproval.declineChange" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "publishApproval.approveChange" }));
+    await waitFor(() => expect(rpc.answer).toHaveBeenCalledWith("a1", true));
+  });
+
+  it("asks to make a private episode public again", () => {
+    render(<PublishApprovalDialog />);
+    announce([request({ kind: "episode_visibility", visibility: "public" })]);
+    const dialog = screen.getByTestId("publish-approval");
+    expect(dialog).toHaveTextContent("publishApproval.titleShowEpisode");
+    expect(dialog).toHaveTextContent("publishApproval.shown");
+  });
+
+  it("asks to hide the whole work", () => {
+    render(<PublishApprovalDialog />);
+    announce([request({ kind: "work_visibility", visibility: "private", node_id: undefined, episode_title: undefined })]);
+    const dialog = screen.getByTestId("publish-approval");
+    expect(dialog).toHaveTextContent("publishApproval.titleHideWork");
+    expect(dialog).toHaveTextContent("publishApproval.workHidden");
+    expect(screen.getByRole("button", { name: "publishApproval.approveChange" })).toBeInTheDocument();
+  });
+
+  it("asks to take the cover down", () => {
+    // A cover deleted from the gallery still has to be askable.
+    rpc.image.mockRejectedValue(new Error("gone"));
+    render(<PublishApprovalDialog />);
+    announce([request({ kind: "remove_cover", node_id: undefined, episode_title: undefined, illustration_id: "ill" })]);
+    const dialog = screen.getByTestId("publish-approval");
+    expect(dialog).toHaveTextContent("publishApproval.titleRemoveCover");
+    expect(dialog).toHaveTextContent("publishApproval.coverRemoved");
+    expect(screen.getByRole("button", { name: "publishApproval.approveChange" })).toBeInTheDocument();
+  });
+
   it("shows the blurb a registration would send and who asked", () => {
     render(<PublishApprovalDialog />);
     announce([request({ kind: "register_work", node_id: undefined, episode_title: undefined, blurb: "탑에 갇힌 검사", serial_status: "ongoing", source: "agent", client: undefined })]);

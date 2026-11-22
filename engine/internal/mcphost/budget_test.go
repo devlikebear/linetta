@@ -206,6 +206,10 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 		if name == "linetta_publish_status" || name == "linetta_publish_episode" || name == "linetta_register_work" || name == "linetta_publish_cover" {
 			continue
 		}
+		// The takedown pair carries its own allowance below.
+		if name == "linetta_set_episode_visibility" || name == "linetta_set_work_visibility" || name == "linetta_remove_cover" {
+			continue
+		}
 		// story-assist Phase 2's report tool, Phase 3's propose tool, and
 		// Phase 4's save-forecast tool carry their own allowances below.
 		if name == "linetta_report_continuity" || name == "linetta_propose_story_ops" || name == "linetta_save_forecast" {
@@ -245,8 +249,17 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	// linetta_publish_cover and the status tool's cover field brought the
 	// four to 3,527B. #238's "they approve it in the app" on the three
 	// writes, paid for by dropping a tool name the agent already sees: 3,577B.
-	if pub := sizes["linetta_publish_status"] + sizes["linetta_publish_episode"] + sizes["linetta_register_work"] + sizes["linetta_publish_cover"]; pub > 3600 {
-		t.Errorf("publish tools cost %dB, want <= 3600B", pub)
+	// The status tool's work_visibility, so an agent knows whether the work
+	// is hidden before it asks to hide it: 3,613B.
+	if pub := sizes["linetta_publish_status"] + sizes["linetta_publish_episode"] + sizes["linetta_register_work"] + sizes["linetta_publish_cover"]; pub > 3650 {
+		t.Errorf("publish tools cost %dB, want <= 3650B", pub)
+	}
+	// The takedown pair measured 1,182B: linetta_set_episode_visibility
+	// 799B (its output is the status tool's episode row), linetta_remove_cover
+	// 383B.
+	t.Logf("takedown: %dB, status %dB", sizes["linetta_set_episode_visibility"]+sizes["linetta_set_work_visibility"]+sizes["linetta_remove_cover"], sizes["linetta_publish_status"])
+	if takedown := sizes["linetta_set_episode_visibility"] + sizes["linetta_remove_cover"]; takedown > 1250 {
+		t.Errorf("the takedown tools cost %dB, want <= 1250B", takedown)
 	}
 	// story-assist Phase 2 measured 3,436B for linetta_report_continuity —
 	// the nested observations[].refs[] schema is most of it, and that

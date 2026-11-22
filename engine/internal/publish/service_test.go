@@ -309,6 +309,47 @@ func TestService_siteOnlyEpisodesKeepTheirPlaceAndAreListed(t *testing.T) {
 	}
 }
 
+func TestService_setWorkVisibility(t *testing.T) {
+	f := newServiceFixture(t, 1)
+	ctx := context.Background()
+	if _, err := f.svc.SetWorkVisibility(ctx, f.project.ID, VisibilityPrivate); err == nil {
+		t.Fatal("want a refusal before connecting")
+	}
+	f.register(t)
+	w, err := f.svc.SetWorkVisibility(ctx, f.project.ID, VisibilityPrivate)
+	if err != nil || w.Visibility != VisibilityPrivate {
+		t.Fatalf("private = %+v, %v", w, err)
+	}
+	ws, err := f.svc.WorkStatus(ctx, f.project.ID)
+	if err != nil || ws.Work == nil || ws.Work.Visibility != VisibilityPrivate {
+		t.Fatalf("status work = %+v, %v", ws.Work, err)
+	}
+	if _, err := f.svc.SetWorkVisibility(ctx, f.project.ID, "hidden"); err == nil {
+		t.Fatal("hidden is not the writer's to set")
+	}
+	f.site.work(f.project.ID).work.Visibility = "hidden"
+	if _, err := f.svc.SetWorkVisibility(ctx, f.project.ID, VisibilityPublic); reasonOf(err) != rpc.ReasonPublishHiddenByOperator {
+		t.Fatalf("operator-hidden: err = %v", err)
+	}
+}
+
+func TestService_setWorkVisibilityOnAnOlderSite(t *testing.T) {
+	f := newServiceFixture(t, 1)
+	f.register(t)
+	f.site.failNext("PATCH /api/artworks/works/"+f.project.ID, 404, "")
+	if _, err := f.svc.SetWorkVisibility(context.Background(), f.project.ID, VisibilityPrivate); reasonOf(err) != rpc.ReasonPublishNotSupported {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestService_setWorkVisibilityNeedsARegisteredWork(t *testing.T) {
+	f := newServiceFixture(t, 1)
+	f.connect(t)
+	if _, err := f.svc.SetWorkVisibility(context.Background(), f.project.ID, VisibilityPrivate); reasonOf(err) != rpc.ReasonPublishWorkNotRegistered {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestService_failuresChangeNothingLocally(t *testing.T) {
 	f := newServiceFixture(t, 1)
 	ctx := context.Background()

@@ -867,7 +867,7 @@ export interface PublishSheetView {
  *  withdrawn, or expires_at passes. */
 export interface PublishApprovalRequest {
   id: string;
-  kind: "register_work" | "publish_episode" | "publish_cover";
+  kind: "register_work" | "publish_episode" | "publish_cover" | "episode_visibility" | "work_visibility" | "remove_cover";
   project_id: string;
   work_title: string;
   node_id?: string;
@@ -877,6 +877,8 @@ export interface PublishApprovalRequest {
   blurb?: string;
   serial_status?: PublishSerialStatus;
   illustration_id?: string;
+  /** What episode_visibility or work_visibility switches to. */
+  visibility?: "public" | "private";
   /** "agent" is the built-in panel; "external" is an MCP client. */
   source: "agent" | "external";
   /** The name an external client gave itself. Its own claim, not verified. */
