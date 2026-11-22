@@ -114,6 +114,15 @@ describe("PublishApprovalDialog", () => {
     expect(dialog).toHaveTextContent("publishApproval.shown");
   });
 
+  it("asks to hide the whole work", () => {
+    render(<PublishApprovalDialog />);
+    announce([request({ kind: "work_visibility", visibility: "private", node_id: undefined, episode_title: undefined })]);
+    const dialog = screen.getByTestId("publish-approval");
+    expect(dialog).toHaveTextContent("publishApproval.titleHideWork");
+    expect(dialog).toHaveTextContent("publishApproval.workHidden");
+    expect(screen.getByRole("button", { name: "publishApproval.approveChange" })).toBeInTheDocument();
+  });
+
   it("asks to take the cover down", () => {
     // A cover deleted from the gallery still has to be askable.
     rpc.image.mockRejectedValue(new Error("gone"));

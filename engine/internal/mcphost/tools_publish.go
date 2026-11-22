@@ -17,17 +17,17 @@ import (
 
 // Publisher is the slice of internal/publish the publish tools use. An agent
 // can look at what is on Linetta Works, register a work, publish its episodes
-// and put up its cover, and take back what it put up: make an episode private
-// or public again and take the cover down. Connecting the account is the
-// writer's alone — it is approved in their browser — so there is no tool for
-// it. The site has no way for the app to hide or delete a whole work; the
-// writer does that on the site.
+// and put up its cover, and take back what it put up: make an episode or the
+// whole work private or public again and take the cover down. Connecting the
+// account is the writer's alone — it is approved in their browser — so there
+// is no tool for it. Deleting a work is done on the site.
 type Publisher interface {
 	WorkStatus(ctx context.Context, projectID string) (publish.WorkStatus, error)
 	UpsertWork(ctx context.Context, in publish.UpsertInput) (publish.WorkView, error)
 	PublishEpisode(ctx context.Context, nodeID string) (publish.PublishResult, error)
 	PublishCover(ctx context.Context, projectID, illustrationID string) (publish.CoverView, error)
 	SetEpisodeVisibility(ctx context.Context, projectID, nodeID, visibility string) (publish.EpisodeView, error)
+	SetWorkVisibility(ctx context.Context, projectID, visibility string) (publish.WorkView, error)
 	RemoveCover(ctx context.Context, projectID string) (bool, error)
 }
 
@@ -76,6 +76,8 @@ type publishStatusOutput struct {
 	Registered bool   `json:"registered"`
 	Offline    bool   `json:"offline,omitempty"`
 	WorkURL    string `json:"work_url,omitempty"`
+	// WorkVisibility is public, private, or hidden (by the site's operator).
+	WorkVisibility string `json:"work_visibility,omitempty"`
 	// Cover is absent while the site has none.
 	Cover *publishedCover `json:"cover,omitempty"`
 	// Episodes are the work's episodes in outline order.
@@ -138,6 +140,20 @@ type episodeVisibilityInput struct {
 
 func (in episodeVisibilityInput) scope() (string, string) { return in.ProjectID, in.NodeID }
 
+// ---------- linetta_set_work_visibility ----------
+
+type workVisibilityInput struct {
+	ProjectID  string `json:"project_id,omitempty"`
+	Visibility string `json:"visibility" jsonschema:"private or public"`
+}
+
+func (in workVisibilityInput) scope() (string, string) { return in.ProjectID, "" }
+
+type workVisibilityOutput struct {
+	WorkURL    string `json:"work_url"`
+	Visibility string `json:"visibility"`
+}
+
 // ---------- linetta_remove_cover ----------
 
 type removeCoverInput struct {
@@ -188,6 +204,11 @@ func (d ToolDeps) registerPublishWriteTools(s *mcp.Server) {
 			"Only when the writer asks" + approvalNote,
 	}, record(d, "linetta_set_episode_visibility", d.setEpisodeVisibility))
 	mcp.AddTool(s, &mcp.Tool{
+		Name: "linetta_set_work_visibility",
+		Description: "Make the whole work private on Linetta Works, hiding it and every episode from readers, or " +
+			"public again. Only when the writer asks" + approvalNote,
+	}, record(d, "linetta_set_work_visibility", d.setWorkVisibility))
+	mcp.AddTool(s, &mcp.Tool{
 		Name:        "linetta_remove_cover",
 		Description: "Take the work's cover down on Linetta Works. Only when the writer asks" + approvalNote,
 	}, record(d, "linetta_remove_cover", d.removeCover))
@@ -210,7 +231,7 @@ func (d ToolDeps) publishStatus(ctx context.Context, _ *mcp.CallToolRequest, in 
 		Episodes: make([]publishedEpisode, 0, len(ws.Episodes)),
 	}
 	if ws.Work != nil {
-		out.WorkURL = ws.Work.URL
+		out.WorkURL, out.WorkVisibility = ws.Work.URL, ws.Work.Visibility
 	}
 	if c := ws.Sheets.Cover; c != nil {
 		cover := toPublishedCover(*c)
@@ -427,6 +448,43 @@ func findPublishedEpisode(ws publish.WorkStatus, nodeID string) (publish.Episode
 	return publish.EpisodeView{}, false
 }
 
+func (d ToolDeps) setWorkVisibility(ctx context.Context, req *mcp.CallToolRequest, in workVisibilityInput) (*mcp.CallToolResult, workVisibilityOutput, error) {
+	if d.Publish == nil {
+		return toolErr("publishing is not available in this build"), workVisibilityOutput{}, nil
+	}
+	vis := strings.ToLower(strings.TrimSpace(in.Visibility))
+	if vis != publish.VisibilityPublic && vis != publish.VisibilityPrivate {
+		return toolErr("visibility must be private or public"), workVisibilityOutput{}, nil
+	}
+	p, errResult := d.requireProject(ctx, in.ProjectID)
+	if errResult != nil {
+		return errResult, workVisibilityOutput{}, nil
+	}
+	ws, errResult := d.publishReady(ctx, p.ID, true)
+	if errResult != nil {
+		return errResult, workVisibilityOutput{}, nil
+	}
+	if w := ws.Work; w != nil && !ws.Offline {
+		if w.Visibility == vis {
+			return nil, workVisibilityOutput{WorkURL: w.URL, Visibility: vis}, nil
+		}
+		if w.Visibility == "hidden" {
+			return toolErr("%s", publishFailure(&rpc.ReasonError{Reason: rpc.ReasonPublishHiddenByOperator})), workVisibilityOutput{}, nil
+		}
+	}
+	if errResult := d.askToPublish(ctx, req, publish.ApprovalRequest{
+		Kind: publish.ApprovalWorkVisibility, ProjectID: p.ID, WorkTitle: p.Title, Visibility: vis,
+	}); errResult != nil {
+		return errResult, workVisibilityOutput{}, nil
+	}
+	w, err := d.Publish.SetWorkVisibility(ctx, p.ID, vis)
+	if err != nil {
+		return toolErr("%s", publishFailure(err)), workVisibilityOutput{}, nil
+	}
+	d.notifyChanged(p.ID, "linetta_set_work_visibility", nil, "")
+	return nil, workVisibilityOutput{WorkURL: w.URL, Visibility: w.Visibility}, nil
+}
+
 func (d ToolDeps) removeCover(ctx context.Context, req *mcp.CallToolRequest, in removeCoverInput) (*mcp.CallToolResult, removeCoverOutput, error) {
 	if d.Publish == nil {
 		return toolErr("publishing is not available in this build"), removeCoverOutput{}, nil
@@ -542,6 +600,11 @@ func publishFailure(err error) string {
 		return "the site could not give the work an address from its title; the writer can choose one in the app's publish dialog"
 	case rpc.ReasonPublishNotEnabled:
 		return "publishing is not open for the writer's account yet"
+	case rpc.ReasonPublishHiddenByOperator:
+		return "the Linetta Works operator hid this work; the writer can see why on the site, and it cannot be " +
+			"made public from here"
+	case rpc.ReasonPublishNotSupported:
+		return "Linetta Works does not support this yet; the writer can do it on the site"
 	case rpc.ReasonPublishEpisodeNotFound:
 		return "that episode is not on Linetta Works"
 	case rpc.ReasonPublishEmptyEpisode:

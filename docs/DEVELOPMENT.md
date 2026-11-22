@@ -214,11 +214,15 @@ Write (`full` mode only):
   through `publish.Service.SetEpisodeVisibility`, the dialog's
   `publish.episode_set_visibility`. An episode already in that state or not
   on the site is answered without asking the writer;
+- `linetta_set_work_visibility`: makes the whole work private or public
+  through `publish.Service.SetWorkVisibility` (`PATCH
+  /api/artworks/works/{project_id}`). A work the site's operator hid is
+  refused without asking (`publish_hidden_by_operator`), and a site without
+  the route yet answers `publish_not_supported`;
 - `linetta_remove_cover`: takes the cover down through
   `publish.Service.RemoveCover` and clears the writer's cover choice, so the
-  next `publish.sheets_sync` does not put it back. No cover, no question. The
-  device API has no way to hide or delete a whole work, so there is no tool
-  for it. All five are refused until the writer has connected an account in the app —
+  next `publish.sheets_sync` does not put it back. No cover, no question.
+  Deleting a work is the site's alone. All six are refused until the writer has connected an account in the app —
   there is deliberately no tool for that, since pairing is approved in the
   writer's browser. Each call then waits in `publish.Approvals` (#238): the
   engine sends `publish.approvals_changed`, the app's `PublishApprovalDialog`

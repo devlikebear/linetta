@@ -78,6 +78,7 @@ export const WRITE_TOOL_NAMES = [
   "linetta_publish_episode",
   "linetta_publish_cover",
   "linetta_set_episode_visibility",
+  "linetta_set_work_visibility",
   "linetta_remove_cover",
   "linetta_report_continuity",
   "linetta_update_continuity",

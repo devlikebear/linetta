@@ -45,6 +45,11 @@ func (f *fakePublisher) SetEpisodeVisibility(_ context.Context, _, nodeID, visib
 	return f.visibilityOut, f.visibilityErr
 }
 
+func (f *fakePublisher) SetWorkVisibility(_ context.Context, _, visibility string) (publish.WorkView, error) {
+	f.visibility = append(f.visibility, "work="+visibility)
+	return publish.WorkView{URL: "https://works.example/w", Visibility: visibility}, f.visibilityErr
+}
+
 func (f *fakePublisher) RemoveCover(context.Context, string) (bool, error) {
 	f.removed++
 	return true, f.removeErr
@@ -464,6 +469,7 @@ func publishWriteCalls(f *publishFixture) []struct {
 		{"linetta_publish_cover", map[string]any{"project_id": f.projectID, "illustration_id": "ill"}},
 		{"linetta_set_episode_visibility", map[string]any{"project_id": f.projectID, "node_id": "site-ep", "visibility": "private"}},
 		{"linetta_remove_cover", map[string]any{"project_id": f.projectID}},
+		{"linetta_set_work_visibility", map[string]any{"project_id": f.projectID, "visibility": "private"}},
 	}
 }
 
@@ -691,5 +697,38 @@ func TestRemoveCover_takesTheCoverDown(t *testing.T) {
 	res = callPublishTool(t, cs, "linetta_remove_cover", map[string]any{"project_id": f.projectID})
 	if res.IsError || f.pub.removed != 1 || len(f.approver.asked) != 1 || !strings.Contains(toolText(res), `"removed":false`) {
 		t.Fatalf("no cover: res = %q, removed %d, asked %d", toolText(res), f.pub.removed, len(f.approver.asked))
+	}
+}
+
+func TestSetWorkVisibility_hidesTheWholeWork(t *testing.T) {
+	f := newPublishFixture(t)
+	f.pub.status.Work = &publish.WorkView{URL: "https://works.example/w", Visibility: publish.VisibilityPublic}
+	cs := connectedServer(t, f.deps, settings.MCPModeFull, AllToolGroups())
+	res := callPublishTool(t, cs, "linetta_set_work_visibility", map[string]any{"project_id": f.projectID, "visibility": "PRIVATE"})
+	if res.IsError || !slices.Equal(f.pub.visibility, []string{"work=private"}) {
+		t.Fatalf("res = %q, calls = %v", toolText(res), f.pub.visibility)
+	}
+	if got := f.approver.asked[0]; got.Kind != publish.ApprovalWorkVisibility || got.Visibility != "private" || got.WorkTitle != "작품" {
+		t.Fatalf("request = %+v", got)
+	}
+	if len(f.changed) != 1 || f.changed[0].Tool != "linetta_set_work_visibility" {
+		t.Fatalf("changed = %+v", f.changed)
+	}
+}
+
+func TestSetWorkVisibility_asksNothingItNeedNotOrCannotDo(t *testing.T) {
+	f := newPublishFixture(t)
+	f.pub.status.Work = &publish.WorkView{Visibility: publish.VisibilityPrivate}
+	cs := connectedServer(t, f.deps, settings.MCPModeFull, AllToolGroups())
+	if res := callPublishTool(t, cs, "linetta_set_work_visibility", map[string]any{"project_id": f.projectID, "visibility": "private"}); res.IsError {
+		t.Fatalf("already private: %q", toolText(res))
+	}
+	f.pub.status.Work.Visibility = "hidden"
+	res := callPublishTool(t, cs, "linetta_set_work_visibility", map[string]any{"project_id": f.projectID, "visibility": "public"})
+	if !res.IsError || !strings.Contains(toolText(res), "operator hid") {
+		t.Fatalf("operator-hidden: %q", toolText(res))
+	}
+	if len(f.approver.asked) != 0 || f.sentAnything() {
+		t.Fatalf("asked %+v, sent %v", f.approver.asked, f.pub.visibility)
 	}
 }

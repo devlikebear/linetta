@@ -323,6 +323,16 @@ func (c *Client) SetEpisodeVisibility(ctx context.Context, token, projectID, nod
 	return out.Episode, err
 }
 
+// SetWorkVisibility makes the whole work public or private. A private work
+// shows none of its episodes, whatever their own visibility.
+func (c *Client) SetWorkVisibility(ctx context.Context, token, projectID, visibility string) (Work, error) {
+	var out struct {
+		Work Work `json:"work"`
+	}
+	err := c.do(ctx, http.MethodPatch, workPath(projectID), token, map[string]string{"visibility": visibility}, &out)
+	return out.Work, err
+}
+
 // ReorderEpisodes renumbers a work's episodes 1, 2, 3… in order. order must
 // name every episode the site has for the work exactly once.
 func (c *Client) ReorderEpisodes(ctx context.Context, token, projectID string, order []string) ([]RemoteEpisode, error) {
@@ -502,6 +512,7 @@ const (
 	CodeAlreadyClaimed    = "already_claimed"
 	CodeImagesMissing     = "images_missing"
 	CodeImageChanged      = "image_changed"
+	CodeHiddenByOperator  = "hidden_by_operator"
 )
 
 // MaxImagesPerEpisode is the site's limit on pictures in one episode

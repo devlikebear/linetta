@@ -584,7 +584,8 @@ export function Workspace() {
     if (
       payload.tool !== "linetta_register_work" &&
       payload.tool !== "linetta_publish_episode" &&
-      payload.tool !== "linetta_set_episode_visibility"
+      payload.tool !== "linetta_set_episode_visibility" &&
+      payload.tool !== "linetta_set_work_visibility"
     )
       return;
     publishApi

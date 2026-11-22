@@ -703,6 +703,41 @@ func desiredOrder(current, localOrder []string, target string) []string {
 	return out
 }
 
+// SetWorkVisibility makes the whole work public or private on the site. A
+// work the site's operator hid cannot be changed (ReasonPublishHiddenByOperator).
+func (s *Service) SetWorkVisibility(ctx context.Context, projectID, visibility string) (WorkView, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if visibility != VisibilityPublic && visibility != VisibilityPrivate {
+		return WorkView{}, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "visibility must be public or private"}
+	}
+	tok, err := s.token()
+	if err != nil {
+		return WorkView{}, err
+	}
+	if _, err := s.project(ctx, projectID); err != nil {
+		return WorkView{}, err
+	}
+	work, err := s.client.SetWorkVisibility(ctx, tok, projectID, visibility)
+	// A site older than this route answers with the router's bare 404, not
+	// the API's not_found.
+	var apiErr *APIError
+	if errors.As(err, &apiErr) && apiErr.Status == 404 && apiErr.Code != CodeNotFound {
+		return WorkView{}, reason(rpc.ReasonPublishNotSupported, err)
+	}
+	if isNotFound(err) {
+		return WorkView{}, reason(rpc.ReasonPublishWorkNotRegistered, err)
+	}
+	if err != nil {
+		return WorkView{}, s.siteError(err)
+	}
+	w := s.workState(projectID, work)
+	if err := s.state.PutWork(ctx, w); err != nil {
+		log.Printf("publish: save state: %v", err)
+	}
+	return *workView(w, work.Visibility), nil
+}
+
 // SetEpisodeVisibility makes an episode public or private on the site. It
 // takes the project, not just the node, because a site-only episode has no
 // node here to find the project by.

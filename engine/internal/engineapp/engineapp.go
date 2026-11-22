@@ -463,7 +463,8 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 			skillHistory: skillHistory,
 			// linetta_publish_status / linetta_register_work /
 			// linetta_publish_episode / linetta_publish_cover /
-			// linetta_set_episode_visibility / linetta_remove_cover go through
+			// linetta_set_episode_visibility / linetta_set_work_visibility /
+			// linetta_remove_cover go through
 			// the same service the publish dialog does, so an agent and the
 			// writer share one connection and one state.
 			publish: publishSvc,

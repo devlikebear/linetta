@@ -73,6 +73,7 @@ func newFakeSite(t *testing.T) *fakeSite {
 	mux.HandleFunc("GET /api/artworks/trial/me", f.auth(f.trialMe))
 	mux.HandleFunc("PUT /api/artworks/works/{pid}", f.auth(f.putWork))
 	mux.HandleFunc("GET /api/artworks/works/{pid}", f.auth(f.getWork))
+	mux.HandleFunc("PATCH /api/artworks/works/{pid}", f.auth(f.patchWork))
 	mux.HandleFunc("PUT /api/artworks/works/{pid}/episodes/{nid}", f.auth(f.putEpisode))
 	mux.HandleFunc("PATCH /api/artworks/works/{pid}/episodes/{nid}", f.auth(f.patchEpisode))
 	mux.HandleFunc("PUT /api/artworks/works/{pid}/episodes/{nid}/images/{iid}", f.auth(f.putImage))
@@ -244,6 +245,26 @@ func (f *fakeSite) getWork(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{"work": work.work, "episodes": work.episodes})
+}
+
+func (f *fakeSite) patchWork(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Visibility string `json:"visibility"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&in)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	work, ok := f.works[r.PathValue("pid")]
+	if !ok {
+		writeErr(w, 404, CodeNotFound)
+		return
+	}
+	if work.work.Visibility == "hidden" {
+		writeErr(w, 403, CodeHiddenByOperator)
+		return
+	}
+	work.work.Visibility = in.Visibility
+	writeJSON(w, 200, map[string]any{"work": work.work})
 }
 
 func (f *fakeSite) putImage(w http.ResponseWriter, r *http.Request) {

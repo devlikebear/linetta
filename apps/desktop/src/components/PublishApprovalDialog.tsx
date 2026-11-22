@@ -80,6 +80,8 @@ function titleKey(request: PublishApprovalRequest): MessageKey {
       return "publishApproval.titleCover";
     case "episode_visibility":
       return request.visibility === "private" ? "publishApproval.titleHideEpisode" : "publishApproval.titleShowEpisode";
+    case "work_visibility":
+      return request.visibility === "private" ? "publishApproval.titleHideWork" : "publishApproval.titleShowWork";
     case "remove_cover":
       return "publishApproval.titleRemoveCover";
   }
@@ -91,6 +93,8 @@ function effectKey(request: PublishApprovalRequest): MessageKey {
   switch (request.kind) {
     case "episode_visibility":
       return request.visibility === "private" ? "publishApproval.hidden" : "publishApproval.shown";
+    case "work_visibility":
+      return request.visibility === "private" ? "publishApproval.workHidden" : "publishApproval.shown";
     case "remove_cover":
       return "publishApproval.coverRemoved";
     default:
@@ -101,7 +105,7 @@ function effectKey(request: PublishApprovalRequest): MessageKey {
 /** The takedowns change something rather than upload it, so their buttons
  *  and deadline say so. */
 function isChange(request: PublishApprovalRequest): boolean {
-  return request.kind === "episode_visibility" || request.kind === "remove_cover";
+  return request.kind === "episode_visibility" || request.kind === "work_visibility" || request.kind === "remove_cover";
 }
 
 function useSecondsLeft(expiresAt: number): number {
