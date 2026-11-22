@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.28.0 - 2026-11-22
+
+- Added: the agent can take back what it put on Linetta Works. Ask it to
+  make a published episode private, or the whole work private, and it can
+  make either public again later; it can also take the cover down. As with
+  publishing, nothing changes until you approve it in the app, and the
+  approval window says the change can be undone. Deleting a work is still
+  done on the Linetta Works site.
+- Security: updated the `url` Rust crate to 2.5.9 for RUSTSEC-2026-0592.
+
 ## v1.27.0 - 2026-11-21
 
 - Added: web search for the agent on a Mac with the Aside browser
