@@ -238,6 +238,38 @@ func (s *Service) PublishCover(ctx context.Context, projectID, illustrationID st
 	return *coverView(cover), nil
 }
 
+// RemoveCover takes the work's cover down on the site and clears the
+// writer's choice here, so the next SyncSheets does not put it back. It
+// reports whether the site had a cover.
+func (s *Service) RemoveCover(ctx context.Context, projectID string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tok, err := s.token()
+	if err != nil {
+		return false, err
+	}
+	if _, err := s.project(ctx, projectID); err != nil {
+		return false, err
+	}
+	work, _, err := s.client.GetWork(ctx, tok, projectID)
+	if isNotFound(err) {
+		return false, reason(rpc.ReasonPublishWorkNotRegistered, err)
+	}
+	if err != nil {
+		return false, s.siteError(err)
+	}
+	had := work.Cover != nil
+	if had {
+		if err := s.client.DeleteCover(ctx, tok, projectID); err != nil {
+			return false, s.siteError(err)
+		}
+	}
+	if err := s.state.SetCover(ctx, projectID, "", s.clock()); err != nil {
+		return had, err
+	}
+	return had, nil
+}
+
 // remoteSheetsStatus fills the site's half for a registered work.
 func (s *Service) remoteSheetsStatus(ctx context.Context, tok, projectID string, work Work, out *SheetsStatus) error {
 	remote, _, err := s.client.GetSheets(ctx, tok, projectID)

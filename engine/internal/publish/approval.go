@@ -10,13 +10,16 @@ import (
 	"github.com/google/uuid"
 )
 
-// What an agent asked to put on Linetta Works. Each is something readers see
-// and nothing in the app can take back, so none of them happens on an
-// agent's word alone (#238).
+// What an agent asked to change on Linetta Works. Each changes what readers
+// see, so none of them happens on an agent's word alone (#238). The first
+// three put something up; episode_visibility and remove_cover hide or take
+// down what is there.
 const (
-	ApprovalRegisterWork   = "register_work"
-	ApprovalPublishEpisode = "publish_episode"
-	ApprovalPublishCover   = "publish_cover"
+	ApprovalRegisterWork      = "register_work"
+	ApprovalPublishEpisode    = "publish_episode"
+	ApprovalPublishCover      = "publish_cover"
+	ApprovalEpisodeVisibility = "episode_visibility"
+	ApprovalRemoveCover       = "remove_cover"
 )
 
 // DefaultApprovalTimeout is how long a publish tool waits for the writer. A
@@ -54,8 +57,11 @@ type ApprovalRequest struct {
 	// Blurb and SerialStatus are what register_work sends.
 	Blurb        string `json:"blurb,omitempty"`
 	SerialStatus string `json:"serial_status,omitempty"`
-	// IllustrationID is the picture publish_cover uploads.
+	// IllustrationID is the picture publish_cover uploads, or the cover
+	// remove_cover takes down.
 	IllustrationID string `json:"illustration_id,omitempty"`
+	// Visibility is public or private for episode_visibility.
+	Visibility string `json:"visibility,omitempty"`
 	// Source is "agent" for the built-in panel and "external" for an MCP
 	// client; Client is the name an external client gave itself, which it
 	// chose, so it is shown as a label and never trusted.

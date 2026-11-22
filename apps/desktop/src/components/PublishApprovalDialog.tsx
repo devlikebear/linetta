@@ -78,7 +78,30 @@ function titleKey(request: PublishApprovalRequest): MessageKey {
       return request.republish ? "publishApproval.titleRepublish" : "publishApproval.titleEpisode";
     case "publish_cover":
       return "publishApproval.titleCover";
+    case "episode_visibility":
+      return request.visibility === "private" ? "publishApproval.titleHideEpisode" : "publishApproval.titleShowEpisode";
+    case "remove_cover":
+      return "publishApproval.titleRemoveCover";
   }
+}
+
+/** What saying yes does to readers. Putting something up cannot be taken
+ *  back from the app; hiding an episode or taking the cover down can. */
+function effectKey(request: PublishApprovalRequest): MessageKey {
+  switch (request.kind) {
+    case "episode_visibility":
+      return request.visibility === "private" ? "publishApproval.hidden" : "publishApproval.shown";
+    case "remove_cover":
+      return "publishApproval.coverRemoved";
+    default:
+      return "publishApproval.public";
+  }
+}
+
+/** The takedowns change something rather than upload it, so their buttons
+ *  and deadline say so. */
+function isChange(request: PublishApprovalRequest): boolean {
+  return request.kind === "episode_visibility" || request.kind === "remove_cover";
 }
 
 function useSecondsLeft(expiresAt: number): number {
@@ -101,7 +124,9 @@ interface CardProps {
 function ApprovalCard({ request, more, busy, error, onAnswer }: Readonly<CardProps>) {
   const { t } = useI18n();
   const seconds = useSecondsLeft(request.expires_at);
-  const cover = useIllustrationImage(request.kind === "publish_cover" ? request.illustration_id ?? null : null);
+  const showsCover = request.kind === "publish_cover" || request.kind === "remove_cover";
+  const cover = useIllustrationImage(showsCover ? request.illustration_id ?? null : null);
+  const change = isChange(request);
   const declineRef = useRef<HTMLButtonElement>(null);
 
   // Declining is the safe default: Enter on a dialog that appeared mid-typing
@@ -144,8 +169,12 @@ function ApprovalCard({ request, more, busy, error, onAnswer }: Readonly<CardPro
             <p className="modal-sub publish-approval-blurb">{request.blurb}</p>
           </>
         )}
-        {request.kind === "publish_cover" && cover && (
-          <img className="publish-approval-cover" src={cover} alt={t("publishApproval.coverAlt")} />
+        {showsCover && cover && (
+          <img
+            className="publish-approval-cover"
+            src={cover}
+            alt={t(request.kind === "remove_cover" ? "publishApproval.currentCoverAlt" : "publishApproval.coverAlt")}
+          />
         )}
         {request.kind === "publish_episode" && request.republish && (
           <p className="modal-sub" role="note">{t("publishApproval.republish")}</p>
@@ -153,16 +182,16 @@ function ApprovalCard({ request, more, busy, error, onAnswer }: Readonly<CardPro
         {request.kind === "publish_cover" && request.republish && (
           <p className="modal-sub" role="note">{t("publishApproval.replaceCover")}</p>
         )}
-        <p className="modal-sub">{t("publishApproval.public")}</p>
-        <p className="modal-sub">{t("publishApproval.expires", { seconds })}</p>
+        <p className="modal-sub">{t(effectKey(request))}</p>
+        <p className="modal-sub">{t(change ? "publishApproval.expiresChange" : "publishApproval.expires", { seconds })}</p>
         {more > 0 && <p className="modal-sub">{t("publishApproval.more", { count: more })}</p>}
         {error && <p className="modal-sub publish-approval-error" role="alert">{error}</p>}
         <div className="modal-actions">
           <button ref={declineRef} type="button" className="btn ghost" disabled={busy} onClick={() => onAnswer(false)}>
-            {t("publishApproval.decline")}
+            {t(change ? "publishApproval.declineChange" : "publishApproval.decline")}
           </button>
           <button type="button" className="btn accent" disabled={busy} onClick={() => onAnswer(true)}>
-            {t("publishApproval.approve")}
+            {t(change ? "publishApproval.approveChange" : "publishApproval.approve")}
           </button>
         </div>
       </div>

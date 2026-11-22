@@ -32,6 +32,22 @@ type fakePublisher struct {
 	covers    []string
 	cover     publish.CoverView
 	coverErr  error
+	// visibility and removed record the takedown calls.
+	visibility    []string
+	visibilityOut publish.EpisodeView
+	visibilityErr error
+	removed       int
+	removeErr     error
+}
+
+func (f *fakePublisher) SetEpisodeVisibility(_ context.Context, _, nodeID, visibility string) (publish.EpisodeView, error) {
+	f.visibility = append(f.visibility, nodeID+"="+visibility)
+	return f.visibilityOut, f.visibilityErr
+}
+
+func (f *fakePublisher) RemoveCover(context.Context, string) (bool, error) {
+	f.removed++
+	return true, f.removeErr
 }
 
 func (f *fakePublisher) UpsertWork(_ context.Context, in publish.UpsertInput) (publish.WorkView, error) {
@@ -93,7 +109,12 @@ func newPublishFixture(t *testing.T) *publishFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &publishFixture{pub: &fakePublisher{status: publish.WorkStatus{Connected: true, Registered: true}}, approver: &fakeApprover{}, projectID: p.ID, nodeID: *p.LastOpenedNodeID, otherID: other.ID, otherNode: *other.LastOpenedNodeID}
+	// One public episode whose node was deleted here, and a cover, so the
+	// takedown tools have something on the site to act on.
+	status := publish.WorkStatus{Connected: true, Registered: true,
+		SiteOnly: []publish.EpisodeView{{NodeID: "site-ep", Number: 3, State: publish.EpisodeSiteOnly, RemoteStatus: publish.RemotePublic}}}
+	status.Sheets.Cover = &publish.CoverView{IllustrationID: "ill", State: publish.EpisodePublic}
+	f := &publishFixture{pub: &fakePublisher{status: status}, approver: &fakeApprover{}, projectID: p.ID, nodeID: *p.LastOpenedNodeID, otherID: other.ID, otherNode: *other.LastOpenedNodeID}
 	f.deps = ToolDeps{
 		Projects: projects,
 		Nodes:    node.NewRepo(st),
@@ -441,11 +462,13 @@ func publishWriteCalls(f *publishFixture) []struct {
 		{"linetta_register_work", map[string]any{"project_id": f.projectID, "blurb": "소개"}},
 		{"linetta_publish_episode", map[string]any{"node_id": f.nodeID}},
 		{"linetta_publish_cover", map[string]any{"project_id": f.projectID, "illustration_id": "ill"}},
+		{"linetta_set_episode_visibility", map[string]any{"project_id": f.projectID, "node_id": "site-ep", "visibility": "private"}},
+		{"linetta_remove_cover", map[string]any{"project_id": f.projectID}},
 	}
 }
 
 func (f *publishFixture) sentAnything() bool {
-	return len(f.pub.upserts)+len(f.pub.published)+len(f.pub.covers) > 0
+	return len(f.pub.upserts)+len(f.pub.published)+len(f.pub.covers)+len(f.pub.visibility)+f.pub.removed > 0
 }
 
 func TestPublishWrites_sendNothingTheWriterDeclines(t *testing.T) {
@@ -456,7 +479,7 @@ func TestPublishWrites_sendNothingTheWriterDeclines(t *testing.T) {
 			f.approver.err = publish.ErrApprovalDenied
 			cs := connectedServer(t, f.deps, settings.MCPModeFull, AllToolGroups())
 			res := callPublishTool(t, cs, call.name, call.args)
-			if !res.IsError || !strings.Contains(toolText(res), "declined") || !strings.Contains(toolText(res), "nothing was published") {
+			if !res.IsError || !strings.Contains(toolText(res), "declined") || !strings.Contains(toolText(res), "nothing changed on the site") {
 				t.Fatalf("result = %v %q", res.IsError, toolText(res))
 			}
 			if len(f.approver.asked) != 1 || f.sentAnything() || len(f.changed) != 0 {
@@ -584,5 +607,89 @@ func TestRegisterWork_showsTheWriterTheBlurbItWillSend(t *testing.T) {
 	got := f.approver.asked[0]
 	if got.Kind != publish.ApprovalRegisterWork || got.Blurb != "원래 소개" || got.SerialStatus != "completed" || !got.Republish {
 		t.Fatalf("request = %+v", got)
+	}
+}
+
+// ---------- taking down what is on the site ----------
+
+func TestSetEpisodeVisibility_hidesTheEpisodeASceneBelongsTo(t *testing.T) {
+	f := newPublishFixture(t)
+	ep, err := episode.Resolve(context.Background(), f.deps.Nodes, project.OutlinePresetWebNovel, f.nodeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.pub.status.Episodes = []publish.EpisodeView{{NodeID: ep.NodeID, LeafIDs: []string{f.nodeID}, Number: 1,
+		State: publish.EpisodePublic, RemoteStatus: publish.RemotePublic}}
+	f.pub.visibilityOut = publish.EpisodeView{NodeID: ep.NodeID, Number: 1, State: publish.EpisodePrivate}
+	cs := connectedServer(t, f.deps, settings.MCPModeFull, AllToolGroups())
+	res := callPublishTool(t, cs, "linetta_set_episode_visibility", map[string]any{"node_id": f.nodeID, "visibility": " Private "})
+	if res.IsError {
+		t.Fatalf("tool error: %s", toolText(res))
+	}
+	if !slices.Equal(f.pub.visibility, []string{ep.NodeID + "=private"}) {
+		t.Fatalf("visibility calls = %v", f.pub.visibility)
+	}
+	got := f.approver.asked[0]
+	if got.Kind != publish.ApprovalEpisodeVisibility || got.Visibility != "private" || got.NodeID != ep.NodeID || got.ProjectID != f.projectID {
+		t.Fatalf("request = %+v", got)
+	}
+	var out publishedEpisode
+	if err := json.Unmarshal([]byte(toolText(res)), &out); err != nil || out.State != publish.EpisodePrivate {
+		t.Fatalf("out = %+v, %v", out, err)
+	}
+	if len(f.changed) != 1 || f.changed[0].Tool != "linetta_set_episode_visibility" {
+		t.Fatalf("changed = %+v", f.changed)
+	}
+}
+
+func TestSetEpisodeVisibility_reachesASiteOnlyEpisode(t *testing.T) {
+	f := newPublishFixture(t)
+	cs := connectedServer(t, f.deps, settings.MCPModeFull, AllToolGroups())
+	res := callPublishTool(t, cs, "linetta_set_episode_visibility", map[string]any{"project_id": f.projectID, "node_id": "site-ep", "visibility": "private"})
+	if res.IsError || !slices.Equal(f.pub.visibility, []string{"site-ep=private"}) {
+		t.Fatalf("res = %q, calls = %v", toolText(res), f.pub.visibility)
+	}
+	if f.approver.asked[0].EpisodeTitle != "3" {
+		t.Fatalf("a site-only episode is named by its number: %+v", f.approver.asked[0])
+	}
+}
+
+func TestSetEpisodeVisibility_asksNothingItNeedNotDo(t *testing.T) {
+	f := newPublishFixture(t)
+	cs := connectedServer(t, f.deps, settings.MCPModeFull, AllToolGroups())
+	for _, call := range []map[string]any{
+		// Already public.
+		{"project_id": f.projectID, "node_id": "site-ep", "visibility": "public"},
+		// Not a visibility.
+		{"project_id": f.projectID, "node_id": "site-ep", "visibility": "hidden"},
+		// Never published.
+		{"node_id": f.nodeID, "visibility": "private"},
+	} {
+		callPublishTool(t, cs, "linetta_set_episode_visibility", call)
+	}
+	if len(f.approver.asked) != 0 || f.sentAnything() {
+		t.Fatalf("asked %+v, sent %v", f.approver.asked, f.pub.visibility)
+	}
+	res := callPublishTool(t, cs, "linetta_set_episode_visibility", map[string]any{"node_id": f.nodeID, "visibility": "private"})
+	if !res.IsError || !strings.Contains(toolText(res), "not on Linetta Works") {
+		t.Fatalf("unpublished: %q", toolText(res))
+	}
+}
+
+func TestRemoveCover_takesTheCoverDown(t *testing.T) {
+	f := newPublishFixture(t)
+	cs := connectedServer(t, f.deps, settings.MCPModeFull, AllToolGroups())
+	res := callPublishTool(t, cs, "linetta_remove_cover", map[string]any{"project_id": f.projectID})
+	if res.IsError || f.pub.removed != 1 {
+		t.Fatalf("res = %q, removed %d", toolText(res), f.pub.removed)
+	}
+	if got := f.approver.asked[0]; got.Kind != publish.ApprovalRemoveCover || got.IllustrationID != "ill" {
+		t.Fatalf("request = %+v", got)
+	}
+
+	f.pub.status.Sheets.Cover = nil
+	res = callPublishTool(t, cs, "linetta_remove_cover", map[string]any{"project_id": f.projectID})
+	if res.IsError || f.pub.removed != 1 || len(f.approver.asked) != 1 || !strings.Contains(toolText(res), `"removed":false`) {
+		t.Fatalf("no cover: res = %q, removed %d, asked %d", toolText(res), f.pub.removed, len(f.approver.asked))
 	}
 }

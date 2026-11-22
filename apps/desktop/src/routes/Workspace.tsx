@@ -576,11 +576,17 @@ export function Workspace() {
     return () => { cancelled = true; };
   }, [vaultAvailable, publishProjectId]);
 
-  // An agent registering the work or publishing an episode changes what the
-  // badges should say, so those two tools refetch the status the same way.
+  // An agent registering the work, publishing an episode or switching one
+  // private changes what the badges should say, so those tools refetch the
+  // status the same way.
   useEngineEvent<McpChangedPayload>("mcp-changed", (payload) => {
     if (!publishAvailable || !publishProjectId || payload.project_id !== publishProjectId) return;
-    if (payload.tool !== "linetta_register_work" && payload.tool !== "linetta_publish_episode") return;
+    if (
+      payload.tool !== "linetta_register_work" &&
+      payload.tool !== "linetta_publish_episode" &&
+      payload.tool !== "linetta_set_episode_visibility"
+    )
+      return;
     publishApi
       .workStatus(publishProjectId)
       .then((st) => { if (loadRef.current?.project.id === st.project_id) setPublishStatus(st); })

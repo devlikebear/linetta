@@ -280,6 +280,48 @@ func TestPublishCover_refusesAWorkNotOnTheSite(t *testing.T) {
 	}
 }
 
+func TestRemoveCover_takesItDownAndForgetsTheChoice(t *testing.T) {
+	f := newSheetsFixture(t)
+	f.register(t)
+	ctx := context.Background()
+	if _, err := f.svc.PublishCover(ctx, f.project.ID, "cover-a"); err != nil {
+		t.Fatal(err)
+	}
+	had, err := f.svc.RemoveCover(ctx, f.project.ID)
+	if err != nil || !had {
+		t.Fatalf("RemoveCover = %v, %v", had, err)
+	}
+	if held := f.site.work(f.project.ID).work.Cover; held != nil {
+		t.Fatalf("site still holds %+v", held)
+	}
+	if got, _, err := f.svc.state.Cover(ctx, f.project.ID); err != nil || got != "" {
+		t.Fatalf("saved choice = %q, %v", got, err)
+	}
+	// A sync afterwards must not put the cover back.
+	f.sync(t)
+	if held := f.site.work(f.project.ID).work.Cover; held != nil {
+		t.Fatalf("sync put the cover back: %+v", held)
+	}
+
+	before := len(f.site.seen())
+	if had, err := f.svc.RemoveCover(ctx, f.project.ID); err != nil || had {
+		t.Fatalf("second RemoveCover = %v, %v", had, err)
+	}
+	if n := countPrefix(f.site.seen()[before:], "DELETE "); n != 0 {
+		t.Fatalf("no cover, yet %d deletes were sent", n)
+	}
+}
+
+func TestRemoveCover_refusesAWorkNotOnTheSite(t *testing.T) {
+	f := newSheetsFixture(t)
+	f.connect(t)
+	_, err := f.svc.RemoveCover(context.Background(), f.project.ID)
+	var re *rpc.ReasonError
+	if !errors.As(err, &re) || re.Reason != rpc.ReasonPublishWorkNotRegistered {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestSheets_workStatusShowsChoicesAndTheSite(t *testing.T) {
 	f := newSheetsFixture(t)
 	ctx := context.Background()

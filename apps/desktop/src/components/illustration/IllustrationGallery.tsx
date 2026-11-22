@@ -144,7 +144,8 @@ export function IllustrationGallery({
   }, [projectId]);
 
   useEngineEvent<McpChangedPayload>("mcp-changed", (payload) => {
-    if (payload.project_id !== projectId || payload.tool !== "linetta_publish_cover") return;
+    if (payload.project_id !== projectId) return;
+    if (payload.tool !== "linetta_publish_cover" && payload.tool !== "linetta_remove_cover") return;
     void publishApi.workStatus(projectId).then(setPublishStatus).catch(() => {});
   });
 

@@ -3,6 +3,8 @@ package mcphost
 import (
 	"context"
 	"errors"
+	"slices"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -15,13 +17,18 @@ import (
 
 // Publisher is the slice of internal/publish the publish tools use. An agent
 // can look at what is on Linetta Works, register a work, publish its episodes
-// and put up its cover. Connecting the account is the writer's alone — it is approved in
-// their browser — so there is no tool for it.
+// and put up its cover, and take back what it put up: make an episode private
+// or public again and take the cover down. Connecting the account is the
+// writer's alone — it is approved in their browser — so there is no tool for
+// it. The site has no way for the app to hide or delete a whole work; the
+// writer does that on the site.
 type Publisher interface {
 	WorkStatus(ctx context.Context, projectID string) (publish.WorkStatus, error)
 	UpsertWork(ctx context.Context, in publish.UpsertInput) (publish.WorkView, error)
 	PublishEpisode(ctx context.Context, nodeID string) (publish.PublishResult, error)
 	PublishCover(ctx context.Context, projectID, illustrationID string) (publish.CoverView, error)
+	SetEpisodeVisibility(ctx context.Context, projectID, nodeID, visibility string) (publish.EpisodeView, error)
+	RemoveCover(ctx context.Context, projectID string) (bool, error)
 }
 
 // PublishApprover puts a publish write in front of the writer and waits for
@@ -121,6 +128,29 @@ type publishCoverInput struct {
 
 func (in publishCoverInput) scope() (string, string) { return in.ProjectID, "" }
 
+// ---------- linetta_set_episode_visibility ----------
+
+type episodeVisibilityInput struct {
+	NodeID     string `json:"node_id" jsonschema:"the episode or a scene inside it; a site_only node_id also works"`
+	Visibility string `json:"visibility" jsonschema:"private or public"`
+	ProjectID  string `json:"project_id,omitempty"`
+}
+
+func (in episodeVisibilityInput) scope() (string, string) { return in.ProjectID, in.NodeID }
+
+// ---------- linetta_remove_cover ----------
+
+type removeCoverInput struct {
+	ProjectID string `json:"project_id,omitempty"`
+}
+
+func (in removeCoverInput) scope() (string, string) { return in.ProjectID, "" }
+
+type removeCoverOutput struct {
+	// Removed is false when the site had no cover.
+	Removed bool `json:"removed"`
+}
+
 func (d ToolDeps) registerPublishReadTool(s *mcp.Server) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_publish_status",
@@ -152,6 +182,15 @@ func (d ToolDeps) registerPublishWriteTools(s *mcp.Server) {
 		Description: "Make a gallery picture the work's cover on Linetta Works and upload it, replacing any cover " +
 			"there. Only when the writer asks" + approvalNote + " The work must be registered first. Sheets are not sent.",
 	}, record(d, "linetta_publish_cover", d.publishCover))
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "linetta_set_episode_visibility",
+		Description: "Make a published episode private on Linetta Works, hiding it from readers, or public again. " +
+			"Only when the writer asks" + approvalNote,
+	}, record(d, "linetta_set_episode_visibility", d.setEpisodeVisibility))
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "linetta_remove_cover",
+		Description: "Take the work's cover down on Linetta Works. Only when the writer asks" + approvalNote,
+	}, record(d, "linetta_remove_cover", d.removeCover))
 }
 
 func (d ToolDeps) publishStatus(ctx context.Context, _ *mcp.CallToolRequest, in publishStatusInput) (*mcp.CallToolResult, publishStatusOutput, error) {
@@ -317,6 +356,107 @@ func (d ToolDeps) publishCover(ctx context.Context, req *mcp.CallToolRequest, in
 	return nil, toPublishedCover(cover), nil
 }
 
+func (d ToolDeps) setEpisodeVisibility(ctx context.Context, req *mcp.CallToolRequest, in episodeVisibilityInput) (*mcp.CallToolResult, publishedEpisode, error) {
+	if d.Publish == nil {
+		return toolErr("publishing is not available in this build"), publishedEpisode{}, nil
+	}
+	vis := strings.ToLower(strings.TrimSpace(in.Visibility))
+	if vis != publish.VisibilityPublic && vis != publish.VisibilityPrivate {
+		return toolErr("visibility must be private or public"), publishedEpisode{}, nil
+	}
+	nodeID := strings.TrimSpace(in.NodeID)
+	if nodeID == "" {
+		return toolErr("node_id is required; take it from linetta_publish_status"), publishedEpisode{}, nil
+	}
+	// A site-only episode has no node here, so the work comes from
+	// project_id; otherwise the node names it.
+	projectID := in.ProjectID
+	if strings.TrimSpace(projectID) == "" {
+		n, errResult := d.requireNode(ctx, nodeID)
+		if errResult != nil {
+			return errResult, publishedEpisode{}, nil
+		}
+		projectID = n.ProjectID
+	}
+	p, errResult := d.requireProject(ctx, projectID)
+	if errResult != nil {
+		return errResult, publishedEpisode{}, nil
+	}
+	ws, errResult := d.publishReady(ctx, p.ID, true)
+	if errResult != nil {
+		return errResult, publishedEpisode{}, nil
+	}
+	ep, ok := findPublishedEpisode(ws, nodeID)
+	if !ok {
+		return toolErr("that episode is not on Linetta Works; see linetta_publish_status for the episodes there"), publishedEpisode{}, nil
+	}
+	if ep.RemoteStatus == vis {
+		return nil, toPublishedEpisode(ep), nil
+	}
+	title := strings.TrimSpace(ep.Label + " " + ep.Title)
+	if title == "" && ep.Number > 0 {
+		title = strconv.Itoa(ep.Number)
+	}
+	if errResult := d.askToPublish(ctx, req, publish.ApprovalRequest{
+		Kind: publish.ApprovalEpisodeVisibility, ProjectID: p.ID, WorkTitle: p.Title,
+		NodeID: ep.NodeID, EpisodeTitle: title, Visibility: vis,
+	}); errResult != nil {
+		return errResult, publishedEpisode{}, nil
+	}
+	out, err := d.Publish.SetEpisodeVisibility(ctx, p.ID, ep.NodeID, vis)
+	if err != nil {
+		return toolErr("%s", publishFailure(err)), publishedEpisode{}, nil
+	}
+	d.notifyChanged(p.ID, "linetta_set_episode_visibility", append([]string{ep.NodeID}, ep.LeafIDs...), "")
+	return nil, toPublishedEpisode(out), nil
+}
+
+// findPublishedEpisode finds the episode on the site that nodeID is, or is a
+// scene of. An episode never published is not on the site.
+func findPublishedEpisode(ws publish.WorkStatus, nodeID string) (publish.EpisodeView, bool) {
+	for _, ep := range ws.Episodes {
+		if ep.NodeID == nodeID || slices.Contains(ep.LeafIDs, nodeID) {
+			return ep, ep.State != "" && ep.State != "unpublished"
+		}
+	}
+	for _, ep := range ws.SiteOnly {
+		if ep.NodeID == nodeID {
+			return ep, true
+		}
+	}
+	return publish.EpisodeView{}, false
+}
+
+func (d ToolDeps) removeCover(ctx context.Context, req *mcp.CallToolRequest, in removeCoverInput) (*mcp.CallToolResult, removeCoverOutput, error) {
+	if d.Publish == nil {
+		return toolErr("publishing is not available in this build"), removeCoverOutput{}, nil
+	}
+	p, errResult := d.requireProject(ctx, in.ProjectID)
+	if errResult != nil {
+		return errResult, removeCoverOutput{}, nil
+	}
+	ws, errResult := d.publishReady(ctx, p.ID, true)
+	if errResult != nil {
+		return errResult, removeCoverOutput{}, nil
+	}
+	if ws.Sheets.Cover == nil && !ws.Offline {
+		return nil, removeCoverOutput{}, nil
+	}
+	ar := publish.ApprovalRequest{Kind: publish.ApprovalRemoveCover, ProjectID: p.ID, WorkTitle: p.Title}
+	if ws.Sheets.Cover != nil {
+		ar.IllustrationID = ws.Sheets.Cover.IllustrationID
+	}
+	if errResult := d.askToPublish(ctx, req, ar); errResult != nil {
+		return errResult, removeCoverOutput{}, nil
+	}
+	removed, err := d.Publish.RemoveCover(ctx, p.ID)
+	if err != nil {
+		return toolErr("%s", publishFailure(err)), removeCoverOutput{}, nil
+	}
+	d.notifyChanged(p.ID, "linetta_remove_cover", nil, "")
+	return nil, removeCoverOutput{Removed: removed}, nil
+}
+
 // publishReady reads the work's state on the site and refuses what is bound
 // to fail, so the writer is never asked to approve a publish that cannot
 // happen. A site it could not read is left to the publish call itself.
@@ -338,7 +478,7 @@ func (d ToolDeps) publishReady(ctx context.Context, projectID string, needRegist
 // when they approved; anything else is a refusal that says nothing was sent.
 func (d ToolDeps) askToPublish(ctx context.Context, req *mcp.CallToolRequest, ar publish.ApprovalRequest) *mcp.CallToolResult {
 	if d.PublishApproval == nil {
-		return toolErr("publishing needs the writer's approval in the app, which this server cannot ask for; nothing was published")
+		return toolErr("this needs the writer's approval in the app, which this server cannot ask for; nothing changed on the site")
 	}
 	ar.Source = d.Source
 	if ar.Source == "" {
@@ -352,12 +492,12 @@ func (d ToolDeps) askToPublish(ctx context.Context, req *mcp.CallToolRequest, ar
 	case err == nil:
 		return nil
 	case errors.Is(err, publish.ErrApprovalDenied):
-		return toolErr("the writer declined this in the app; nothing was published. Do not ask again unless they bring it up")
+		return toolErr("the writer declined this in the app; nothing changed on the site. Do not ask again unless they bring it up")
 	case errors.Is(err, publish.ErrApprovalTimeout):
-		return toolErr("the writer did not approve this in the app in time; nothing was published. Tell them it needs " +
+		return toolErr("the writer did not approve this in the app in time; nothing changed on the site. Tell them it needs " +
 			"their approval in Linetta and try again only when they ask")
 	default:
-		return toolErr("nothing was published: %v", err)
+		return toolErr("nothing changed on the site: %v", err)
 	}
 }
 
@@ -402,6 +542,8 @@ func publishFailure(err error) string {
 		return "the site could not give the work an address from its title; the writer can choose one in the app's publish dialog"
 	case rpc.ReasonPublishNotEnabled:
 		return "publishing is not open for the writer's account yet"
+	case rpc.ReasonPublishEpisodeNotFound:
+		return "that episode is not on Linetta Works"
 	case rpc.ReasonPublishEmptyEpisode:
 		return "the episode has no text to publish"
 	case rpc.ReasonPublishNotEpisode:

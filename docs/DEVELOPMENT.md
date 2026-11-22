@@ -208,8 +208,17 @@ Write (`full` mode only):
   it through `publish.Service.PublishCover`, the same call the gallery's
   `publish.cover_publish` RPC makes. Unlike the dialog's
   `publish.sheets_sync`, it sends no sheets. A refused picture or a failed
-  upload leaves the site's cover and the writer's choice as they were. All
-  three are refused until the writer has connected an account in the app —
+  upload leaves the site's cover and the writer's choice as they were;
+- `linetta_set_episode_visibility`: makes a published episode (a scene inside
+  one, or a `site_only` one by project_id and node_id) private or public
+  through `publish.Service.SetEpisodeVisibility`, the dialog's
+  `publish.episode_set_visibility`. An episode already in that state or not
+  on the site is answered without asking the writer;
+- `linetta_remove_cover`: takes the cover down through
+  `publish.Service.RemoveCover` and clears the writer's cover choice, so the
+  next `publish.sheets_sync` does not put it back. No cover, no question. The
+  device API has no way to hide or delete a whole work, so there is no tool
+  for it. All five are refused until the writer has connected an account in the app —
   there is deliberately no tool for that, since pairing is approved in the
   writer's browser. Each call then waits in `publish.Approvals` (#238): the
   engine sends `publish.approvals_changed`, the app's `PublishApprovalDialog`
